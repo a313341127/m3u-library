@@ -16,7 +16,9 @@ M3U 条目格式（途播可导入）:
 
 生成前自动处理（prepare_items）:
     1. 标题清洗: 去掉 1080p/720p/HD/全集/高清 等标记（清晰度由 quality 字段单独保存）
-    2. 资源去重: 同分类下 名称+年份+地区 相同，只保留一条（保留清晰度更高/带封面/更新更近的）
+    2. 多线路保留: 同资源（名称+年份+地区）的不同播放地址全部保留，
+       相同 URL 才去重；同一资源的多条线路中「国内可直连源」排最前，
+       播放器里同名多条 = 不同线路（某条超时可换另一条）
 
 TXT 文本源格式（config.TXT_LINE_FORMAT 可配）:
     流浪地球2,http://example.com/play.m3u8
@@ -129,49 +131,60 @@ def group_titles(item: dict) -> List[str]:
 
 
 # ---------------------------------------------------------------- 去重
-_QUALITY_RANK = {"4k": 4, "2160p": 4, "1080p": 3, "超清": 3,
-                 "720p": 2, "hd": 2, "标清": 1}
+# 国内可直连线路的域名特征（这些源国内直连延迟低，多线路时排最前）
+_DOMESTIC_HINTS = ("bfvvs.com", ".cn/", "aliyun", "cdnd", "huya", "qncdn",
+                   "upyun", "wsdns", "gtimg", "126.net", "163.com",
+                   "mgtv.com", "qq.com", "youku.com", "iqiyi.com",
+                   "sohu.com", "bilibili.com", "b23.tv", "1905.com")
 
 
-def _quality_rank(item: dict) -> int:
-    return _QUALITY_RANK.get(str(item.get("quality") or "").lower(), 0)
-
-
-def _better(a: dict, b: dict) -> bool:
-    """两条重复记录中选更优的一条：清晰度高 > 带封面 > 更新时间更近"""
-    qa, qb = _quality_rank(a), _quality_rank(b)
-    if qa != qb:
-        return qa > qb
-    if bool(a.get("cover")) != bool(b.get("cover")):
-        return bool(a.get("cover"))
-    return (a.get("updated_at") or "") > (b.get("updated_at") or "")
+def _is_domestic(url: str) -> bool:
+    """粗判播放地址是否偏向国内可直连（按域名特征匹配，命中即视为国内源优先）"""
+    u = (url or "").lower()
+    return any(k in u for k in _DOMESTIC_HINTS)
 
 
 def prepare_items(category: str) -> Tuple[List[dict], Dict[str, int]]:
-    """加载 + 标题清洗 + 去重（名称+年份+地区），返回 (条目列表, 统计)
+    """加载 + 标题清洗 + 多线路保留，返回 (条目列表, 统计)
+
+    多线路策略（方案 A）:
+    - 同一资源（名称+年份+地区）来自不同采集站的多个播放地址【全部保留】
+    - 只有完全相同的 URL 才视为重复剔除
+    - 同一资源的多条线路中，国内可直连源排最前（不开 VPN 也能看的优先）
 
     统计: {"raw": 原始条数, "dropped_no_url": 无播放地址被剔除,
-           "duplicates": 去重剔除条数}
+           "duplicates": 同URL重复剔除条数, "lines": 最终线路条数}
     """
     db = Database()
     raw = [dict(r) for r in db.list_resources(category=category)]
     items = [i for i in raw if i.get("url")]
     stats = {"raw": len(items), "dropped_no_url": len(raw) - len(items),
-             "duplicates": 0}
+             "duplicates": 0, "lines": 0}
 
-    seen: Dict[tuple, dict] = {}
+    # 先按资源聚合（名称+年份+地区），组内再做 URL 去重 + 国内优先
+    groups: Dict[tuple, List[dict]] = defaultdict(list)
     for it in items:
         clean = clean_title(it["name"]) or it["name"]
         it["_clean_name"] = clean
         key = (clean, it.get("year") or "", it.get("region") or "")
-        old = seen.get(key)
-        if old is None:
-            seen[key] = it
-        else:
-            stats["duplicates"] += 1
-            if _better(it, old):
-                seen[key] = it
-    return list(seen.values()), stats
+        groups[key].append(it)
+
+    result: List[dict] = []
+    for gitems in groups.values():
+        seen_url: set = set()
+        uniq: List[dict] = []
+        for it in gitems:
+            u = (it.get("url") or "").strip()
+            if not u or u in seen_url:
+                stats["duplicates"] += 1
+                continue
+            seen_url.add(u)
+            uniq.append(it)
+        # 组内：国内可直连线路排最前，其次保持原顺序
+        uniq.sort(key=lambda it: 0 if _is_domestic(it.get("url")) else 1)
+        result.extend(uniq)
+        stats["lines"] += len(uniq)
+    return result, stats
 
 
 # ---------------------------------------------------------------- 条目构建
