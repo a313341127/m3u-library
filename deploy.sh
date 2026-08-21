@@ -51,25 +51,35 @@ fi
 echo "[1/3] 重新生成 M3U / TXT ..."
 "$PY" main.py generate --txt
 
-# ---------- 2) 生成 _headers（确保 M3U 的 Content-Type 正确） ----------
+# ---------- 2) 生成 _headers（确保 M3U 的 Content-Type 正确 + 禁止缓存） ----------
 echo "[2/3] 生成 _headers ..."
 cat > output/_headers <<'EOF'
 /movie.m3u
   Content-Type: application/vnd.apple.mpegurl
+  Cache-Control: max-age=0, must-revalidate
 /tv.m3u
   Content-Type: application/vnd.apple.mpegurl
+  Cache-Control: max-age=0, must-revalidate
 /anime.m3u
   Content-Type: application/vnd.apple.mpegurl
+  Cache-Control: max-age=0, must-revalidate
 /variety.m3u
   Content-Type: application/vnd.apple.mpegurl
+  Cache-Control: max-age=0, must-revalidate
 /movie.txt
   Content-Type: text/plain; charset=utf-8
+  Cache-Control: max-age=0, must-revalidate
 /tv.txt
   Content-Type: text/plain; charset=utf-8
+  Cache-Control: max-age=0, must-revalidate
 /anime.txt
   Content-Type: text/plain; charset=utf-8
+  Cache-Control: max-age=0, must-revalidate
 /variety.txt
   Content-Type: text/plain; charset=utf-8
+  Cache-Control: max-age=0, must-revalidate
+/index.html
+  Cache-Control: max-age=0, must-revalidate
 EOF
 
 # ---------- 3) 部署到 Cloudflare Pages ----------

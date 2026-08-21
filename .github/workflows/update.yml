@@ -43,25 +43,35 @@ jobs:
       - name: 生成 M3U / TXT / Web 首页
         run: python main.py generate --txt
 
-      - name: 生成 _headers（M3U Content-Type 修正）
+      - name: 生成 _headers（M3U Content-Type 修正 + 禁止缓存）
         run: |
           cat > output/_headers <<'EOF'
           /movie.m3u
             Content-Type: application/vnd.apple.mpegurl
+            Cache-Control: max-age=0, must-revalidate
           /tv.m3u
             Content-Type: application/vnd.apple.mpegurl
+            Cache-Control: max-age=0, must-revalidate
           /anime.m3u
             Content-Type: application/vnd.apple.mpegurl
+            Cache-Control: max-age=0, must-revalidate
           /variety.m3u
             Content-Type: application/vnd.apple.mpegurl
+            Cache-Control: max-age=0, must-revalidate
           /movie.txt
             Content-Type: text/plain; charset=utf-8
+            Cache-Control: max-age=0, must-revalidate
           /tv.txt
             Content-Type: text/plain; charset=utf-8
+            Cache-Control: max-age=0, must-revalidate
           /anime.txt
             Content-Type: text/plain; charset=utf-8
+            Cache-Control: max-age=0, must-revalidate
           /variety.txt
             Content-Type: text/plain; charset=utf-8
+            Cache-Control: max-age=0, must-revalidate
+          /index.html
+            Cache-Control: max-age=0, must-revalidate
           EOF
 
       - name: 部署到 Cloudflare Pages
