@@ -49,7 +49,7 @@ fi
 
 # ---------- 1) 重新生成 M3U / TXT ----------
 echo "[1/3] 重新生成 M3U / TXT ..."
-"$PY" main.py generate --txt
+"$PY" main.py generate --txt --best
 
 # ---------- 2) 生成 _headers（确保 M3U 的 Content-Type 正确 + 禁止缓存） ----------
 echo "[2/3] 生成 _headers ..."
@@ -76,6 +76,30 @@ cat > output/_headers <<'EOF'
   Content-Type: text/plain; charset=utf-8
   Cache-Control: max-age=0, must-revalidate
 /variety.txt
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: max-age=0, must-revalidate
+/movie.best.m3u
+  Content-Type: application/vnd.apple.mpegurl
+  Cache-Control: max-age=0, must-revalidate
+/tv.best.m3u
+  Content-Type: application/vnd.apple.mpegurl
+  Cache-Control: max-age=0, must-revalidate
+/anime.best.m3u
+  Content-Type: application/vnd.apple.mpegurl
+  Cache-Control: max-age=0, must-revalidate
+/variety.best.m3u
+  Content-Type: application/vnd.apple.mpegurl
+  Cache-Control: max-age=0, must-revalidate
+/movie.best.txt
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: max-age=0, must-revalidate
+/tv.best.txt
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: max-age=0, must-revalidate
+/anime.best.txt
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: max-age=0, must-revalidate
+/variety.best.txt
   Content-Type: text/plain; charset=utf-8
   Cache-Control: max-age=0, must-revalidate
 /index.html

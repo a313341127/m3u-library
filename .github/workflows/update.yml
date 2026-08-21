@@ -41,7 +41,7 @@ jobs:
           python main.py collect -n cc0cd --pages 1 --sources "$SOURCES"
 
       - name: 生成 M3U / TXT / Web 首页
-        run: python main.py generate --txt
+        run: python main.py generate --txt --best
 
       - name: 生成 _headers（M3U Content-Type 修正 + 禁止缓存）
         run: |
@@ -68,6 +68,30 @@ jobs:
             Content-Type: text/plain; charset=utf-8
             Cache-Control: max-age=0, must-revalidate
           /variety.txt
+            Content-Type: text/plain; charset=utf-8
+            Cache-Control: max-age=0, must-revalidate
+          /movie.best.m3u
+            Content-Type: application/vnd.apple.mpegurl
+            Cache-Control: max-age=0, must-revalidate
+          /tv.best.m3u
+            Content-Type: application/vnd.apple.mpegurl
+            Cache-Control: max-age=0, must-revalidate
+          /anime.best.m3u
+            Content-Type: application/vnd.apple.mpegurl
+            Cache-Control: max-age=0, must-revalidate
+          /variety.best.m3u
+            Content-Type: application/vnd.apple.mpegurl
+            Cache-Control: max-age=0, must-revalidate
+          /movie.best.txt
+            Content-Type: text/plain; charset=utf-8
+            Cache-Control: max-age=0, must-revalidate
+          /tv.best.txt
+            Content-Type: text/plain; charset=utf-8
+            Cache-Control: max-age=0, must-revalidate
+          /anime.best.txt
+            Content-Type: text/plain; charset=utf-8
+            Cache-Control: max-age=0, must-revalidate
+          /variety.best.txt
             Content-Type: text/plain; charset=utf-8
             Cache-Control: max-age=0, must-revalidate
           /index.html

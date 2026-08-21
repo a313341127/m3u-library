@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Dict, List
 
 import config
-from generator.m3u import clean_title, prepare_items
+from generator.m3u import clean_title, prepare_items, _flat_best_items
 
 
 HTML_TEMPLATE = """<!DOCTYPE html>
@@ -489,7 +489,8 @@ def generate_index(output_dir: Path = None) -> Path:
     resources: Dict[str, List[dict]] = {}
     for cat in config.M3U_OUTPUT:
         items, _ = prepare_items(cat)
-        resources[cat] = [_item_to_json(it) for it in items]
+        # Web 首页同样去重：每部影片只展示一条最优线路，避免搜索时满屏重复
+        resources[cat] = [_item_to_json(it) for it in _flat_best_items(items)]
 
     categories = {
         cat: {"label": info["label"]}

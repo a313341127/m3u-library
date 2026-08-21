@@ -47,6 +47,13 @@ CATEGORIES = {
 M3U_OUTPUT = {"movie": "movie.m3u", "tv": "tv.m3u", "anime": "anime.m3u", "variety": "variety.m3u"}
 TXT_OUTPUT = {"movie": "movie.txt", "tv": "tv.txt", "anime": "anime.txt", "variety": "variety.txt"}
 
+# 单条最优版输出：同部影片只保留排序后的第一条线路（国内源优先），
+# 适合只想在播放器里看到一个条目的场景。
+BEST_M3U_OUTPUT = {"movie": "movie.best.m3u", "tv": "tv.best.m3u",
+                   "anime": "anime.best.m3u", "variety": "variety.best.m3u"}
+BEST_TXT_OUTPUT = {"movie": "movie.best.txt", "tv": "tv.best.txt",
+                   "anime": "anime.best.txt", "variety": "variety.best.txt"}
+
 # 输出编码：Windows 上部分播放器对无 BOM 的 UTF-8 识别不稳，
 # 默认带 BOM（utf-8-sig）；如播放器兼容性好可改为 "utf-8"
 M3U_ENCODING = "utf-8-sig"

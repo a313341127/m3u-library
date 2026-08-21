@@ -266,13 +266,72 @@ def generate_txt(category: str, output_dir: Path = None) -> Path:
     return out
 
 
-def generate_all(output_dir: Path = None, include_txt: bool = False) -> Dict[str, Path]:
+def _flat_best_items(items: List[dict]) -> List[dict]:
+    """从已排序的多线路条目中，每部影片只保留一条最优线路。
+
+    聚合键为（名称, 年份），忽略不同来源对地区/类型的不一致标注，
+    从而实现搜索列表里「一部影片只出现一次」。
+    由于 prepare_items 已经把国内可直连源排最前，这里保留的第一条就是最优线路。
+    """
+    seen: dict = {}
+    for it in items:
+        key = (it["_clean_name"], it.get("year") or "")
+        if key in seen:
+            continue
+        seen[key] = it
+    # 按名称+年份排序，输出稳定
+    return sorted(seen.values(), key=lambda it: (it["_clean_name"], it.get("year") or 0))
+
+
+def generate_best_m3u(category: str, output_dir: Path = None) -> Path:
+    """生成单条最优版 M3U：每部影片只保留一条线路（国内源优先），且只出现一次"""
+    items, stats = prepare_items(category)
+    best_items_list = _flat_best_items(items)
+    out = (output_dir or config.OUTPUT_DIR) / config.BEST_M3U_OUTPUT[category]
+    out.parent.mkdir(parents=True, exist_ok=True)
+
+    # 平面列表：统一归到一个 group-title，避免多维分组导致同一影片反复出现
+    group = config.CATEGORIES[category]["label"]
+
+    lines = ["#EXTM3U"]
+    for it in best_items_list:
+        lines.append(build_entry(it, group))
+    out.write_text("\n".join(lines) + "\n", encoding=config.M3U_ENCODING)
+
+    problems = verify_m3u(out)
+    if problems:
+        for p in problems:
+            print(f"[自检失败] {out.name}: {p}")
+    else:
+        print(f"[自检通过] {out.name}: {len(best_items_list)} 条最优资源 "
+              f"（完整版 {len(items)} 条）")
+    return out
+
+
+def generate_best_txt(category: str, output_dir: Path = None) -> Path:
+    """生成单条最优版 TXT 文本源，返回文件路径"""
+    items, stats = prepare_items(category)
+    best_items_list = _flat_best_items(items)
+    out = (output_dir or config.OUTPUT_DIR) / config.BEST_TXT_OUTPUT[category]
+    out.parent.mkdir(parents=True, exist_ok=True)
+    lines = [config.TXT_LINE_FORMAT.format(
+        name=it["_clean_name"] or it["name"], url=it["url"]) for it in best_items_list]
+    out.write_text("\n".join(lines) + "\n", encoding=config.M3U_ENCODING)
+    return out
+
+
+def generate_all(output_dir: Path = None, include_txt: bool = False,
+                 include_best: bool = False) -> Dict[str, Path]:
     """生成全部分类的源文件，返回 {文件名: 路径}"""
     results: Dict[str, Path] = {}
     for cat in config.M3U_OUTPUT:
         results[config.M3U_OUTPUT[cat]] = generate_m3u(cat, output_dir)
         if include_txt:
             results[config.TXT_OUTPUT[cat]] = generate_txt(cat, output_dir)
+        if include_best:
+            results[config.BEST_M3U_OUTPUT[cat]] = generate_best_m3u(cat, output_dir)
+            if include_txt:
+                results[config.BEST_TXT_OUTPUT[cat]] = generate_best_txt(cat, output_dir)
     return results
 
 

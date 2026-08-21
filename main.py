@@ -98,8 +98,14 @@ def cmd_generate(args):
         if args.txt:
             p2 = m3u_gen.generate_txt(args.category)
             print(f"[OK] 已生成 {p2}")
+        if args.best:
+            p3 = m3u_gen.generate_best_m3u(args.category)
+            print(f"[OK] 已生成 {p3}")
+            if args.txt:
+                p4 = m3u_gen.generate_best_txt(args.category)
+                print(f"[OK] 已生成 {p4}")
     else:
-        results = m3u_gen.generate_all(include_txt=args.txt)
+        results = m3u_gen.generate_all(include_txt=args.txt, include_best=args.best)
         for path in results.values():
             print(f"[OK] 已生成 {path}")
     if not args.no_web:
@@ -144,7 +150,7 @@ def cmd_collect(args):
 
     # 采集后自动重新生成 M3U（默认开启，--no-generate 关闭）
     if not args.no_generate:
-        gen_results = m3u_gen.generate_all(include_txt=args.txt)
+        gen_results = m3u_gen.generate_all(include_txt=args.txt, include_best=args.best)
         for path in gen_results.values():
             print(f"[OK] 已重新生成 {path}")
 
@@ -181,6 +187,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_gen = sub.add_parser("generate", help="生成 M3U / TXT 源文件")
     p_gen.add_argument("-c", "--category", choices=list(config.CATEGORIES), help="只生成指定分类")
     p_gen.add_argument("--txt", action="store_true", help="同时生成 TXT 文本源")
+    p_gen.add_argument("--best", action="store_true", help="同时生成单条最优版（同影片只保留一条线路）")
     p_gen.add_argument("--no-web", action="store_true", help="不生成卡片式 Web 首页")
     p_gen.set_defaults(func=cmd_generate)
 
@@ -191,6 +198,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_col.add_argument("--pages", type=int, help="每个采集源采集页数（每页约 20 条，默认 3）")
     p_col.add_argument("--sources", default="", help="只采集指定源（逗号分隔，如 360,旺旺；默认白名单全部）")
     p_col.add_argument("--txt", action="store_true", help="采集后同时生成 TXT 文本源")
+    p_col.add_argument("--best", action="store_true", help="采集后同时生成单条最优版 M3U/TXT")
     p_col.add_argument("--no-generate", action="store_true", help="采集后不自动重新生成 M3U")
     p_col.add_argument("--list", action="store_true", help="列出已注册采集器")
     p_col.set_defaults(func=cmd_collect)
