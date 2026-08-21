@@ -1,0 +1,2 @@
+# 第一阶段仅使用 Python 标准库（sqlite3 / argparse / pathlib），无需第三方依赖。
+# 后续接入真实采集站需要 requests 等库时，再在此追加。

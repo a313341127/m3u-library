@@ -1,0 +1,83 @@
+name: 每日自动更新
+
+# 每天北京时间 03:30 自动增量采集 -> 生成 M3U -> 部署 Cloudflare Pages -> 提交数据库
+# 也可在 Actions 页面手动点击 Run workflow 立即执行一次
+on:
+  schedule:
+    - cron: '30 19 * * *'   # UTC 19:30 = 北京时间 03:30
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: 增量采集（21 个源按天轮换，3 天一循环全覆盖）
+        run: |
+          # 17 个直接 API 源按天数分 3 组轮换，配置中心 4 个源(360/旺旺/如意/率率)每天都采
+          DIRECT=("索尼" "金鹰" "红牛" "猫眼" "樱花" "非凡" "光速" "无尽" "速播" "极速" "火狐" "西瓜" "优酷" "百度" "豆瓣" "暴风" "星球")
+          DAY=$(( $(date +%s) / 86400 ))
+          GROUP=$(( DAY % 3 ))
+          SELECTED=()
+          i=0
+          for s in "${DIRECT[@]}"; do
+            if [ $(( i % 3 )) -eq $GROUP ]; then
+              SELECTED+=("$s")
+            fi
+            i=$(( i + 1 ))
+          done
+          SOURCES="360,旺旺,如意,率率,$(IFS=,; echo "${SELECTED[*]}")"
+          echo "本次采集源: $SOURCES"
+          python main.py collect -n cc0cd --pages 1 --sources "$SOURCES"
+
+      - name: 生成 M3U / TXT / Web 首页
+        run: python main.py generate --txt
+
+      - name: 生成 _headers（M3U Content-Type 修正）
+        run: |
+          cat > output/_headers <<'EOF'
+          /movie.m3u
+            Content-Type: application/vnd.apple.mpegurl
+          /tv.m3u
+            Content-Type: application/vnd.apple.mpegurl
+          /anime.m3u
+            Content-Type: application/vnd.apple.mpegurl
+          /variety.m3u
+            Content-Type: application/vnd.apple.mpegurl
+          /movie.txt
+            Content-Type: text/plain; charset=utf-8
+          /tv.txt
+            Content-Type: text/plain; charset=utf-8
+          /anime.txt
+            Content-Type: text/plain; charset=utf-8
+          /variety.txt
+            Content-Type: text/plain; charset=utf-8
+          EOF
+
+      - name: 部署到 Cloudflare Pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx --yes wrangler@4 pages deploy output --project-name=qinjin --branch=production
+
+      - name: 提交数据库变更（供下次增量采集去重）
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/media.db
+          if git diff --cached --quiet; then
+            echo "数据库无变化，跳过提交"
+          else
+            git commit -m "chore: 每日采集更新 $(date +%F)"
+            git push
+          fi
