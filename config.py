@@ -163,6 +163,10 @@ COLLECTORS = {
             "豆瓣": "https://caiji.dbzy5.com/api.php/provide/vod/at/json/",
             "暴风": "https://bfzyapi.com/api.php/provide/vod/",
             "星球": "https://www.ysxq.cc/api.php/provide/vod",
+            # 量子：国内可直连源（播放域名 47ms 实测），150898 条大站
+            "量子": "https://cj.lziapi.com/api.php/provide/vod/",
+            # 茅台：国内节点直连快（vodcnd02.uvjtih.cn 53ms 实测），141390 条大站
+            "茅台": "https://caiji.maotaizy.cc/api.php/provide/vod/",
         },
         "default_pages": 3,        # 每源默认采集页数（每页 20 条）
             "detail_batch": 20,        # 单次 ac=detail 批量查询的 vod_id 数

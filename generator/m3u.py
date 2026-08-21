@@ -135,7 +135,9 @@ def group_titles(item: dict) -> List[str]:
 _DOMESTIC_HINTS = ("bfvvs.com", ".cn/", "aliyun", "cdnd", "huya", "qncdn",
                    "upyun", "wsdns", "gtimg", "126.net", "163.com",
                    "mgtv.com", "qq.com", "youku.com", "iqiyi.com",
-                   "sohu.com", "bilibili.com", "b23.tv", "1905.com")
+                   "sohu.com", "bilibili.com", "b23.tv", "1905.com",
+                   # 实测国内直连快: 量子 lzcdn / 暴风 fengbao,baofeng
+                   "lzcdn", "fengbao", "baofeng")
 
 
 def _is_domestic(url: str) -> bool:
