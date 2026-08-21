@@ -24,17 +24,18 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>影视资源库</title>
+  <title>秦哥影视源</title>
+  <meta name="theme-color" content="#101318">
   <style>
     :root {
-      --bg: #f5f5f7;
-      --card: #ffffff;
-      --text: #1d1d1f;
-      --text-secondary: #6e6e73;
-      --accent: #ff2d55;
-      --accent-light: #ffe5ea;
-      --border: rgba(0,0,0,0.08);
-      --shadow: 0 4px 20px rgba(0,0,0,0.08);
+      --bg: #101318;
+      --card: #1a1e24;
+      --text: #e6e8eb;
+      --text-secondary: #8a919c;
+      --accent: #ff4757;
+      --accent-light: rgba(255,71,87,0.16);
+      --border: rgba(255,255,255,0.08);
+      --shadow: 0 4px 20px rgba(0,0,0,0.4);
     }
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     body {
@@ -48,7 +49,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       position: sticky;
       top: 0;
       z-index: 100;
-      background: rgba(255,255,255,0.92);
+      background: rgba(16,19,24,0.92);
       backdrop-filter: saturate(180%) blur(20px);
       border-bottom: 1px solid var(--border);
     }
@@ -192,7 +193,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       position: relative;
       width: 100%;
       padding-top: 140%;
-      background: #e5e5ea;
+      background: #232a33;
       overflow: hidden;
     }
     .poster img {
@@ -254,7 +255,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       padding: 60px 20px;
       color: var(--text-secondary);
     }
-    .empty svg { width: 64px; height: 64px; fill: #d1d1d6; margin-bottom: 12px; }
+    .empty svg { width: 64px; height: 64px; fill: #3a414b; margin-bottom: 12px; }
     .toast {
       position: fixed;
       bottom: 30px;
@@ -271,12 +272,87 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       z-index: 200;
     }
     .toast.show { opacity: 1; }
+    .modal {
+      position: fixed;
+      inset: 0;
+      z-index: 300;
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal.show { display: flex; }
+    .modal-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+    }
+    .modal-box {
+      position: relative;
+      width: calc(100% - 32px);
+      max-width: 560px;
+      background: var(--card);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+    .modal-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px 12px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .modal-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .modal-close {
+      flex: 0 0 auto;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      border: none;
+      background: var(--bg);
+      color: var(--text-secondary);
+      font-size: 18px;
+      line-height: 1;
+      cursor: pointer;
+    }
+    .modal-video { background: #000; }
+    .modal-video video {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      display: block;
+      background: #000;
+    }
+    .modal-fallback {
+      padding: 40px 20px;
+      text-align: center;
+      color: var(--text-secondary);
+    }
+    .modal-fallback p { margin: 0 0 18px; font-size: 14px; }
+    .modal-fallback .btn {
+      display: inline-block;
+      margin: 0 6px;
+      padding: 10px 22px;
+      border-radius: 20px;
+      border: none;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-ghost { background: var(--bg); color: var(--text); }
   </style>
 </head>
 <body>
   <header>
     <div class="header-inner">
-      <h1 class="title"><span class="title-dot"></span>影视资源库</h1>
+      <h1 class="title"><span class="title-dot"></span>秦哥影视源</h1>
       <nav class="tabs" id="tabs"></nav>
     </div>
   </header>
@@ -304,6 +380,26 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="grid" id="grid"></div>
   </main>
   <div class="toast" id="toast"></div>
+
+  <div class="modal" id="playerModal">
+    <div class="modal-backdrop" onclick="closePlayer()"></div>
+    <div class="modal-box">
+      <div class="modal-head">
+        <div class="modal-title" id="playerTitle"></div>
+        <button class="modal-close" onclick="closePlayer()" aria-label="关闭">&times;</button>
+      </div>
+      <div class="modal-video">
+        <video id="playerVideo" controls playsinline></video>
+        <div class="modal-fallback" id="playerFallback" style="display:none">
+          <p>该链接无法在页面内直接播放（网页源或防盗链）</p>
+          <button class="btn btn-primary" onclick="openExternal()">浏览器打开</button>
+          <button class="btn btn-ghost" onclick="copyCurrent()">复制链接</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js"></script>
 
   <script>
     const CATEGORIES = __CATEGORIES__;
@@ -376,13 +472,58 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       });
     }
 
-    function openUrl(url) {
-      // 尝试用外部播放器打开；移动端可复制链接
-      if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
-        window.location.href = url;
+    let hlsPlayer = null;
+    let currentUrl = '';
+
+    function isM3u8(url) { return /[.]m3u8($|[?])/i.test(url); }
+
+    function openVideo(name, url) {
+      currentUrl = url;
+      $('playerTitle').textContent = name;
+      const video = $('playerVideo');
+      $('playerFallback').style.display = 'none';
+      video.style.display = 'block';
+      if (hlsPlayer) { hlsPlayer.destroy(); hlsPlayer = null; }
+      video.pause();
+      video.removeAttribute('src');
+      video.load();
+      if (isM3u8(url)) {
+        if (video.canPlayType('application/vnd.apple.mpegurl')) {
+          video.src = url;
+          video.play().catch(() => showFallback());
+        } else if (window.Hls && Hls.isSupported()) {
+          hlsPlayer = new Hls();
+          hlsPlayer.loadSource(url);
+          hlsPlayer.attachMedia(video);
+          hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
+          hlsPlayer.on(Hls.Events.ERROR, (ev, data) => { if (data.fatal) showFallback(); });
+        } else {
+          showFallback();
+        }
       } else {
-        copyToClipboard(url);
+        showFallback();
       }
+      $('playerModal').classList.add('show');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function showFallback() {
+      $('playerVideo').style.display = 'none';
+      $('playerFallback').style.display = 'block';
+    }
+
+    function openExternal() { if (currentUrl) window.open(currentUrl, '_blank'); }
+
+    function copyCurrent() { if (currentUrl) copyToClipboard(currentUrl); }
+
+    function closePlayer() {
+      if (hlsPlayer) { hlsPlayer.destroy(); hlsPlayer = null; }
+      const video = $('playerVideo');
+      video.pause();
+      video.removeAttribute('src');
+      video.load();
+      $('playerModal').classList.remove('show');
+      document.body.style.overflow = '';
     }
 
     function copyToClipboard(text) {
@@ -425,7 +566,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         card.target = '_blank';
         card.onclick = e => {
           e.preventDefault();
-          openUrl(it.url);
+          openVideo(it.name, it.url);
         };
         const meta = [it.region, it.year, it.quality].filter(Boolean).join(' · ');
         card.innerHTML = `
