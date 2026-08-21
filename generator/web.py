@@ -12,6 +12,7 @@
 """
 import json
 import html
+import re
 from pathlib import Path
 from typing import Dict, List
 
@@ -441,20 +442,43 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       });
     }
 
+    // 地区标签白名单（顺序即显示顺序）
+    const REGION_ORDER = ['内地', '香港', '台湾', '美国', '日本', '英国', '韩国', '印度', '加拿大', '法国', '德国', '泰国', '西班牙', '俄罗斯', '澳大利亚', '巴西', '意大利', '菲律宾', '马来西亚', '墨西哥'];
+
+    function normalizeRegion(raw) {
+      if (!raw) return '';
+      const s = String(raw);
+      // 合拍片优先识别华语区
+      if (/(中国|大陆|华语)/.test(s)) return '内地';
+      if (/香港/.test(s)) return '香港';
+      if (/台湾/.test(s)) return '台湾';
+      for (const r of REGION_ORDER) {
+        if (s.includes(r)) return r;
+      }
+      return '';
+    }
+
     function getFilterValues(cat, dim) {
       const set = new Set();
       RESOURCES[cat].forEach(it => {
-        const v = it[dim];
+        let v = it[dim];
+        if (dim === 'region') {
+          v = normalizeRegion(v);
+        }
         if (v) set.add(v);
       });
-      return Array.from(set).sort((a, b) => {
-        // 年代按数字区间排序
-        if (dim === 'year') {
-          const order = { '2020年代':1, '2010年代':2, '2000年代':3, '90年代':4, '80年代':5, '更早':6 };
-          return (order[a] || 99) - (order[b] || 99);
-        }
-        return a.localeCompare(b, 'zh-CN');
-      });
+      const arr = Array.from(set);
+      if (dim === 'year') {
+        return arr.sort((a, b) => {
+          const na = parseInt(a, 10) || 0;
+          const nb = parseInt(b, 10) || 0;
+          return nb - na; // 新->旧
+        });
+      }
+      if (dim === 'region') {
+        return arr.sort((a, b) => REGION_ORDER.indexOf(a) - REGION_ORDER.indexOf(b));
+      }
+      return arr.sort((a, b) => a.localeCompare(b, 'zh-CN'));
     }
 
     function filterItems(items) {
@@ -614,12 +638,59 @@ def _item_to_json(it: dict) -> dict:
     return {
         "name": it.get("_clean_name") or clean_title(it["name"]),
         "media_type": it.get("media_type") or "",
-        "region": it.get("region") or "",
-        "year": str(it.get("year") or ""),
+        "region": _normalize_region(it.get("region")),
+        "year": _normalize_year(it.get("year")),
         "quality": it.get("quality") or "",
         "cover": it.get("cover") or "",
         "url": it.get("url") or "",
     }
+
+
+def _normalize_year(raw) -> str:
+    """把具体年份映射成年代区间"""
+    try:
+        y = int(raw or 0)
+    except (ValueError, TypeError):
+        return ""
+    if y <= 0:
+        return ""
+    if y >= 2020:
+        return "2020年代"
+    if y >= 2010:
+        return "2010年代"
+    if y >= 2000:
+        return "2000年代"
+    if y >= 1990:
+        return "90年代"
+    if y >= 1980:
+        return "80年代"
+    if y >= 1970:
+        return "70年代"
+    return "更早"
+
+
+# 地区标签白名单（顺序即显示顺序）
+_REGION_ORDER = ["内地", "香港", "台湾", "美国", "日本", "英国", "韩国", "印度", "加拿大", "法国",
+                 "德国", "泰国", "西班牙", "俄罗斯", "澳大利亚", "巴西", "意大利", "菲律宾",
+                 "马来西亚", "墨西哥"]
+
+
+def _normalize_region(raw: str) -> str:
+    """把原始地区字段映射成页面标签"""
+    if not raw:
+        return ""
+    s = str(raw)
+    # 合拍片优先识别华语区
+    if re.search(r"(中国|大陆|华语)", s):
+        return "内地"
+    if "香港" in s:
+        return "香港"
+    if "台湾" in s:
+        return "台湾"
+    for r in _REGION_ORDER:
+        if r in s:
+            return r
+    return ""
 
 
 def generate_index(output_dir: Path = None) -> Path:
