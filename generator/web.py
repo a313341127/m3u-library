@@ -469,11 +469,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       });
       const arr = Array.from(set);
       if (dim === 'year') {
-        return arr.sort((a, b) => {
-          const na = parseInt(a, 10) || 0;
-          const nb = parseInt(b, 10) || 0;
-          return nb - na; // 新->旧
-        });
+        const order = { '2020年代': 1, '2010年代': 2, '2000年代': 3, '90年代': 4, '80年代': 5, '70年代': 6, '更早': 7 };
+        return arr.sort((a, b) => (order[a] || 99) - (order[b] || 99)); // 新->旧
       }
       if (dim === 'region') {
         return arr.sort((a, b) => REGION_ORDER.indexOf(a) - REGION_ORDER.indexOf(b));
