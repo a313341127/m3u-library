@@ -13,6 +13,7 @@
 import json
 import html
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
 
@@ -469,8 +470,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       });
       const arr = Array.from(set);
       if (dim === 'year') {
-        const order = { '2020年代': 1, '2010年代': 2, '2000年代': 3, '90年代': 4, '80年代': 5, '70年代': 6, '更早': 7 };
-        return arr.sort((a, b) => (order[a] || 99) - (order[b] || 99)); // 新->旧
+        return arr.sort((a, b) => {
+          if (a === '更早') return 1;
+          if (b === '更早') return -1;
+          return parseInt(b, 10) - parseInt(a, 10); // 近->远
+        });
       }
       if (dim === 'region') {
         return arr.sort((a, b) => REGION_ORDER.indexOf(a) - REGION_ORDER.indexOf(b));
@@ -644,26 +648,17 @@ def _item_to_json(it: dict) -> dict:
 
 
 def _normalize_year(raw) -> str:
-    """把具体年份映射成年代区间"""
+    """年份标签：直接用具体年份，脏数据（未来年份/非法值）丢弃"""
     try:
         y = int(raw or 0)
     except (ValueError, TypeError):
         return ""
-    if y <= 0:
+    this_year = datetime.now().year
+    if y <= 0 or y > this_year:
         return ""
-    if y >= 2020:
-        return "2020年代"
-    if y >= 2010:
-        return "2010年代"
-    if y >= 2000:
-        return "2000年代"
-    if y >= 1990:
-        return "90年代"
-    if y >= 1980:
-        return "80年代"
-    if y >= 1970:
-        return "70年代"
-    return "更早"
+    if y < 1970:
+        return "更早"
+    return str(y)
 
 
 # 地区标签白名单（顺序即显示顺序）
