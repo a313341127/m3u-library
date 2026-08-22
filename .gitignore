@@ -6,3 +6,4 @@ output/
 .env
 node_modules/
 .wrangler/
+share/dist/
