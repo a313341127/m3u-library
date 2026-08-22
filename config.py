@@ -134,6 +134,38 @@ TITLE_CLEAN_TOKENS = (
     "高清", "超清", "全集", "蓝光", "bd",
 )
 
+# ---------- 直播源配置 ----------
+# 聚合直播源（公开 M3U），每天更新一次，全量刷新 live 表。
+# 下载走系统代理（本机 HTTPS_PROXY），测速始终直连（贴近真实观看网络）。
+LIVE_SOURCES = {
+    # Guovin iptv-api：每天自动测速优选（gd=广东视角），量大含港澳台
+    "guovin": "https://raw.githubusercontent.com/Guovin/iptv-api/gd/output/result.m3u",
+    # vbskycn：分组规整（央视/卫视/地方）
+    "vbskycn": "https://raw.githubusercontent.com/vbskycn/iptv/master/tv/iptv4.m3u",
+    # iptv-org 港澳台补充（含 Geo-blocked 标记的会自动剔除）
+    "iptvorg-hk": "https://iptv-org.github.io/iptv/countries/hk.m3u",
+    "iptvorg-tw": "https://iptv-org.github.io/iptv/countries/tw.m3u",
+    "iptvorg-mo": "https://iptv-org.github.io/iptv/countries/mo.m3u",
+}
+
+# 直播分类体系：key -> M3U group-title / Web 筛选标签
+LIVE_CATEGORIES = {
+    "cctv": "央视频道",
+    "satellite": "卫视频道",
+    "local": "地方频道",
+    "hmt": "港澳台",
+}
+LIVE_CATEGORY_ORDER = ["cctv", "satellite", "local", "hmt"]
+
+LIVE_KEEP_PER_CHANNEL = 3   # 每频道保留的线路数（按延迟升序）
+LIVE_SPEED_TIMEOUT = 3.0    # TCP 测速超时（秒）
+LIVE_SPEED_WORKERS = 64     # 测速并发线程数
+LIVE_SPEED_RETRY = 1        # 测速失败重试次数
+
+# 直播输出文件
+LIVE_M3U_OUTPUT = "live.m3u"
+LIVE_TXT_OUTPUT = "live.txt"
+
 # ---------- 采集配置 ----------
 # cc0cd = TVBox 聚合配置中心（https://tv.cc0cd.cc.cd 根路径返回一份 JSON，
 # 内含数百个影视采集站 API）。sources 为启用的白名单源 key（对应配置中心 sites[].key）。

@@ -90,6 +90,7 @@ def cmd_remove(args):
 # ---------------------------------------------------------------- generate
 def cmd_generate(args):
     from generator import m3u as m3u_gen
+    from generator import live as live_gen
     from generator.web import generate_index
 
     if args.category:
@@ -108,6 +109,12 @@ def cmd_generate(args):
         results = m3u_gen.generate_all(include_txt=args.txt, include_best=args.best)
         for path in results.values():
             print(f"[OK] 已生成 {path}")
+        # 直播源（live 表有数据时顺带生成）
+        from collector.live import list_live
+        if list_live():
+            live_gen.generate_live_m3u()
+            if args.txt:
+                live_gen.generate_live_txt()
     if not args.no_web:
         generate_index()
 
@@ -155,6 +162,27 @@ def cmd_collect(args):
             print(f"[OK] 已重新生成 {path}")
 
 
+# ---------------------------------------------------------------- collect-live
+def cmd_collect_live(args):
+    from collector.live import collect_live
+    from generator import m3u as m3u_gen
+    from generator import live as live_gen
+    from generator.web import generate_index
+
+    stats = collect_live()
+    print(f"[OK] 直播采集完成: 源可用 {stats.get('sources_ok')}/{stats.get('sources_ok', 0) + stats.get('sources_fail', 0)}"
+          f" | 解析 {stats.get('parsed')} 条 | 频道 {stats.get('kept')} 个"
+          f" | 入库线路 {stats.get('rows', 0)} 条")
+    if args.no_generate:
+        return
+    for path in m3u_gen.generate_all(include_txt=args.txt, include_best=args.best).values():
+        print(f"[OK] 已重新生成 {path}")
+    live_gen.generate_live_m3u()
+    if args.txt:
+        live_gen.generate_live_txt()
+    generate_index()
+
+
 # ---------------------------------------------------------------- 参数定义
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="main.py", description="M3U 影视资源库")
@@ -190,6 +218,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_gen.add_argument("--best", action="store_true", help="同时生成单条最优版（同影片只保留一条线路）")
     p_gen.add_argument("--no-web", action="store_true", help="不生成卡片式 Web 首页")
     p_gen.set_defaults(func=cmd_generate)
+
+    p_live = sub.add_parser("collect-live", help="采集聚合直播源（下载/分类/测速择优），完成后自动重新生成全部源")
+    p_live.add_argument("--txt", action="store_true", help="同时生成 TXT 文本源")
+    p_live.add_argument("--best", action="store_true", help="同时生成单条最优版 M3U/TXT")
+    p_live.add_argument("--no-generate", action="store_true", help="采集后不自动重新生成")
+    p_live.set_defaults(func=cmd_collect_live)
 
     p_col = sub.add_parser("collect", help="运行采集器，采集后自动重新生成 M3U")
     p_col.add_argument("-n", "--name", default="", help="采集器注册名")

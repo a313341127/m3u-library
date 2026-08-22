@@ -289,6 +289,69 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       color: var(--text-secondary);
     }
     .empty svg { width: 64px; height: 64px; fill: #3a414b; margin-bottom: 12px; }
+    /* 直播频道卡 */
+    .live-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+    @media (min-width: 640px) { .live-grid { grid-template-columns: repeat(3, 1fr); } }
+    @media (min-width: 900px) { .live-grid { grid-template-columns: repeat(4, 1fr); } }
+    @media (min-width: 1200px) { .live-grid { grid-template-columns: repeat(5, 1fr); } }
+    .live-card {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--card);
+      border-radius: 14px;
+      padding: 10px 12px;
+      box-shadow: var(--shadow);
+      cursor: pointer;
+      transition: transform .2s;
+      border: 1px solid var(--border);
+    }
+    .live-card:active { transform: scale(0.97); }
+    .live-logo {
+      flex: 0 0 auto;
+      width: 44px; height: 44px;
+      border-radius: 10px;
+      background: #232a33;
+      object-fit: contain;
+      padding: 4px;
+    }
+    .live-info { flex: 1; min-width: 0; }
+    .live-name {
+      font-size: 14px;
+      font-weight: 600;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .live-meta {
+      margin-top: 4px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .live-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: #2ed573;
+      box-shadow: 0 0 6px rgba(46,213,115,0.8);
+    }
+    .lat-badge {
+      flex: 0 0 auto;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #fff;
+      background: rgba(46,213,115,0.85);
+    }
+    .lat-badge.mid { background: rgba(255,159,10,0.9); }
+    .lat-badge.slow { background: rgba(255,71,87,0.9); }
     .toast {
       position: fixed;
       bottom: 30px;
@@ -394,17 +457,21 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zM9.5 14A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"/></svg>
       <input class="search" id="search" type="text" placeholder="搜索片名...">
     </div>
-    <div class="filter-section">
+    <div class="filter-section" id="mediaFilters">
       <div class="filter-label">类型</div>
       <div class="filter-tags" id="typeTags"></div>
     </div>
-    <div class="filter-section">
+    <div class="filter-section" id="regionFilterSec">
       <div class="filter-label">地区</div>
       <div class="filter-tags" id="regionTags"></div>
     </div>
-    <div class="filter-section">
+    <div class="filter-section" id="mediaFiltersYear">
       <div class="filter-label">年代</div>
       <div class="filter-tags" id="eraTags"></div>
+    </div>
+    <div class="filter-section" id="liveFilterSec" style="display:none">
+      <div class="filter-label">频道分类</div>
+      <div class="filter-tags" id="liveTags"></div>
     </div>
     <div class="section-title">
       <span style="display:flex;align-items:baseline;gap:8px;">
@@ -440,12 +507,15 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   <script>
     const CATEGORIES = __CATEGORIES__;
     const RESOURCES = __RESOURCES__;
+    const LIVE = __LIVE__;
+    const LIVE_CATS = { cctv: '央视', satellite: '卫视', local: '地方', hmt: '港澳台' };
     const DIM_LABELS = { media_type: '类型', region: '地区', year: '年代' };
 
     let currentCat = 'movie';
     let activeFilters = { media_type: '', region: '', year: '' };
+    let liveFilter = '';
     let searchQuery = '';
-    let currentSort = 'pop';   // pop=人气 / latest=最新 / score=评分
+    let currentSort = 'pop';   // pop=人气 / latest=最新 / score=评分 / chan=频道序 / lat=延迟
 
     const $ = id => document.getElementById(id);
 
@@ -469,7 +539,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     function initSortGroup() {
       const bar = $('sortGroup');
       bar.innerHTML = '';
-      [['pop', '人气'], ['latest', '最新'], ['score', '评分']].forEach(([key, label]) => {
+      const opts = currentCat === 'live'
+        ? [['chan', '频道序'], ['lat', '延迟']]
+        : [['pop', '人气'], ['latest', '最新'], ['score', '评分']];
+      if (currentCat === 'live' && currentSort !== 'chan' && currentSort !== 'lat') currentSort = 'chan';
+      if (currentCat !== 'live' && currentSort === 'chan') currentSort = 'pop';
+      if (currentCat !== 'live' && currentSort === 'lat') currentSort = 'pop';
+      opts.forEach(([key, label]) => {
         const btn = document.createElement('button');
         btn.className = 'sort-btn' + (currentSort === key ? ' active' : '');
         btn.textContent = label;
@@ -485,8 +561,33 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         const btn = document.createElement('button');
         btn.className = 'tab' + (key === currentCat ? ' active' : '');
         btn.textContent = info.label;
-        btn.onclick = () => { currentCat = key; activeFilters = { media_type: '', region: '', year: '' }; render(); };
+        btn.onclick = () => {
+          currentCat = key;
+          activeFilters = { media_type: '', region: '', year: '' };
+          liveFilter = '';
+          currentSort = key === 'live' ? 'chan' : 'pop';
+          render();
+        };
         tabs.appendChild(btn);
+      });
+    }
+
+    function makeLiveTags() {
+      const c = $('liveTags');
+      c.innerHTML = '';
+      const all = document.createElement('span');
+      all.className = 'tag' + (!liveFilter ? ' active' : '');
+      all.textContent = '全部';
+      all.onclick = () => { liveFilter = ''; render(); };
+      c.appendChild(all);
+      const counts = {};
+      LIVE.forEach(it => { counts[it.c] = (counts[it.c] || 0) + 1; });
+      Object.entries(LIVE_CATS).forEach(([key, label]) => {
+        const span = document.createElement('span');
+        span.className = 'tag' + (liveFilter === key ? ' active' : '');
+        span.textContent = label + ' ' + (counts[key] || 0);
+        span.onclick = () => { liveFilter = key; render(); };
+        c.appendChild(span);
       });
     }
 
@@ -564,7 +665,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     let hlsPlayer = null;
     let currentUrl = '';
 
-    function isM3u8(url) { return /[.]m3u8($|[?])/i.test(url); }
+    function isM3u8(url) { return true; }  // 直播源多为短链/PHP转发，一律交给 hls.js 尝试，失败自动 fallback
 
     function openVideo(name, url) {
       currentUrl = url;
@@ -638,6 +739,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
     function renderGrid(items) {
       const grid = $('grid');
+      grid.className = 'grid';
       grid.innerHTML = '';
       $('resultCount').textContent = items.length + ' 部';
       $('sectionName').textContent = CATEGORIES[currentCat].label;
@@ -678,9 +780,77 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     }
 
+    function latBadgeClass(lat) {
+      if (!lat) return '';
+      if (lat < 150) return '';
+      if (lat < 400) return ' mid';
+      return ' slow';
+    }
+
+    function renderLiveGrid(items) {
+      const grid = $('grid');
+      grid.className = 'live-grid';
+      grid.innerHTML = '';
+      $('resultCount').textContent = items.length + ' 个频道';
+      $('sectionName').textContent = '直播';
+      if (!items.length) {
+        grid.innerHTML = `<div class="empty">
+          <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/></svg>
+          <div>没有找到相关频道</div>
+        </div>`;
+        return;
+      }
+      items.forEach(it => {
+        const card = document.createElement('a');
+        card.className = 'live-card';
+        card.href = it.u;
+        card.onclick = e => { e.preventDefault(); openVideo(it.n, it.u); };
+        card.innerHTML = `
+          ${it.l ? `<img class="live-logo" src="${it.l}" loading="lazy" onerror="this.style.display='none'">`
+                 : `<div class="live-logo"></div>`}
+          <div class="live-info">
+            <div class="live-name">${htmlEscape(it.n)}</div>
+            <div class="live-meta"><span class="live-dot"></span>${LIVE_CATS[it.c] || ''}</div>
+          </div>
+          ${it.lat ? `<span class="lat-badge${latBadgeClass(it.lat)}">${it.lat}ms</span>` : ''}
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    function filterLive() {
+      return LIVE.filter(it => {
+        if (liveFilter && it.c !== liveFilter) return false;
+        if (searchQuery) {
+          return it.n && it.n.toLowerCase().includes(searchQuery.toLowerCase());
+        }
+        return true;
+      });
+    }
+
+    function sortLive(items) {
+      const arr = items.slice();
+      if (currentSort === 'lat') {
+        arr.sort((a, b) => (a.lat || 1e9) - (b.lat || 1e9));
+      }
+      // 频道序：LIVE 数据本身已按分类顺序+频道号排好，无需再排
+      return arr;
+    }
+
     function render() {
+      const isLive = currentCat === 'live';
       initTabs();
       initSortGroup();
+      $('mediaFilters').style.display = isLive ? 'none' : '';
+      $('regionFilterSec').style.display = isLive ? 'none' : '';
+      $('mediaFiltersYear').style.display = isLive ? 'none' : '';
+      $('liveFilterSec').style.display = isLive ? '' : 'none';
+      $('search').placeholder = isLive ? '搜索频道...' : '搜索片名...';
+      if (isLive) {
+        makeLiveTags();
+        renderLiveGrid(sortLive(filterLive()));
+        return;
+      }
       makeTags('typeTags', 'media_type', getFilterValues(currentCat, 'media_type'));
       makeTags('regionTags', 'region', getFilterValues(currentCat, 'region'));
       makeTags('eraTags', 'year', getFilterValues(currentCat, 'year'));
@@ -690,7 +860,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
     $('search').addEventListener('input', e => {
       searchQuery = e.target.value.trim();
-      renderGrid(sortItems(filterItems(RESOURCES[currentCat])));
+      if (currentCat === 'live') {
+        renderLiveGrid(sortLive(filterLive()));
+      } else {
+        renderGrid(sortItems(filterItems(RESOURCES[currentCat])));
+      }
     });
 
     render();
@@ -790,11 +964,37 @@ def generate_index(output_dir: Path = None) -> Path:
         cat: {"label": info["label"]}
         for cat, info in config.CATEGORIES.items()
     }
+    # 直播 Tab（频道已按 分类顺序+频道号+延迟 排好，Web 端展示最优线路）
+    live_data = _load_live_json()
+    if live_data:
+        categories["live"] = {"label": "直播"}
 
     html_text = HTML_TEMPLATE
     html_text = html_text.replace("__CATEGORIES__", json.dumps(categories, ensure_ascii=False))
     html_text = html_text.replace("__RESOURCES__", json.dumps(resources, ensure_ascii=False))
+    html_text = html_text.replace("__LIVE__", json.dumps(live_data, ensure_ascii=False))
 
     out.write_text(html_text, encoding="utf-8")
     print(f"[OK] 已生成 {out}")
     return out
+
+
+def _load_live_json() -> List[dict]:
+    """live 表 -> Web 端频道列表（每频道最优线路一条）"""
+    try:
+        from collector.live import list_live
+        rows = list_live()
+    except Exception as e:
+        print(f"[警告] 直播数据读取失败: {e}")
+        return []
+    channels: Dict[str, dict] = {}
+    for r in rows:
+        key = f"{r['category']}|{r['name']}"
+        if key in channels:
+            continue  # list_live 已按延迟排序，首条即最优
+        channels[key] = {
+            "n": r["name"], "c": r["category"],
+            "l": r.get("logo") or "", "u": r["url"],
+            "lat": int(r.get("latency") or 0),
+        }
+    return list(channels.values())

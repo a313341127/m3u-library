@@ -336,6 +336,7 @@ function showCode(code) {
     '<div class="linkbox"><div class="lb-t">播放器 M3U 地址（带专属码）</div>' +
       '<code>' + m3u('movie') + '</code><br><code>' + m3u('tv') + '</code><br>' +
       '<code>' + m3u('anime') + '</code><br><code>' + m3u('variety') + '</code><br>' +
+      '<code>' + m3u('live') + '</code><br>' +
       '<div class="lb-t" style="margin-top:6px">单条最优版（同名只留一条最快线路）</div>' +
       '<code>' + m3u('movie.best') + '</code> 等</div>' +
     '<button class="copy" onclick="copyAll(\\'' + code + '\\')">复制全部链接</button>' +
@@ -353,6 +354,7 @@ function copyAll(code) {
     '剧集：' + SITE2 + '/tv.m3u?key=' + code + '\\n' +
     '动漫：' + SITE2 + '/anime.m3u?key=' + code + '\\n' +
     '综艺：' + SITE2 + '/variety.m3u?key=' + code + '\\n' +
+    '直播：' + SITE2 + '/live.m3u?key=' + code + '\\n' +
     '（单条最优版：movie.best.m3u / tv.best.m3u 等同理）';
   navigator.clipboard.writeText(text).then(() => {
     alert('已复制，直接粘贴发给朋友');

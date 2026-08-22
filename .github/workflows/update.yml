@@ -40,8 +40,10 @@ jobs:
           echo "本次采集源: $SOURCES"
           python main.py collect -n cc0cd --pages 1 --sources "$SOURCES"
 
-      - name: 生成 M3U / TXT / Web 首页
-        run: python main.py generate --txt --best
+      - name: 采集直播源（聚合源下载 + 测速择优，全量刷新）
+        run: |
+          python main.py collect-live --no-generate
+          python main.py generate --txt --best
 
       - name: 生成 _headers（M3U Content-Type 修正 + 禁止缓存）
         run: |
@@ -92,6 +94,12 @@ jobs:
             Content-Type: text/plain; charset=utf-8
             Cache-Control: max-age=0, must-revalidate
           /variety.best.txt
+            Content-Type: text/plain; charset=utf-8
+            Cache-Control: max-age=0, must-revalidate
+          /live.m3u
+            Content-Type: application/vnd.apple.mpegurl
+            Cache-Control: max-age=0, must-revalidate
+          /live.txt
             Content-Type: text/plain; charset=utf-8
             Cache-Control: max-age=0, must-revalidate
           /index.html
