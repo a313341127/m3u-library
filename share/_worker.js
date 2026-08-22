@@ -3,6 +3,7 @@
 const ADMIN_PASSWORD = "031985";   // 管理面板登录口令
 const SITE_URL = "https://qs-agcl2.pages.dev";
 const COOKIE = "qgcode";           // 用户身份 Cookie（值为邀请码）
+const NOTE_COOKIE = "qgnote";      // 首次弹窗已确认 Cookie
 const ADMIN_COOKIE = "qgadmin";    // 管理员 Cookie
 const MAX_AGE = 7776000;           // 90 天
 const ANOMALY_IPS = 3;             // 24h 内超过 N 个不同 IP → 异常
@@ -105,6 +106,8 @@ const LOGIN_HTML = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8
     background:#ff2d55;color:#fff;font-size:16px;font-weight:600;cursor:pointer}
   button:active{opacity:.85}
   .err{color:#ff6160;font-size:13px;text-align:center;margin-top:12px;min-height:18px}
+  .foot{margin-top:18px;padding-top:14px;border-top:1px solid #22262e;
+    font-size:11px;color:#6b7280;text-align:center;line-height:1.7}
 </style></head><body>
 <form class="box" method="POST" action="/__login" autocomplete="off">
   <div class="t">秦哥影视资源</div>
@@ -112,6 +115,7 @@ const LOGIN_HTML = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8
   <input name="code" type="text" maxlength="6" autofocus required placeholder="邀请码">
   <button type="submit">进入</button>
   <div class="err" id="e"><!--ERR--></div>
+  <div class="foot">邀请码仅限本人使用 · 严禁转发分享<br>多 IP 访问将被自动封禁</div>
 </form></body></html>`;
 
 const BLOCKED_HTML = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
@@ -360,6 +364,85 @@ function closeModal() { $('modal').style.display = 'none'; }
 loadUsers();
 </script></body></html>`;
 
+// ---------- 首次访问弹窗（注入到首页 HTML）----------
+function escHtml(s) {
+  return String(s || "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+function popupHTML(code, user) {
+  const ips = (user.ips24h || []).length;
+  const isAnomaly = user.status === "anomaly";
+  const banner = isAnomaly
+    ? `<div class="qg-pn-warn">警告：你的邀请码 24 小时内已在 <b>${ips}</b> 个不同 IP 上使用，已被标记为异常。请立即停止分享，再扩散将自动封禁。</div>`
+    : "";
+  return `
+<style>
+#qg-pn-ov{position:fixed;inset:0;z-index:99998;background:rgba(0,0,0,.62);
+  display:flex;align-items:center;justify-content:center;padding:24px}
+#qg-pn-ov.qg-hide{display:none}
+#qg-pn-box{width:100%;max-width:400px;background:#1f232a;border:1px solid #333945;
+  border-radius:16px;padding:26px 24px 20px;text-align:center;animation:qg-pop .28s ease}
+@keyframes qg-pop{from{transform:scale(.92);opacity:0}to{transform:scale(1);opacity:1}}
+#qg-pn-box.qg-warnbox{border-color:#8a6a2a}
+.qg-pn-logo{width:52px;height:52px;margin:0 auto 14px;border-radius:14px;background:#C4502E;
+  color:#fff;font-size:20px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.qg-warnbox .qg-pn-logo{background:#b8862b}
+.qg-pn-t{font-size:18px;font-weight:700;color:#f2f2f2;margin-bottom:4px}
+.qg-pn-s{font-size:12px;color:#8a909a;margin-bottom:18px}
+.qg-pn-code{background:#14171c;border:1px dashed #4a5160;border-radius:10px;
+  padding:12px 10px;margin-bottom:16px}
+.qg-pn-code .l{font-size:12px;color:#9aa0aa;margin-bottom:6px}
+.qg-pn-code .c{font-size:26px;font-weight:700;letter-spacing:6px;color:#e8b56a;
+  font-family:Consolas,monospace}
+.qg-pn-rules{text-align:left;background:#181b20;border-radius:10px;padding:12px 14px;
+  margin-bottom:16px;list-style:none}
+.qg-pn-rules li{font-size:13px;color:#c3c8d0;line-height:1.9;display:flex;gap:8px}
+.qg-pn-rules li::before{content:"·";color:#C4502E;font-weight:700}
+.qg-pn-rules b{color:#e88a6a;font-weight:600}
+.qg-pn-warn{background:rgba(232,181,106,.12);border:1px solid rgba(232,181,106,.4);
+  color:#e8b56a;font-size:13px;border-radius:10px;padding:10px 12px;margin-bottom:14px;
+  line-height:1.6;text-align:left}
+.qg-pn-ip{display:flex;justify-content:space-between;align-items:center;font-size:12px;
+  color:#9aa0aa;padding:0 4px 16px}
+.qg-pn-ip .v{color:#7fc79a;font-weight:700}
+.qg-warnbox .qg-pn-ip .v{color:#e8b56a}
+#qg-pn-ok{width:100%;padding:13px 0;border:none;border-radius:10px;background:#C4502E;
+  color:#fff;font-size:15px;font-weight:600;cursor:pointer}
+#qg-pn-ok:active{transform:translateY(1px)}
+</style>
+<div id="qg-pn-ov">
+  <div id="qg-pn-box"${isAnomaly ? ' class="qg-warnbox"' : ""}>
+    <div class="qg-pn-logo">秦</div>
+    <div class="qg-pn-t">秦哥影视资源</div>
+    <div class="qg-pn-s">专属邀请码 · 仅限本人使用</div>
+    ${banner}
+    <div class="qg-pn-code">
+      <div class="l">你的专属邀请码（绑定 ${escHtml(user.name)}）</div>
+      <div class="c">${escHtml(code)}</div>
+    </div>
+    <ul class="qg-pn-rules">
+      <li>本邀请码<b>仅限本人使用，严禁转发</b>给他人</li>
+      <li>系统实时监测访问 IP，超过 <b>${ANOMALY_IPS} 个 IP</b> 标记异常</li>
+      <li>超过 <b>${BLOCK_IPS} 个 IP</b> 将<b>自动封禁</b>，无法访问</li>
+      <li>封禁后需联系分享者人工解封</li>
+    </ul>
+    <div class="qg-pn-ip">
+      <span>当前 24h 已监测到</span>
+      <span class="v">${ips} / ${ANOMALY_IPS} 个 IP</span>
+    </div>
+    <button id="qg-pn-ok">我已知晓</button>
+  </div>
+</div>
+<script>
+(function(){
+  var ov=document.getElementById('qg-pn-ov');
+  document.getElementById('qg-pn-ok').addEventListener('click',function(){
+    document.cookie='${NOTE_COOKIE}=1; Path=/; Max-Age=${MAX_AGE}; Secure; SameSite=Lax';
+    ov.parentNode&&ov.parentNode.removeChild(ov);
+  });
+})();
+</script>`;
+}
+
 // ---------- 静态资源 ----------
 function contentTypeFor(path) {
   if (path.endsWith(".m3u") || path.endsWith(".m3u8")) return "application/vnd.apple.mpegurl";
@@ -526,9 +609,25 @@ export default {
     // ===== Cookie 会话访问 =====
     const cookieCode = getCookie(request, COOKIE);
     if (cookieCode) {
-      const user = await getUser(env, cookieCode);
+      let user = await getUser(env, cookieCode);
       if (user && user.status !== "blocked") {
+        const isPage = path === "/" || path === "/index.html";
+        // 网页访问也记录 IP（此前仅登录/M3U 请求记录）；用更新后的数据渲染弹窗
+        if (isPage) user = (await logAccess(env, cookieCode, request, path)) || user;
         const r = await env.ASSETS.fetch(request);
+        // 首次访问（无 qgnote）或异常状态 → 注入弹窗
+        const needPopup = getCookie(request, NOTE_COOKIE) !== "1" || user.status === "anomaly";
+        const isHtml = (r.headers.get("content-type") || "").includes("text/html");
+        if (isPage && needPopup && isHtml) {
+          let html = await r.text();
+          const idx = html.toLowerCase().lastIndexOf("</body>");
+          if (idx >= 0) html = html.slice(0, idx) + popupHTML(cookieCode, user) + html.slice(idx);
+          else html += popupHTML(cookieCode, user);
+          const res = new Response(html, r);
+          res.headers.set("cache-control", "no-store");
+          res.headers.set("X-Robots-Tag", "noindex");
+          return res;
+        }
         return wrapAsset(r, path, null);
       }
     }

@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>首次弹窗预览 - 秦哥影视资源</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #14161a;
+    color: #e8e8e8;
+    min-height: 100vh;
+  }
+  .preview-bar {
+    position: sticky; top: 0; z-index: 300;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 12px 20px;
+    background: #1d2026;
+    border-bottom: 1px solid #2c3038;
+  }
+  .preview-bar .label { font-size: 13px; color: #9aa0aa; margin-right: 6px; }
+  .pv-btn {
+    padding: 7px 14px; border-radius: 999px; border: 1px solid #3a3f49;
+    background: #262a31; color: #cfd4db; font-size: 13px; cursor: pointer;
+    transition: all .15s;
+  }
+  .pv-btn:hover { border-color: #5a6270; }
+  .pv-btn.active { background: #C4502E; border-color: #C4502E; color: #fff; }
+
+  .page { max-width: 1080px; margin: 0 auto; padding: 20px 20px 60px; }
+  .site-header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 18px; }
+  .site-header h1 { font-size: 22px; font-weight: 600; color: #f0f0f0; }
+  .site-header span { font-size: 12px; color: #7d838d; }
+  .tabs { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+  .tab { padding: 6px 16px; border-radius: 999px; background: #262a31; color: #b8bec7; font-size: 13px; border: 1px solid #2c3038; }
+  .tab.on { background: #2e3b4d; color: #dce6f5; border-color: #3f557a; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; filter: blur(0px); }
+  .card { background: #1e2127; border-radius: 10px; overflow: hidden; border: 1px solid #2a2e36; }
+  .card .poster { height: 200px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #6b7280; position: relative; }
+  .card .badge { position: absolute; top: 8px; left: 8px; background: #d97a1f; color: #fff; font-size: 11px; padding: 2px 7px; border-radius: 4px; }
+  .card .name { padding: 8px 10px; font-size: 13px; color: #d5d9df; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card .meta { padding: 0 10px 10px; font-size: 11px; color: #7d838d; }
+  .c1 { background: linear-gradient(160deg,#2b3a4d,#1c2735); }
+  .c2 { background: linear-gradient(160deg,#4d3a2b,#35271c); }
+  .c3 { background: linear-gradient(160deg,#3a4d2b,#27351c); }
+  .c4 { background: linear-gradient(160deg,#432b4d,#2e1c35); }
+
+  .overlay {
+    position: fixed; inset: 0; z-index: 200;
+    background: rgba(0,0,0,.62);
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+    backdrop-filter: blur(2px);
+    transition: opacity .25s;
+  }
+  .overlay.hide { opacity: 0; pointer-events: none; }
+  .dialog {
+    width: 100%; max-width: 400px;
+    background: #1f232a;
+    border: 1px solid #333945;
+    border-radius: 16px;
+    padding: 26px 24px 20px;
+    text-align: center;
+    box-shadow: 0 18px 50px rgba(0,0,0,.5);
+    animation: pop .28s ease;
+  }
+  @keyframes pop { from { transform: scale(.92); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .dialog .logo {
+    width: 52px; height: 52px; margin: 0 auto 14px; border-radius: 14px;
+    background: #C4502E; color: #fff; font-size: 20px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    letter-spacing: 1px;
+  }
+  .dialog h2 { font-size: 18px; font-weight: 600; color: #f2f2f2; margin-bottom: 4px; }
+  .dialog .sub { font-size: 12px; color: #8a909a; margin-bottom: 18px; }
+  .code-box {
+    background: #14171c; border: 1px dashed #4a5160; border-radius: 10px;
+    padding: 12px 10px; margin-bottom: 16px;
+  }
+  .code-box .t { font-size: 12px; color: #9aa0aa; margin-bottom: 6px; }
+  .code-box .code { font-size: 26px; font-weight: 700; letter-spacing: 6px; color: #e8b56a; font-family: "Consolas", monospace; }
+  .rules { text-align: left; background: #181b20; border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; }
+  .rules li { list-style: none; font-size: 13px; color: #c3c8d0; line-height: 1.9; display: flex; gap: 8px; }
+  .rules li::before { content: "·"; color: #C4502E; font-weight: 700; }
+  .rules b { color: #e88a6a; font-weight: 600; }
+  .ip-line {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 12px; color: #9aa0aa; padding: 0 4px 16px;
+  }
+  .ip-line .val { color: #7fc79a; font-weight: 600; }
+  .ip-line .val.warn { color: #e8b56a; }
+  .btn {
+    width: 100%; padding: 13px 0; border: none; border-radius: 10px;
+    background: #C4502E; color: #fff; font-size: 15px; font-weight: 600;
+    cursor: pointer;
+  }
+  .btn:active { transform: translateY(1px); }
+  .btn-reset {
+    margin-top: 10px; background: none; border: none; color: #7d838d;
+    font-size: 12px; cursor: pointer; text-decoration: underline;
+  }
+
+  .dialog.warn { border-color: #8a6a2a; }
+  .dialog.warn .logo { background: #b8862b; }
+  .dialog.warn .code { color: #e8b56a; }
+  .warn-banner {
+    background: rgba(232,181,106,.12); border: 1px solid rgba(232,181,106,.4);
+    color: #e8b56a; font-size: 13px; border-radius: 10px;
+    padding: 10px 12px; margin-bottom: 14px; line-height: 1.6; text-align: left;
+  }
+  .dialog.blocked { border-color: #8a3a35; }
+  .dialog.blocked .logo { background: #a32d2d; }
+  .blocked-banner {
+    background: rgba(226,75,74,.12); border: 1px solid rgba(226,75,74,.45);
+    color: #e2908f; font-size: 13px; border-radius: 10px;
+    padding: 10px 12px; margin-bottom: 14px; line-height: 1.6; text-align: left;
+  }
+  .tip { text-align: center; font-size: 12px; color: #6b7280; margin-top: 30px; line-height: 1.8; }
+</style>
+</head>
+<body>
+
+<div class="preview-bar">
+  <span class="label">弹窗状态预览：</span>
+  <button class="pv-btn active" data-mode="normal">首次访问（正常）</button>
+  <button class="pv-btn" data-mode="anomaly">异常用户（黄色警告）</button>
+  <button class="pv-btn" data-mode="blocked">已封禁（红色）</button>
+  <button class="pv-btn" data-mode="closed">已确认（弹窗关闭后）</button>
+</div>
+
+<div class="page">
+  <div class="site-header">
+    <h1>秦哥影视资源</h1>
+    <span>14640 部 · 4 个分类 · 每日更新</span>
+  </div>
+  <div class="tabs">
+    <div class="tab on">电影</div><div class="tab">剧集</div><div class="tab">动漫</div><div class="tab">综艺</div>
+  </div>
+  <div class="grid" id="grid"></div>
+  <div class="tip">
+    ↑ 底下是分享站首页的示意内容，弹窗叠加在页面上层<br>
+    实际实现：Worker 判定「已登录 + 无 qgnote Cookie」时才注入弹窗，点「我已知晓」后写入 qgnote（90 天），之后不再弹出
+  </div>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="dialog" id="dialog">
+    <div class="logo">秦</div>
+    <h2>秦哥影视资源</h2>
+    <div class="sub">专属邀请码 · 仅限本人使用</div>
+
+    <div id="warnBox"></div>
+
+    <div class="code-box">
+      <div class="t">你的专属邀请码</div>
+      <div class="code">7KX9PZ</div>
+    </div>
+
+    <ul class="rules">
+      <li>本邀请码<b>仅限本人使用，严禁转发</b>给他人</li>
+      <li>系统实时监测访问 IP，超过 <b>3 个 IP</b> 标记异常</li>
+      <li>超过 <b>5 个 IP</b> 将<b>自动封禁</b>，无法访问</li>
+      <li>封禁后需联系管理员人工解封</li>
+    </ul>
+
+    <div class="ip-line">
+      <span>当前 24h 已监测到</span>
+      <span class="val" id="ipVal">1 / 3 个 IP</span>
+    </div>
+
+    <button class="btn" id="okBtn">我已知晓</button>
+    <button class="btn-reset" id="resetBtn">重新查看弹窗</button>
+  </div>
+</div>
+
+<script>
+  var films = [
+    ["长安三万里","动画 · 2023","8.3","c1"],["流浪地球3","科幻 · 2027","8.9","c2"],
+    ["热辣滚烫","喜剧 · 2024","7.7","c3"],["第二十条","剧情 · 2024","7.5","c4"],
+    ["封神第二部","奇幻 · 2025","7.8","c1"],["哪吒之魔童闹海","动画 · 2025","8.5","c2"],
+    ["飞驰人生2","喜剧 · 2024","7.6","c3"],["满江红","悬疑 · 2023","7.0","c4"],
+    ["消失的她","悬疑 · 2023","6.2","c1"],["孤注一掷","犯罪 · 2023","6.8","c2"]
+  ];
+  var grid = document.getElementById("grid");
+  films.forEach(function (f) {
+    var card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML =
+      '<div class="poster ' + f[3] + '">' + (f[2] >= 8 ? '<span class="badge">' + f[2] + '</span>' : "") +
+      '<span>' + f[0] + " · 海报示意</span></div>" +
+      '<div class="name">' + f[0] + "</div>" +
+      '<div class="meta">' + f[1] + " · 评分 " + f[2] + "</div>";
+    grid.appendChild(card);
+  });
+
+  var overlay = document.getElementById("overlay");
+  var dialog = document.getElementById("dialog");
+  var ipVal = document.getElementById("ipVal");
+  var warnBox = document.getElementById("warnBox");
+  var okBtn = document.getElementById("okBtn");
+  var resetBtn = document.getElementById("btn-reset") || document.getElementById("resetBtn");
+
+  var modes = {
+    normal:   { ip: "1 / 3 个 IP", cls: "", warn: "" },
+    anomaly:  { ip: "4 / 3 个 IP", cls: "warn", warn: '<div class="warn-banner">警告：你的邀请码 24 小时内已在 <b>4 个不同 IP</b> 上使用，已被标记为异常。请立即停止分享，再扩散将自动封禁。</div>' },
+    blocked:  { ip: "6 / 3 个 IP", cls: "blocked", warn: '<div class="blocked-banner">该邀请码已在超过 5 个 IP 上使用，<b>已被自动封禁</b>。网页与 M3U 播放地址均已失效，如需解封请联系管理员。</div>' },
+    closed:   null
+  };
+
+  function setMode(m) {
+    var cfg = modes[m];
+    document.querySelectorAll(".pv-btn").forEach(function (b) { b.classList.toggle("active", b.dataset.mode === m); });
+    dialog.className = "dialog" + (cfg && cfg.cls ? " " + cfg.cls : "");
+    if (!cfg) {
+      overlay.classList.add("hide");
+      return;
+    }
+    overlay.classList.remove("hide");
+    warnBox.innerHTML = cfg.warn;
+    ipVal.textContent = cfg.ip;
+    ipVal.className = "val" + (cfg.cls ? " warn" : "");
+    okBtn.style.display = cfg.cls === "blocked" ? "none" : "";
+    resetBtn.style.display = cfg.cls ? "none" : "";
+  }
+
+  document.querySelectorAll(".pv-btn").forEach(function (b) {
+    b.addEventListener("click", function () { setMode(b.dataset.mode); });
+  });
+  okBtn.addEventListener("click", function () { setMode("closed"); });
+  document.getElementById("resetBtn").addEventListener("click", function () { setMode("normal"); });
+</script>
+</body>
+</html>
