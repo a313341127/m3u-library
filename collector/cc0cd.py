@@ -412,6 +412,18 @@ class CC0CDCollector(BaseCollector):
         except (TypeError, ValueError):
             year = None
 
+        # 人气（源站播放量）与评分（0-10，脏值归 0）
+        try:
+            hits = int(v.get("vod_hits") or 0)
+        except (TypeError, ValueError):
+            hits = 0
+        try:
+            score = float(v.get("vod_score") or 0)
+        except (TypeError, ValueError):
+            score = 0.0
+        if not (0 < score <= 10):
+            score = 0.0
+
         return ResourceItem(
             name=name,
             category=category,
@@ -423,4 +435,6 @@ class CC0CDCollector(BaseCollector):
             url=url,
             quality=quality,
             raw_type_name=raw_type_name,
+            hits=hits,
+            score=score,
         )

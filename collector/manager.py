@@ -16,7 +16,7 @@ from core.database import Database
 
 # 采集场景下允许刷新的字段（不含 name/category/url 这些"身份键"）
 _UPDATE_FIELDS = ("media_type", "region", "year", "cover", "description",
-                  "quality", "raw_type_name")
+                  "quality", "raw_type_name", "hits", "score")
 
 
 def run_collector(name: str, **kwargs) -> Dict[str, object]:

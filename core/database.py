@@ -42,7 +42,7 @@ CREATE INDEX IF NOT EXISTS idx_resources_year       ON resources(year);
 # update_resource 允许更新的字段白名单
 UPDATEABLE_FIELDS = {"name", "category", "media_type", "region", "year",
                      "cover", "description", "url", "quality", "source",
-                     "raw_type_name"}
+                     "raw_type_name", "hits", "score"}
 
 
 class Database:
@@ -68,10 +68,14 @@ class Database:
 
     @staticmethod
     def _migrate(conn: sqlite3.Connection):
-        """兼容升级：老表缺少 raw_type_name 时自动追加"""
+        """兼容升级：老表缺列时自动追加"""
         cols = {r[1] for r in conn.execute("PRAGMA table_info(resources)")}
         if "raw_type_name" not in cols:
             conn.execute("ALTER TABLE resources ADD COLUMN raw_type_name TEXT DEFAULT ''")
+        if "hits" not in cols:
+            conn.execute("ALTER TABLE resources ADD COLUMN hits INTEGER DEFAULT 0")
+        if "score" not in cols:
+            conn.execute("ALTER TABLE resources ADD COLUMN score REAL DEFAULT 0")
 
     @staticmethod
     def _now() -> str:
@@ -83,7 +87,8 @@ class Database:
                      region: str = "", year: Optional[int] = None,
                      cover: str = "", description: str = "", url: str = "",
                      quality: str = "", source: str = "manual",
-                     raw_type_name: str = "") -> Optional[int]:
+                     raw_type_name: str = "", hits: int = 0,
+                     score: float = 0.0) -> Optional[int]:
         """新增资源，返回新 id；重复（同分类+同名+同地址）返回 None。"""
         now = self._now()
         with self._connect() as conn:
@@ -97,10 +102,10 @@ class Database:
                 """INSERT INTO resources
                    (name, category, media_type, region, year, cover,
                     description, url, quality, source, raw_type_name,
-                    updated_at, created_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    hits, score, updated_at, created_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (name, category, media_type, region, year, cover, description,
-                 url, quality, source, raw_type_name, now, now),
+                 url, quality, source, raw_type_name, hits, score, now, now),
             )
             return cur.lastrowid
 

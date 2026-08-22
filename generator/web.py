@@ -26,7 +26,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>秦哥影视源</title>
+  <title>秦哥影视资源</title>
   <meta name="theme-color" content="#101318">
   <style>
     :root {
@@ -229,6 +229,37 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       color: #fff;
       background: rgba(0,0,0,0.65);
     }
+    .score-badge {
+      position: absolute;
+      top: 8px; left: 8px;
+      padding: 3px 7px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #fff;
+      background: rgba(255,159,10,0.92);
+    }
+    .score-badge.high { background: rgba(255,71,87,0.92); }
+    .sort-group {
+      display: flex;
+      gap: 6px;
+    }
+    .sort-btn {
+      padding: 5px 12px;
+      border-radius: 14px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      background: var(--card);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: all .2s;
+    }
+    .sort-btn.active {
+      color: var(--accent);
+      background: var(--accent-light);
+      border-color: var(--accent-light);
+      font-weight: 600;
+    }
     .info {
       padding: 12px;
     }
@@ -354,7 +385,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <body>
   <header>
     <div class="header-inner">
-      <h1 class="title"><span class="title-dot"></span>秦哥影视源</h1>
+      <h1 class="title"><span class="title-dot"></span>秦哥影视资源</h1>
       <nav class="tabs" id="tabs"></nav>
     </div>
   </header>
@@ -376,8 +407,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       <div class="filter-tags" id="eraTags"></div>
     </div>
     <div class="section-title">
-      <span id="sectionName">全部</span>
-      <span class="count" id="resultCount">0</span>
+      <span style="display:flex;align-items:baseline;gap:8px;">
+        <span id="sectionName">全部</span>
+        <span class="count" id="resultCount">0</span>
+      </span>
+      <div class="sort-group" id="sortGroup"></div>
     </div>
     <div class="grid" id="grid"></div>
   </main>
@@ -411,8 +445,38 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     let currentCat = 'movie';
     let activeFilters = { media_type: '', region: '', year: '' };
     let searchQuery = '';
+    let currentSort = 'pop';   // pop=人气 / latest=最新 / score=评分
 
     const $ = id => document.getElementById(id);
+
+    // 排序：人气=播放量(无人气时用线路数兜底) 最新=年份近到远 评分=豆瓣分高到低
+    function sortItems(items) {
+      const arr = items.slice();
+      const nameCmp = (a, b) => (a.name || '').localeCompare(b.name || '', 'zh-CN');
+      if (currentSort === 'latest') {
+        arr.sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)
+          || (b.hits || 0) - (a.hits || 0) || nameCmp(a, b));
+      } else if (currentSort === 'score') {
+        arr.sort((a, b) => (b.score || 0) - (a.score || 0)
+          || (b.hits || 0) - (a.hits || 0) || (b.lines || 0) - (a.lines || 0) || nameCmp(a, b));
+      } else {
+        arr.sort((a, b) => (b.hits || 0) - (a.hits || 0)
+          || (b.lines || 0) - (a.lines || 0) || (b.score || 0) - (a.score || 0) || nameCmp(a, b));
+      }
+      return arr;
+    }
+
+    function initSortGroup() {
+      const bar = $('sortGroup');
+      bar.innerHTML = '';
+      [['pop', '人气'], ['latest', '最新'], ['score', '评分']].forEach(([key, label]) => {
+        const btn = document.createElement('button');
+        btn.className = 'sort-btn' + (currentSort === key ? ' active' : '');
+        btn.textContent = label;
+        btn.onclick = () => { currentSort = key; render(); };
+        bar.appendChild(btn);
+      });
+    }
 
     function initTabs() {
       const tabs = $('tabs');
@@ -599,6 +663,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             <img src="${it.cover || ''}" alt="${htmlEscape(it.name)}" loading="lazy" onerror="this.style.display='none'">
             <div class="play-icon"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div>
             ${it.quality ? `<span class="quality-badge">${htmlEscape(it.quality)}</span>` : ''}
+            ${it.score > 0 ? `<span class="score-badge${it.score >= 8 ? ' high' : ''}">${it.score.toFixed(1)}</span>` : ''}
           </div>
           <div class="info">
             <div class="name">${htmlEscape(it.name)}</div>
@@ -615,16 +680,17 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
     function render() {
       initTabs();
+      initSortGroup();
       makeTags('typeTags', 'media_type', getFilterValues(currentCat, 'media_type'));
       makeTags('regionTags', 'region', getFilterValues(currentCat, 'region'));
       makeTags('eraTags', 'year', getFilterValues(currentCat, 'year'));
-      const items = filterItems(RESOURCES[currentCat]);
+      const items = sortItems(filterItems(RESOURCES[currentCat]));
       renderGrid(items);
     }
 
     $('search').addEventListener('input', e => {
       searchQuery = e.target.value.trim();
-      renderGrid(filterItems(RESOURCES[currentCat]));
+      renderGrid(sortItems(filterItems(RESOURCES[currentCat])));
     });
 
     render();
@@ -636,6 +702,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
 def _item_to_json(it: dict) -> dict:
     """把数据库条目转成页面需要的轻量字段"""
+    try:
+        score = round(float(it.get("_best_score") or 0), 1)
+    except (TypeError, ValueError):
+        score = 0.0
     return {
         "name": it.get("_clean_name") or clean_title(it["name"]),
         "media_type": it.get("media_type") or "",
@@ -644,6 +714,9 @@ def _item_to_json(it: dict) -> dict:
         "quality": it.get("quality") or "",
         "cover": it.get("cover") or "",
         "url": it.get("url") or "",
+        "score": score,
+        "hits": int(it.get("_best_hits") or 0),
+        "lines": int(it.get("_lines") or 1),
     }
 
 
@@ -693,6 +766,23 @@ def generate_index(output_dir: Path = None) -> Path:
     resources: Dict[str, List[dict]] = {}
     for cat in config.M3U_OUTPUT:
         items, _ = prepare_items(cat)
+        # 统计每部影片的线路数（多少个源收录，作为人气的兜底指标）；
+        # 并聚合所有线路中最大的人气/评分（保留的线路可能来自无人气数据的源）
+        agg: Dict[tuple, dict] = {}
+        for it in items:
+            key = (it["_clean_name"], it.get("year") or "")
+            a = agg.setdefault(key, {"lines": 0, "hits": 0, "score": 0.0})
+            a["lines"] += 1
+            a["hits"] = max(a["hits"], int(it.get("hits") or 0))
+            try:
+                a["score"] = max(a["score"], float(it.get("score") or 0))
+            except (TypeError, ValueError):
+                pass
+        for it in items:
+            a = agg[(it["_clean_name"], it.get("year") or "")]
+            it["_lines"] = a["lines"]
+            it["_best_hits"] = a["hits"]
+            it["_best_score"] = a["score"]
         # Web 首页同样去重：每部影片只展示一条最优线路，避免搜索时满屏重复
         resources[cat] = [_item_to_json(it) for it in _flat_best_items(items)]
 
