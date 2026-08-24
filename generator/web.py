@@ -524,8 +524,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       const arr = items.slice();
       const nameCmp = (a, b) => (a.name || '').localeCompare(b.name || '', 'zh-CN');
       if (currentSort === 'latest') {
+        // 最新 = 年份（上映时间）降序；同年份内按评分高→低、再按名称，避免与「人气」撞车
         arr.sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)
-          || (b.hits || 0) - (a.hits || 0) || nameCmp(a, b));
+          || (b.score || 0) - (a.score || 0) || nameCmp(a, b));
       } else if (currentSort === 'score') {
         arr.sort((a, b) => (b.score || 0) - (a.score || 0)
           || (b.hits || 0) - (a.hits || 0) || (b.lines || 0) - (a.lines || 0) || nameCmp(a, b));
