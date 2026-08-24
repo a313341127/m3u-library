@@ -26,6 +26,7 @@ import json
 import re
 import time
 import urllib.request
+import urllib.parse
 import ssl
 from typing import Dict, List, Optional, Tuple
 
@@ -47,10 +48,11 @@ def http_get_json(url: str, timeout: int = 20) -> dict:
 
 
 def join_params(api: str, **params) -> str:
-    """给采集 API 追加查询参数。api 可能自带 ?ac=list 或尾部 ?，统一处理"""
+    """给采集 API 追加查询参数。api 可能自带 ?ac=list 或尾部 ?，统一处理
+    参数值含中文时自动 URL 编码。"""
     base = api.rstrip("?&")
     sep = "&" if "?" in base else "?"
-    qs = "&".join(f"{k}={v}" for k, v in params.items())
+    qs = "&".join(f"{k}={urllib.parse.quote(str(v), safe='')}" for k, v in params.items())
     return f"{base}{sep}{qs}"
 
 
@@ -326,6 +328,8 @@ class CC0CDCollector(BaseCollector):
                 params = {"ac": "list", "pg": pg}
                 if tid is not None:
                     params["t"] = tid
+                if keyword:
+                    params["wd"] = keyword
                 list_url = join_params(api, **params)
                 try:
                     data = http_get_json(list_url, timeout=timeout)

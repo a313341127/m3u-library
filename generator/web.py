@@ -519,20 +519,31 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
     const $ = id => document.getElementById(id);
 
-    // 排序：人气=播放量(无人气时用线路数兜底) 最新=年份近到远 评分=豆瓣分高到低
+    // 综合人气分：播放量按评分加权，低评分大幅降权，没评分按 5 分兜底
+    function popScore(it) {
+      const hits = it.hits || 0;
+      const lines = it.lines || 1;
+      // 没评分按 5.0 算；低分（<5）会显著降权，避免低分烂片霸榜
+      const s = (it.score > 0 && it.score <= 10) ? it.score : 5.0;
+      const weight = Math.pow(s / 10, 2);
+      return (hits || lines * 1000) * weight;
+    }
+
+    // 排序：人气=综合人气分 最新=年份近到远 评分=豆瓣分高到低
     function sortItems(items) {
       const arr = items.slice();
       const nameCmp = (a, b) => (a.name || '').localeCompare(b.name || '', 'zh-CN');
       if (currentSort === 'latest') {
-        // 最新 = 年份（上映时间）降序；同年份内按评分高→低、再按名称，避免与「人气」撞车
+        // 最新 = 年份（上映时间）降序；同年份内按名称，纯粹按时间呈现
         arr.sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)
-          || (b.score || 0) - (a.score || 0) || nameCmp(a, b));
+          || nameCmp(a, b));
       } else if (currentSort === 'score') {
         arr.sort((a, b) => (b.score || 0) - (a.score || 0)
-          || (b.hits || 0) - (a.hits || 0) || (b.lines || 0) - (a.lines || 0) || nameCmp(a, b));
+          || popScore(b) - popScore(a) || (b.lines || 0) - (a.lines || 0) || nameCmp(a, b));
       } else {
-        arr.sort((a, b) => (b.hits || 0) - (a.hits || 0)
-          || (b.lines || 0) - (a.lines || 0) || (b.score || 0) - (a.score || 0) || nameCmp(a, b));
+        // 人气：按加权播放量，低评分自动下沉
+        arr.sort((a, b) => popScore(b) - popScore(a)
+          || (b.lines || 0) - (a.lines || 0) || nameCmp(a, b));
       }
       return arr;
     }
