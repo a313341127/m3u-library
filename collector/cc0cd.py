@@ -157,6 +157,16 @@ def classify_category(type_name: str, description: str = "") -> Optional[Tuple[s
         if mt in _REGION_MAP or (mt + "国") in _REGION_MAP or mt in ("国产", "内地", "大陆", "海外", "欧美", "日韩"):
             return ("anime", "")
         return ("anime", mt or "动漫")
+    # 电影细分类型（文采/文才等站用细分名，如 科幻/喜剧/动作/战争/剧情/悬疑）
+    # 注意「剧情」以"剧"结尾，必须先于下面的"剧"分支识别为电影
+    _MOVIE_TYPES = ("科幻", "喜剧", "动作", "战争", "爱情", "犯罪", "恐怖",
+                    "悬疑", "剧情", "冒险", "惊悚", "武侠", "奇幻", "灾难",
+                    "运动", "历史", "传记", "伦理")
+    if any(k in t for k in _MOVIE_TYPES):
+        mt = t.strip().rstrip("片")      # "科幻片" -> 科幻
+        if mt in _REGION_MAP or (mt + "国") in _REGION_MAP or mt in ("国产", "内地", "大陆", "海外", "欧美", "日韩"):
+            return ("movie", "")
+        return ("movie", mt or "电影")
     if t.endswith("剧"):
         mt = t[:-1]
         # 地区复合剧种（日本剧/泰国剧/港剧/泰剧/国产剧...）：
@@ -315,9 +325,28 @@ class CC0CDCollector(BaseCollector):
             )
             print(f"[cc0cd] [{site_name}] 类型映射 {summary}")
 
+        # 1.1 探测 t=type_id 是否生效：部分源（如文采/文才影视）的 API 忽略
+        #     type 参数，ac=list&t=N 返回空。此时改为全量混采（不加 t），
+        #     由 _to_item 在入库时按 type_name 重新分类。
+        first_tid = next((t[0] for t in type_map if t[0] is not None), None)
+        if first_tid is not None:
+            probe_url = join_params(api, ac="list", t=first_tid, pg=1)
+            try:
+                probe = http_get_json(probe_url, timeout=timeout)
+                if not probe.get("list"):
+                    print(f"[cc0cd] [{site_name}] 源不支持按类型筛选(t={first_tid} 返回空)，"
+                          f"改用全量混采模式")
+                    # forced_category 置 None：由 _to_item 按 type_name 重新分类，
+                    # 同时受 want_category 过滤，避免把混合数据全部强行标成 movie
+                    type_map = [(None, "", None, "")]
+            except Exception:
+                pass
+
         # 2. 只保留目标分类
         if want_category:
-            type_map = [t for t in type_map if t[2] == want_category]
+            # 全量混采 fallback 的条目 category 为 None，由 _to_item 按 type_name
+            # 再分类并受 want_category 过滤，此处不能把它过滤掉
+            type_map = [t for t in type_map if t[2] == want_category or t[2] is None]
         if not type_map:
             print(f"[cc0cd] [{site_name}] 无匹配的目标分类，跳过")
             return 0

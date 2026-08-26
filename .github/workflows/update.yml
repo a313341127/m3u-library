@@ -1,6 +1,6 @@
 name: 每日自动更新
 
-# 每天北京时间 03:30 自动增量采集 -> 生成 M3U -> 部署 Cloudflare Pages -> 提交数据库
+# 每天北京时间 03:30 自动增量采集 -> 生成 M3U/Web -> 生成途播 Jellyfin 数据 -> 部署 Cloudflare Pages -> 提交数据库
 # 也可在 Actions 页面手动点击 Run workflow 立即执行一次
 on:
   schedule:
@@ -44,6 +44,25 @@ jobs:
         run: |
           python main.py collect-live --no-generate
           python main.py generate --txt --best
+
+      - name: 生成途播 Jellyfin 后端数据（api/movies.json + 地区分片）
+        # 关键：途播后端 worker 在运行时 fetch 此 JSON 渲染海报墙。
+        # 此前工作流只生成 M3U/Web，从不生成它，导致途播每日更新“看似完成”实则数据没变。
+        run: |
+          python generate_movies_json.py
+
+      - name: 生成电影墙分类封面
+        run: |
+          python -m pip install -q pillow
+          python scripts/generate_covers.py
+
+      - name: 递增 DATA_VERSION（避免客户端/途播缓存旧数据）
+        # worker 用 DATA_VERSION 做缓存键与查询参数；每次部署换新版，强制客户端拉取最新片源。
+        run: |
+          VER="$(date +%Y%m%d%H)"
+          sed -i "s/const DATA_VERSION = \".*\";/const DATA_VERSION = \"$VER\";/" output/_worker.js
+          echo "DATA_VERSION -> $VER"
+          grep "DATA_VERSION =" output/_worker.js
 
       - name: 生成 _headers（M3U Content-Type 修正 + 禁止缓存）
         run: |
@@ -106,11 +125,15 @@ jobs:
             Cache-Control: max-age=0, must-revalidate
           EOF
 
-      - name: 部署到 Cloudflare Pages
+      - name: 部署到 Cloudflare Pages（裸域名 qinjin.pages.dev = 途播入口，由 main 分支提供）
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx --yes wrangler@4 pages deploy output --project-name=qinjin --branch=production
+        run: |
+          # 裸域名 qinjin.pages.dev 由 main 分支提供（途播实际使用的入口），必须部署到 main。
+          # production 分支仅作别名/预览，顺带同步以保持一致。
+          npx --yes wrangler@4 pages deploy output --project-name=qinjin --branch=main
+          npx --yes wrangler@4 pages deploy output --project-name=qinjin --branch=production
 
       - name: 构建并部署分享站（带访问口令，独立项目 qs-agcl2）
         env:
