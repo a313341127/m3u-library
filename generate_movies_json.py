@@ -171,8 +171,9 @@ def main():
     for m in movies:
         by_region[m.get("region") or "其他"].append(m)
     region_files = []
-    # 列表分片进一步瘦身：去掉 overview（列表页用不到），详情页从全量 JSON 取。
-    LIGHT_FIELDS = ("id", "name", "sort", "region", "year", "cover", "quality", "score")
+    # 列表分片：去掉 overview（列表页用不到），详情页从全量 JSON 取。
+    # 但必须保留 sources：itemsList 要按 tuboSources() 过滤掉途播不可播源，否则地区视图会全空。
+    LIGHT_FIELDS = ("id", "name", "sort", "region", "year", "cover", "quality", "score", "sources")
     for region, rmovies in by_region.items():
         light_movies = [
             {k: m[k] for k in LIGHT_FIELDS}

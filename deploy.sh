@@ -107,17 +107,22 @@ cat > output/_headers <<'EOF'
 EOF
 
 # ---------- 3) 部署到 Cloudflare Pages ----------
-echo "[3/3] 部署到 Cloudflare Pages ($PROJECT) ..."
+# 裸域名 qinjin.pages.dev 由 main 分支提供（途播实际入口），必须优先部署到 main。
+# production 分支仅作别名/预览，顺带同步。
+echo "[3/4] 部署到 Cloudflare Pages ($PROJECT) main ..."
 export CLOUDFLARE_API_TOKEN="$CF_TOKEN"
 export CLOUDFLARE_ACCOUNT_ID="$CF_ACCOUNT"
 if [ ! -f "$WRANGLER" ]; then
   echo "wrangler 未找到，先安装（首次运行）..."
   npm install --prefix "$HOME/.workbuddy/binaries/node/workspace" wrangler --no-fund --no-audit >/dev/null
 fi
+"$NODE_BIN" "$WRANGLER" pages deploy output --project-name="$PROJECT" --branch=main
+
+echo "[4/4] 部署到 Cloudflare Pages ($PROJECT) production ..."
 "$NODE_BIN" "$WRANGLER" pages deploy output --project-name="$PROJECT" --branch=production
 
 echo ""
 echo "✅ 部署完成！"
-echo "   Web 首页:   https://production.qinjin.pages.dev/"
-echo "   M3U 源:     https://production.qinjin.pages.dev/movie.m3u"
-echo "   （自定义域名 qinjin.ccwu.cc 受本地 DNS 劫持影响，建议先用 Pages 域名）"
+echo "   Web 首页:   https://qinjin.pages.dev/"
+echo "   M3U 源:     https://qinjin.pages.dev/movie.m3u"
+echo "   production 别名: https://production.qinjin.pages.dev/"
