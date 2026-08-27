@@ -17,33 +17,37 @@ def find_font(candidates):
     raise FileNotFoundError("找不到可用字体，尝试以下路径均不存在：" + "; ".join(candidates))
 
 
-# Windows 优先 SourceHan / Arial；Linux Actions 优先 Noto CJK / DejaVu / Liberation
+# 仓库内置中文字体（scripts/fonts/），优先于系统字体，保证 CI（ubuntu-latest 无中文字体）
+# 与本地 Windows（SourceHan）都能稳定渲染中文，避免环境差异导致封面缺字或步骤失败。
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+LOCAL_FONT = os.path.join(_SCRIPT_DIR, "fonts", "wqy-microhei.ttc")
+
+# Windows 优先 SourceHan；CI/其他平台回退到仓库内置 wqy-microhei；最后尝试系统字体
 FONT_BOLD = find_font([
     "C:/Windows/Fonts/SOURCEHANSANSCN-HEAVY.OTF",
     "C:/Windows/Fonts/SOURCEHANSANSCN-BOLD.OTF",
     "C:/Windows/Fonts/msyhbd.ttc",
-    "/usr/share/fonts/truetype/noto/NotoSansCJK-Bold.ttc",
-    "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
+    LOCAL_FONT,
     "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
     "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+    "/usr/share/fonts/truetype/noto/NotoSansCJK-Bold.ttc",
 ])
 FONT_REG = find_font([
     "C:/Windows/Fonts/SOURCEHANSANSCN-REGULAR.OTF",
     "C:/Windows/Fonts/msyh.ttc",
-    "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
-    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    LOCAL_FONT,
     "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
     "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+    "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
 ])
 FONT_EN = find_font([
-    "C:/Windows/Fonts/ARIAL.TTF",
     "C:/Windows/Fonts/ARIALBD.TTF",
+    "C:/Windows/Fonts/ARIAL.TTF",
+    LOCAL_FONT,
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-    "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
-    "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
 ])
 
 REGIONS = [
