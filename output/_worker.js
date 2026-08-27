@@ -5,9 +5,9 @@ const DATA_ORIGIN = "https://qinjin.pages.dev";
 const DATA_VERSION = "20260827b";
 // 数据源（cc0cd 苹果CMS）不提供真实时长字段，故不返回 RunTimeTicks，
 // 避免途播显示统一的虚假“1小时30分”。若日后采集到真实时长再补。
-// 统一库分类：电影/剧集/动漫/综艺（直播不在 Jellyfin 后端，单独保留在 Web 端）
-const CAT_LABELS = { movie: "电影", tv: "剧集", anime: "动漫", variety: "综艺" };
-const CAT_ORDER = ["movie", "tv", "anime", "variety"];
+// 统一库分类：电影/直播/剧集/综艺/动漫
+const CAT_LABELS = { movie: "电影", live: "直播", tv: "剧集", variety: "综艺", anime: "动漫" };
+const CAT_ORDER = ["movie", "live", "tv", "variety", "anime"];
 
 let CACHE_ALL = null;
 let CACHE_ALL_LOADING = null;
@@ -149,15 +149,8 @@ function toDto(m) {
 }
 
 function views(data) {
-  // 统一库：全部 + 四分类（电影/剧集/动漫/综艺）。直播不在此处（Web 端单独保留）。
-  const items = [{
-    Id: "view_all",
-    Name: "全部",
-    Type: "CollectionFolder",
-    CollectionType: "movies",
-    ImageTags: { Primary: "cover" },
-    ServerId: "c0a8f7e2-1b3c-4d5e-9f0a-2b6c4d8e1f02",
-  }];
+  // 统一库：五分类（电影/直播/剧集/综艺/动漫），无「全部」
+  const items = [];
   for (const c of CAT_ORDER) {
     items.push({
       Id: "view_cat_" + c,
@@ -176,11 +169,13 @@ function itemsList(data, url) {
   let scope = "all";
   if (parentId && parentId.startsWith("view_cat_")) {
     scope = parentId.slice("view_cat_".length);
-  } else if (parentId === "view_all") {
-    scope = "all";
   }
-  // 按分类取数据：全部=全量，分类=预建索引
-  let items = scope === "all" ? data.movies : (data.byCat[scope] || []);
+  // 按分类取数据：分类=预建索引
+  let items = data.byCat[scope] || [];
+  if (scope === "all" || !items.length) {
+    // 兼容旧客户端或无 ParentId 的列表请求：返回全量
+    items = data.movies || [];
+  }
 
   const searchTerm =
     url.searchParams.get("searchTerm") ||
@@ -543,11 +538,22 @@ function redirect302(loc) {
 async function streamProxy(data, id, url, request, ctx) {
   const m = data.byId.get(id);
   if (!m) return new Response("not found", { status: 404 });
+  const cat = m.cat || "movie";
   const srcIdx = parseInt(url.searchParams.get("src") || "0", 10) || 0;
+  const sourcesRaw = (m.sources && m.sources.length)
+    ? m.sources
+    : (m.url ? [m.url] : []);
+  if (!sourcesRaw.length) return new Response("no source", { status: 404 });
+  const tryIdx = Math.min(srcIdx, sourcesRaw.length - 1);
+
+  // 直播直接 302 给客户端，不经过 worker 代理（playlist 实时更新、分片动态）
+  if (cat === "live") {
+    return redirect302(sourcesRaw[tryIdx]);
+  }
+
   // 与 playbackInfo 一致：途播侧只用过滤后的源（索引对齐）
   const sources = tuboSources(m);
   if (!sources.length) return new Response("no source for tubo", { status: 404 });
-  const tryIdx = Math.min(srcIdx, sources.length - 1);
   const order = [];
   for (let i = tryIdx; i < sources.length; i++) order.push(i);
   for (let i = 0; i < tryIdx; i++) order.push(i);
@@ -652,6 +658,35 @@ function tuboSources(m) {
 function playbackInfo(data, id, origin) {
   const m = data.byId.get(id);
   if (!m) return { MediaSources: [] };
+  const cat = m.cat || "movie";
+  const sourcesRaw = (m.sources && m.sources.length)
+    ? m.sources
+    : (m.url ? [m.url] : []);
+  if (!sourcesRaw.length) return { MediaSources: [] };
+
+  // 直播：不过滤、不代理，直接给原始 m3u8 地址让客户端大陆网络直连
+  if (cat === "live") {
+    const mediaSources = sourcesRaw.map((u, i) => {
+      const container = detectContainer(u);
+      return {
+        Protocol: "Http",
+        Id: m.id + "-" + i,
+        Path: u,
+        DirectStreamUrl: u,
+        Type: "Default",
+        Container: container,
+        IsRemote: true,
+        SupportsDirectStream: true,
+        SupportsDirectPlay: true,
+        SupportsTranscoding: false,
+        Name: i === 0 ? "主线路" : "线路" + (i + 1),
+        Size: 0,
+        MediaStreams: makeStreams(),
+      };
+    });
+    return { MediaSources: mediaSources, PlaySessionId: "sess-" + m.id };
+  }
+
   // 途播侧只暴露“途播可播”的源（过滤黑名单域名）；网页端走静态数据不受影响
   const sources = tuboSources(m);
   if (!sources.length) return { MediaSources: [] };

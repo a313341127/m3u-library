@@ -1,14 +1,14 @@
-"""生成电影/剧集/动漫/综艺元数据 JSON，供 Cloudflare Workers (Jellyfin 兼容后端) 运行时 fetch。
+"""生成电影/剧集/动漫/综艺/直播元数据 JSON，供 Cloudflare Workers (Jellyfin 兼容后端) 运行时 fetch。
 
 输出:
-  output/api/all.json        # 四分类合并（电影+剧集+动漫+综艺），每条带 cat 字段，统一库入口
+  output/api/all.json        # 五分类合并（电影+直播+剧集+综艺+动漫），每条带 cat 字段，统一库入口
   output/api/movies.json     # 仅电影（向后兼容旧 worker）
   output/api/movies_{region}.json  # 电影地区分片（向后兼容）
 
 all.json 结构: {"updated": "...", "count": N, "movies": [ {...}, ... ]}
 每条影片字段:
-  id       稳定哈希 id(按 名称|年份 生成，重生成不变)；按分类加前缀 m_/t_/a_/v_ 避免跨类重名
-  cat      分类: movie / tv / anime / variety
+  id       稳定哈希 id(按 名称|年份 生成，重生成不变)；按分类加前缀 m_/l_/t_/v_/a_ 避免跨类重名
+  cat      分类: movie / live / tv / variety / anime
   name     片名
   sort     排序名(用于 SortName，按名称拼音/原始)
   region   地区桶
@@ -25,7 +25,7 @@ all.json 结构: {"updated": "...", "count": N, "movies": [ {...}, ... ]}
 去重策略:
   同一部影片(名称+年份相同)在数据库里往往有多行(多采集站/多线路)，
   这里按 (名称,年份) 合并为一条（分类内去重），把多条 URL 收集进 sources，
-  国内可直连源排最前。直播(live)不纳入本文件，单独走 live 模块。
+  国内可直连源排最前。直播(live)按频道+子分类去重，每个频道保留测速后的多条线路。
 """
 import json
 import sys
@@ -46,12 +46,13 @@ OUT_DIR = os.path.join(ROOT, "output", "api")
 # 兼容旧文件名：movies.json / movies_{region}.json
 OUT_MOVIES = os.path.join(OUT_DIR, "movies.json")
 
-# 纳入统一库的四分类（直播单独保留，不进来）
+# 纳入统一库的五分类（顺序 = 途播视图展示顺序）
 JELLYFIN_CATS = [
     ("movie", "m_", "电影"),
+    ("live", "l_", "直播"),
     ("tv", "t_", "剧集"),
-    ("anime", "a_", "动漫"),
     ("variety", "v_", "综艺"),
+    ("anime", "a_", "动漫"),
 ]
 
 
@@ -92,6 +93,73 @@ def popularity(hits, score, lines: int = 1, year: int = None) -> float:
     if year and year >= 2020:
         base *= (1.0 + (year - 2020) * 0.05)
     return base
+
+
+def build_live(prefix: str) -> list:
+    """从 live 表构建直播频道列表（按 央视/卫视/地方/港澳台 排序，同频道多线路合并）。"""
+    from collector.live import list_live
+
+    # list_live 已按 LIVE_CATEGORY_ORDER + channel_sort_key + latency 排好序
+    rows = list_live()
+
+    # 聚合：key=(category, name) -> sources
+    merged = {}
+    order = []
+    for r in rows:
+        cat = r.get("category", "")
+        name = r.get("name", "")
+        url = (r.get("url") or "").strip()
+        logo = r.get("logo") or ""
+        if not url:
+            continue
+        key = (cat, name)
+        if key not in merged:
+            merged[key] = {
+                "name": name,
+                "sort": name,
+                "region": config.LIVE_CATEGORIES.get(cat, cat),
+                "year": None,
+                "cover": logo,
+                "overview": "",
+                "quality": "",
+                "score": 0,
+                "hits": 0,
+                "sources": [url],
+            }
+            order.append(key)
+        else:
+            rec = merged[key]
+            if url not in rec["sources"]:
+                rec["sources"].append(url)
+            if not rec["cover"] and logo:
+                rec["cover"] = logo
+
+    channels = []
+    for key in order:
+        rec = merged[key]
+        sources = rec.pop("sources")
+        cat = key[0]
+        # id 稳定：由 分类+频道名 决定
+        ch_id = prefix + hashlib.md5(
+            ("%s|%s" % (key[0], key[1])).encode("utf-8")
+        ).hexdigest()[:14]
+        channels.append({
+            "id": ch_id,
+            "cat": "live",
+            "name": rec["name"],
+            "sort": rec["sort"],
+            "region": rec["region"],
+            "year": None,
+            "cover": rec["cover"],
+            "overview": "",
+            "quality": "",
+            "score": 0,
+            "hits": 0,
+            "pop": 0,
+            "url": sources[0] if sources else "",
+            "sources": sources,
+        })
+    return channels
 
 
 def build_category(cat: str, prefix: str) -> list:
@@ -203,12 +271,15 @@ def main():
     per_cat = {}
     all_movies = []
     for cat, prefix, label in JELLYFIN_CATS:
-        lst = build_category(cat, prefix)
+        if cat == "live":
+            lst = build_live(prefix)
+        else:
+            lst = build_category(cat, prefix)
         per_cat[cat] = lst
         all_movies.extend(lst)
         print("分类 %s(%s): %d 部" % (label, cat, len(lst)))
 
-    # 1) 统一库入口：四分类合并 all.json（带 cat 字段）
+    # 1) 统一库入口：五分类合并 all.json（带 cat 字段）
     all_payload = {
         "updated": datetime.datetime.now().isoformat(timespec="seconds"),
         "count": len(all_movies),
