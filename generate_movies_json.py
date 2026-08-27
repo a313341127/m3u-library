@@ -1,14 +1,18 @@
-"""生成电影元数据 JSON，供 Cloudflare Workers (Jellyfin 兼容后端) 运行时 fetch。
+"""生成电影/剧集/动漫/综艺元数据 JSON，供 Cloudflare Workers (Jellyfin 兼容后端) 运行时 fetch。
 
-输出: output/api/movies.json
-结构: {"updated": "...", "count": N, "movies": [ {...}, ... ]}
+输出:
+  output/api/all.json        # 四分类合并（电影+剧集+动漫+综艺），每条带 cat 字段，统一库入口
+  output/api/movies.json     # 仅电影（向后兼容旧 worker）
+  output/api/movies_{region}.json  # 电影地区分片（向后兼容）
 
-字段说明 (每部电影):
-  id       稳定哈希 id(按 名称|年份 生成，重生成不变，便于途播缓存)
+all.json 结构: {"updated": "...", "count": N, "movies": [ {...}, ... ]}
+每条影片字段:
+  id       稳定哈希 id(按 名称|年份 生成，重生成不变)；按分类加前缀 m_/t_/a_/v_ 避免跨类重名
+  cat      分类: movie / tv / anime / variety
   name     片名
   sort     排序名(用于 SortName，按名称拼音/原始)
-  region   地区桶(中国大陆/港澳/台湾/美国/日本/韩国/英国/印度/泰国/欧美/其他)
-  year     清洗后年份(int | null, 非 [1900,2026] 归 null)
+  region   地区桶
+  year     清洗后年份(int | null)
   cover    海报 URL
   overview 简介
   url      主播放直链(国内可直连源优先)
@@ -19,9 +23,9 @@
   sources  该片所有播放线路(去重后的 URL 列表，主线路在前，供途播切换)
 
 去重策略:
-  同一部电影(名称+年份相同)在数据库里往往有多行(多采集站/多线路)，
-  这里按 (名称,年份) 合并为一条，把多条 URL 收集进 sources，
-  国内可直连源排最前 —— 海报墙不再出现重复片源，播放时可切换线路。
+  同一部影片(名称+年份相同)在数据库里往往有多行(多采集站/多线路)，
+  这里按 (名称,年份) 合并为一条（分类内去重），把多条 URL 收集进 sources，
+  国内可直连源排最前。直播(live)不纳入本文件，单独走 live 模块。
 """
 import json
 import sys
@@ -30,6 +34,7 @@ import re
 import datetime
 import hashlib
 import sqlite3
+from collections import defaultdict
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, ROOT)
@@ -38,7 +43,16 @@ from generator.m3u import _region_bucket, _is_domestic  # noqa: E402
 
 DB = os.path.join(ROOT, "data", "media.db")
 OUT_DIR = os.path.join(ROOT, "output", "api")
-OUT = os.path.join(OUT_DIR, "movies.json")
+# 兼容旧文件名：movies.json / movies_{region}.json
+OUT_MOVIES = os.path.join(OUT_DIR, "movies.json")
+
+# 纳入统一库的四分类（直播单独保留，不进来）
+JELLYFIN_CATS = [
+    ("movie", "m_", "电影"),
+    ("tv", "t_", "剧集"),
+    ("anime", "a_", "动漫"),
+    ("variety", "v_", "综艺"),
+]
 
 
 def clean_sort(name: str) -> str:
@@ -80,19 +94,17 @@ def popularity(hits, score, lines: int = 1, year: int = None) -> float:
     return base
 
 
-def main():
-    os.makedirs(OUT_DIR, exist_ok=True)
+def build_category(cat: str, prefix: str) -> list:
+    """构建单个分类的影片列表（分类内按 名称|年份 去重，合并线路）。"""
     con = sqlite3.connect(DB)
     con.row_factory = sqlite3.Row
     cur = con.execute(
         "SELECT id,name,region,year,cover,description,url,quality,score,hits "
-        "FROM resources WHERE category='movie'"
+        "FROM resources WHERE category=?", (cat,)
     )
     rows = cur.fetchall()
     con.close()
-    raw = len(rows)
 
-    # 合并：按 (名称,年份) 去重，同一部片的多条线路收集为 sources
     merged = {}
     order = []
     for row in rows:
@@ -149,12 +161,13 @@ def main():
         rec["pop"] = popularity(rec["hits"], rec["score"], len(rec["sources"]), rec["year"])
         sources = rec.pop("sources")
         rec.pop("_best_score", None)
-        # 主线路：直链优先 → 国内可直连优先（途播默认播主线路，需是可直连流地址）
+        # 主线路：直链优先 → 国内可直连优先
         primary_first = _sort_sources(sources)
         movies.append({
-            "id": "m_" + hashlib.md5(
+            "id": prefix + hashlib.md5(
                 ("%s|%s" % (key[0], key[1])).encode("utf-8")
             ).hexdigest()[:14],
+            "cat": cat,
             "name": rec["name"],
             "sort": rec["sort"],
             "region": rec["region"],
@@ -168,52 +181,7 @@ def main():
             "pop": rec["pop"],
             "sources": primary_first,
         })
-
-
-    payload = {
-        "updated": datetime.datetime.now().isoformat(timespec="seconds"),
-        "count": len(movies),
-        "movies": movies,
-    }
-    with open(OUT, "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False, separators=(",", ":"))
-    size = os.path.getsize(OUT)
-    multi = sum(1 for m in movies if len(m["sources"]) > 1)
-
-    # 按地区分片：Jellyfin 后端按 ParentId 加载时只取对应地区，减少每次传输/解析量。
-    # 列表分片去掉多线路 sources（只保留主线路 url），体积可降约一半。
-    from collections import defaultdict
-    by_region = defaultdict(list)
-    for m in movies:
-        by_region[m.get("region") or "其他"].append(m)
-    region_files = []
-    # 列表分片：去掉 overview（列表页用不到），详情页从全量 JSON 取。
-    # 必须保留 sources（itemsList 按 tuboSources() 过滤不可播源）和 pop（按人气排序）。
-    LIGHT_FIELDS = ("id", "name", "sort", "region", "year", "cover", "quality", "score", "pop", "sources")
-    for region, rmovies in by_region.items():
-        light_movies = [
-            {k: m[k] for k in LIGHT_FIELDS}
-            for m in rmovies
-        ]
-        rpayload = {
-            "updated": payload["updated"],
-            "count": len(light_movies),
-            "region": region,
-            "movies": light_movies,
-        }
-        safe_name = region.replace(" ", "_").replace("/", "_")
-        rpath = os.path.join(OUT_DIR, f"movies_{safe_name}.json")
-        with open(rpath, "w", encoding="utf-8") as f:
-            json.dump(rpayload, f, ensure_ascii=False, separators=(",", ":"))
-        region_files.append((region, len(light_movies), os.path.getsize(rpath)))
-
-    print(
-        "生成完成: 原始 %d 行 -> 去重 %d 部电影(其中 %d 部含多线路), "
-        "文件 %.2f MB -> %s" % (raw, len(movies), multi, size / 1024 / 1024, OUT)
-    )
-    print("地区分片:")
-    for region, count, rsize in sorted(region_files, key=lambda x: -x[2]):
-        print("  %s: %d 部, %.2f MB -> %s" % (region, count, rsize / 1024 / 1024, os.path.join(OUT_DIR, f"movies_{region.replace(' ', '_').replace('/', '_')}.json")))
+    return movies
 
 
 def _is_direct(u: str) -> bool:
@@ -223,11 +191,67 @@ def _is_direct(u: str) -> bool:
 
 
 def _sort_sources(sources):
-    """排序：直链优先 → 国内可直连优先。
-    确保途播默认播放的「主线路」是可直连的流地址(而非 HTML 解析页)。"""
+    """排序：直链优先 → 国内可直连优先。"""
     def key(u):
         return (0 if _is_direct(u) else 1, 0 if _is_domestic(u) else 1)
     return sorted(sources, key=key)
+
+
+def main():
+    os.makedirs(OUT_DIR, exist_ok=True)
+
+    per_cat = {}
+    all_movies = []
+    for cat, prefix, label in JELLYFIN_CATS:
+        lst = build_category(cat, prefix)
+        per_cat[cat] = lst
+        all_movies.extend(lst)
+        print("分类 %s(%s): %d 部" % (label, cat, len(lst)))
+
+    # 1) 统一库入口：四分类合并 all.json（带 cat 字段）
+    all_payload = {
+        "updated": datetime.datetime.now().isoformat(timespec="seconds"),
+        "count": len(all_movies),
+        "movies": all_movies,
+    }
+    out_all = os.path.join(OUT_DIR, "all.json")
+    with open(out_all, "w", encoding="utf-8") as f:
+        json.dump(all_payload, f, ensure_ascii=False, separators=(",", ":"))
+    print("生成 %s: %d 部, %.2f MB" % (
+        out_all, len(all_movies), os.path.getsize(out_all) / 1024 / 1024))
+
+    # 2) 向后兼容：movies.json（仅电影）
+    movie_list = per_cat["movie"]
+    movies_payload = {
+        "updated": all_payload["updated"],
+        "count": len(movie_list),
+        "movies": movie_list,
+    }
+    with open(OUT_MOVIES, "w", encoding="utf-8") as f:
+        json.dump(movies_payload, f, ensure_ascii=False, separators=(",", ":"))
+
+    # 3) 向后兼容：电影地区分片
+    by_region = defaultdict(list)
+    for m in movie_list:
+        by_region[m.get("region") or "其他"].append(m)
+    LIGHT_FIELDS = ("id", "name", "sort", "region", "year", "cover", "quality", "score", "pop", "sources", "cat")
+    region_files = []
+    for region, rmovies in by_region.items():
+        light_movies = [{k: m[k] for k in LIGHT_FIELDS} for m in rmovies]
+        rpayload = {
+            "updated": all_payload["updated"],
+            "count": len(light_movies),
+            "region": region,
+            "movies": light_movies,
+        }
+        safe_name = region.replace(" ", "_").replace("/", "_")
+        rpath = os.path.join(OUT_DIR, f"movies_{safe_name}.json")
+        with open(rpath, "w", encoding="utf-8") as f:
+            json.dump(rpayload, f, ensure_ascii=False, separators=(",", ":"))
+        region_files.append((region, len(light_movies), os.path.getsize(rpath)))
+    print("电影地区分片:")
+    for region, count, rsize in sorted(region_files, key=lambda x: -x[2]):
+        print("  %s: %d 部, %.2f MB" % (region, count, rsize / 1024 / 1024))
 
 
 if __name__ == "__main__":

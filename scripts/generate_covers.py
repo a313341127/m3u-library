@@ -283,6 +283,20 @@ def icon_other(draw, size, color, alpha, lw):
         draw.ellipse([x - size * 0.06, cy - size * 0.06, x + size * 0.06, cy + size * 0.06], outline=c, width=lw)
 
 
+def icon_play(draw, size, color, alpha, lw):
+    """通用播放三角（分类视图封面水印）"""
+    c = rgba(color, alpha)
+    cx, cy = WIDTH * 0.78, HEIGHT * 0.52
+    r = size * 0.32
+    draw.ellipse([cx - r, cy - r, cx + r, cy + r], outline=c, width=lw)
+    tri = [
+        (cx - r * 0.34, cy - r * 0.42),
+        (cx - r * 0.34, cy + r * 0.42),
+        (cx + r * 0.46, cy),
+    ]
+    draw.polygon(tri, fill=c)
+
+
 ICON_MAP = {
     "中国大陆": icon_mainland,
     "香港": icon_hongkong,
@@ -296,6 +310,7 @@ ICON_MAP = {
     "印度": icon_india,
     "欧美": icon_west,
     "其他": icon_other,
+    "cat": icon_play,
 }
 
 
@@ -336,7 +351,7 @@ class FloatDraw:
         return self.draw.rounded_rectangle(self._intxy(xy), *args, **kwargs)
 
 
-def generate(region, c1, c2, text_dark):
+def generate(badge_text, big_text, c1, c2, text_dark, label_en, icon_key, file_key):
     img = Image.new("RGB", (WIDTH, HEIGHT), hex_to_rgb(c1))
     draw = ImageDraw.Draw(img)
 
@@ -348,7 +363,7 @@ def generate(region, c1, c2, text_dark):
     # subtle grain / noise texture (very faint)
     grain = overlay()
     gd = ImageDraw.Draw(grain)
-    draw_noise_texture(gd, WIDTH, HEIGHT, accent, 8, seed=hash(region) % 100000)
+    draw_noise_texture(gd, WIDTH, HEIGHT, accent, 8, seed=hash(badge_text + big_text) % 100000)
     img = Image.alpha_composite(img.convert("RGBA"), grain).convert("RGB")
     draw = ImageDraw.Draw(img)
     fdraw = FloatDraw(draw)
@@ -369,7 +384,7 @@ def generate(region, c1, c2, text_dark):
     fdraw.arc([-WIDTH * 0.10, HEIGHT * 0.45, WIDTH * 0.45, HEIGHT * 1.10], 0, 90, fill=arc_c, width=HEIGHT // 25)
 
     # right-side outline watermark icon
-    icon_fn = ICON_MAP.get(region, icon_other)
+    icon_fn = ICON_MAP.get(icon_key, icon_other)
     line_w = max(2, int(HEIGHT * 0.018))
     icon_fn(fdraw, int(min(WIDTH, HEIGHT) * 0.55), accent, 90, line_w)
 
@@ -378,10 +393,10 @@ def generate(region, c1, c2, text_dark):
     left_x = WIDTH * 0.12
     top_y = HEIGHT * 0.16
 
-    # pill badge "电影"
+    # pill badge
     badge_h = 40
     badge_font = ImageFont.truetype(FONT_BOLD, 24)
-    bbox_badge = fdraw.textbbox((0, 0), "电影", font=badge_font)
+    bbox_badge = fdraw.textbbox((0, 0), badge_text, font=badge_font)
     badge_w = (bbox_badge[2] - bbox_badge[0]) + badge_h * 1.6
     badge_y = top_y
     fdraw.rounded_rectangle(
@@ -390,43 +405,55 @@ def generate(region, c1, c2, text_dark):
         fill=rgba("#FFFFFF" if not text_dark else "#000000", 140)
     )
     fdraw.text((left_x + badge_h * 0.8, badge_y + (badge_h - (bbox_badge[3] - bbox_badge[1])) // 2 - 2),
-               "电影", fill=text_color, font=badge_font)
+               badge_text, fill=text_color, font=badge_font)
 
-    # region name
-    region_y = top_y + badge_h + HEIGHT * 0.07
-    region_font = ImageFont.truetype(FONT_BOLD, 84)
-    bbox_region = fdraw.textbbox((0, 0), region, font=region_font)
+    # big text
+    big_y = top_y + badge_h + HEIGHT * 0.07
+    big_font = ImageFont.truetype(FONT_BOLD, 84)
+    bbox_big = fdraw.textbbox((0, 0), big_text, font=big_font)
     max_w = WIDTH * 0.46
-    if bbox_region[2] - bbox_region[0] > max_w:
-        scale = max_w / (bbox_region[2] - bbox_region[0])
+    if bbox_big[2] - bbox_big[0] > max_w:
+        scale = max_w / (bbox_big[2] - bbox_big[0])
         new_size = max(52, int(84 * scale))
-        region_font = ImageFont.truetype(FONT_BOLD, new_size)
-        bbox_region = fdraw.textbbox((0, 0), region, font=region_font)
-    fdraw.text((left_x, region_y), region, fill=text_color, font=region_font)
+        big_font = ImageFont.truetype(FONT_BOLD, new_size)
+        bbox_big = fdraw.textbbox((0, 0), big_text, font=big_font)
+    fdraw.text((left_x, big_y), big_text, fill=text_color, font=big_font)
 
-    # MOVIE label
-    movie_font = ImageFont.truetype(FONT_EN, 26)
-    movie_y = region_y + (bbox_region[3] - bbox_region[1]) + HEIGHT * 0.05
+    # EN label
+    en_font = ImageFont.truetype(FONT_EN, 26)
+    en_y = big_y + (bbox_big[3] - bbox_big[1]) + HEIGHT * 0.05
     spacing = 13
     cur_x = left_x
-    for ch in "MOVIE":
-        fdraw.text((cur_x, movie_y), ch, fill=text_color, font=movie_font)
-        bw = fdraw.textbbox((0, 0), ch, font=movie_font)
+    for ch in label_en:
+        fdraw.text((cur_x, en_y), ch, fill=text_color, font=en_font)
+        bw = fdraw.textbbox((0, 0), ch, font=en_font)
         cur_x += (bw[2] - bw[0]) + spacing
 
     # tiny sparkle
     star_c = rgba(accent, 70)
     sx = cur_x + 12
-    sy = movie_y + 8
+    sy = en_y + 8
     fdraw.polygon([(sx, sy - 6), (sx + 2, sy - 1), (sx + 7, sy), (sx + 2, sy + 1),
                    (sx, sy + 6), (sx - 2, sy + 1), (sx - 7, sy), (sx - 2, sy - 1)], fill=star_c)
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    path = os.path.join(OUTPUT_DIR, f"view_{region}.jpg")
+    path = os.path.join(OUTPUT_DIR, f"view_{file_key}.jpg")
     img.save(path, "JPEG", quality=92)
     print("saved", path)
 
 
+# 统一库分类视图封面（途播 Jellyfin 后端）：全部 + 电影/剧集/动漫/综艺
+CATEGORY_COVERS = [
+    ("全部", "全部", "#7A2E4D", "#C4502E", False, "ALL", "cat", "all"),
+    ("秦哥影视", "电影", "#1B4B6B", "#2E86AB", False, "MOVIE", "movie", "cat_movie"),
+    ("秦哥影视", "剧集", "#5B2C6F", "#8E44AD", False, "SERIES", "cat", "cat_tv"),
+    ("秦哥影视", "动漫", "#1E6F5C", "#2ECC9B", False, "ANIME", "cat", "cat_anime"),
+    ("秦哥影视", "综艺", "#B9770E", "#E67E22", False, "VARIETY", "cat", "cat_variety"),
+]
+
+
 if __name__ == "__main__":
     for r, c1, c2, dark in REGIONS:
-        generate(r, c1, c2, dark)
+        generate("电影", r, c1, c2, dark, "MOVIE", r, r)
+    for badge, big, c1, c2, dark, en, icon, fkey in CATEGORY_COVERS:
+        generate(badge, big, c1, c2, dark, en, icon, fkey)

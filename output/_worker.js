@@ -5,20 +5,15 @@ const DATA_ORIGIN = "https://qinjin.pages.dev";
 const DATA_VERSION = "20260827b";
 // 数据源（cc0cd 苹果CMS）不提供真实时长字段，故不返回 RunTimeTicks，
 // 避免途播显示统一的虚假“1小时30分”。若日后采集到真实时长再补。
-const REGION_ORDER = [
-  "中国大陆", "香港", "台湾", "美国", "日本", "韩国",
-  "英国", "法国", "泰国", "印度", "欧美", "其他",
-];
+// 统一库分类：电影/剧集/动漫/综艺（直播不在 Jellyfin 后端，单独保留在 Web 端）
+const CAT_LABELS = { movie: "电影", tv: "剧集", anime: "动漫", variety: "综艺" };
+const CAT_ORDER = ["movie", "tv", "anime", "variety"];
 
 let CACHE_ALL = null;
 let CACHE_ALL_LOADING = null;
-const CACHE_REGION = new Map();
-const CACHE_REGION_LOADING = new Map();
 
-function dataUrl(origin, region) {
-  if (!region) return origin + "/api/movies.json?v=" + DATA_VERSION;
-  const safe = region.replace(/[ /]/g, "_");
-  return origin + "/api/movies_" + safe + ".json?v=" + DATA_VERSION;
+function dataUrl(origin) {
+  return origin + "/api/all.json?v=" + DATA_VERSION;
 }
 
 async function cachedFetch(url, ctx) {
@@ -41,42 +36,23 @@ async function cachedFetch(url, ctx) {
   }
 }
 
-async function loadRegion(origin, region, ctx) {
-  if (CACHE_REGION.has(region)) return CACHE_REGION.get(region);
-  if (CACHE_REGION_LOADING.has(region)) return CACHE_REGION_LOADING.get(region);
-
-  const promise = (async () => {
-    try {
-      const url = dataUrl(origin, region);
-      const res = await cachedFetch(url, ctx);
-      if (!res.ok) throw new Error("movies_" + region + ".json " + res.status);
-      const json = await res.json();
-      json.byId = new Map(json.movies.map((m) => [m.id, m]));
-      CACHE_REGION.set(region, json);
-      return json;
-    } finally {
-      CACHE_REGION_LOADING.delete(region);
-    }
-  })();
-  CACHE_REGION_LOADING.set(region, promise);
-  return promise;
-}
-
 async function loadAll(origin, ctx) {
   if (CACHE_ALL && CACHE_ALL.movies) return CACHE_ALL;
   if (CACHE_ALL_LOADING) return CACHE_ALL_LOADING;
 
   CACHE_ALL_LOADING = (async () => {
     try {
-      const res = await cachedFetch(dataUrl(origin, null), ctx);
-      if (!res.ok) throw new Error("movies.json " + res.status);
+      const res = await cachedFetch(dataUrl(origin), ctx);
+      if (!res.ok) throw new Error("all.json " + res.status);
       const json = await res.json();
-      const regions = new Set();
-      for (const m of json.movies) regions.add(m.region || "其他");
-      const ordered = REGION_ORDER.filter((r) => regions.has(r));
-      const extra = [...regions].filter((r) => !REGION_ORDER.includes(r));
-      json.regions = ordered.concat(extra);
       json.byId = new Map(json.movies.map((m) => [m.id, m]));
+      // 按分类预建索引，分类视图直接取，避免每次全量过滤
+      json.byCat = {};
+      for (const c of CAT_ORDER) json.byCat[c] = [];
+      for (const m of json.movies) {
+        const c = m.cat || "movie";
+        (json.byCat[c] || (json.byCat[c] = [])).push(m);
+      }
       CACHE_ALL = json;
       return CACHE_ALL;
     } finally {
@@ -84,12 +60,6 @@ async function loadAll(origin, ctx) {
     }
   })();
   return CACHE_ALL_LOADING;
-}
-
-async function loadData(origin, region, ctx) {
-  // 搜索/无地区：用全量；有地区：优先用分片
-  if (!region) return loadAll(origin, ctx);
-  return loadRegion(origin, region, ctx);
 }
 
 function json(obj, status = 200, extraHeaders = {}) {
@@ -161,6 +131,7 @@ function userObject() {
 
 function toDto(m) {
   if (!m || !m.id) return {};
+  const cat = m.cat || "movie";
   return {
     Id: m.id,
     Name: m.name,
@@ -168,6 +139,7 @@ function toDto(m) {
     MediaType: "Video",
     ProductionYear: m.year || null,
     Overview: m.overview || "",
+    Genres: [CAT_LABELS[cat] || "电影"],
     ImageTags: { Primary: "cover" },
     ServerId: "c0a8f7e2-1b3c-4d5e-9f0a-2b6c4d8e1f02",
     SortName: m.sort || m.name,
@@ -177,27 +149,38 @@ function toDto(m) {
 }
 
 function views(data) {
-  // 只展示“含至少一部可播影片”的地区，避免空分类
-  const items = data.regions
-    .filter((r) => data.movies.some((m) => (m.region || "其他") === r && tuboSources(m).length > 0))
-    .map((r) => ({
-      Id: "view_" + r,
-      Name: "电影-" + r,
+  // 统一库：全部 + 四分类（电影/剧集/动漫/综艺）。直播不在此处（Web 端单独保留）。
+  const items = [{
+    Id: "view_all",
+    Name: "全部",
+    Type: "CollectionFolder",
+    CollectionType: "movies",
+    ImageTags: { Primary: "cover" },
+    ServerId: "c0a8f7e2-1b3c-4d5e-9f0a-2b6c4d8e1f02",
+  }];
+  for (const c of CAT_ORDER) {
+    items.push({
+      Id: "view_cat_" + c,
+      Name: CAT_LABELS[c] || c,
       Type: "CollectionFolder",
       CollectionType: "movies",
       ImageTags: { Primary: "cover" },
       ServerId: "c0a8f7e2-1b3c-4d5e-9f0a-2b6c4d8e1f02",
-    }));
+    });
+  }
   return { Items: items, TotalRecordCount: items.length };
 }
 
 function itemsList(data, url) {
   const parentId = url.searchParams.get("ParentId");
-  const region = parentId && parentId.startsWith("view_") ? parentId.slice(5) : null;
-  let items = data.movies;
-  if (region) {
-    items = items.filter((m) => (m.region || "其他") === region);
+  let scope = "all";
+  if (parentId && parentId.startsWith("view_cat_")) {
+    scope = parentId.slice("view_cat_".length);
+  } else if (parentId === "view_all") {
+    scope = "all";
   }
+  // 按分类取数据：全部=全量，分类=预建索引
+  let items = scope === "all" ? data.movies : (data.byCat[scope] || []);
 
   const searchTerm =
     url.searchParams.get("searchTerm") ||
@@ -213,8 +196,7 @@ function itemsList(data, url) {
     );
   }
 
-  // 途播侧只暴露“有可播线路”的影片：过滤掉所有源都被封的片（如九尾狐/文采片），
-  // 不让用户点到注定失败的条目。网页端走静态数据，不受影响。
+  // 途播侧只暴露“有可播线路”的影片：过滤掉所有源都被封的片。
   items = items.filter((m) => tuboSources(m).length > 0);
 
   const sortBy = (url.searchParams.get("SortBy") || "ProductionYear").split(",")[0];
@@ -744,33 +726,33 @@ export default {
         return cacheJson(request, userObject(), 200, DATA_VERSION + "_user", 3600, 86400);
 
       if (p.endsWith("/Views")) {
-        const data = await loadData(url.origin, null, ctx);
-        return cacheJson(request, views(data), 200, DATA_VERSION + "_views_" + data.regions.length, 3600, 86400);
+        const data = await loadAll(url.origin, ctx);
+        return cacheJson(request, views(data), 200, DATA_VERSION + "_views", 3600, 86400);
       }
 
       let m = p.match(/^\/Users\/[^\/]+\/Items\/([^\/]+)$/);
       if (m) {
-        const data = await loadData(url.origin, null, ctx);
+        const data = await loadAll(url.origin, ctx);
         return cacheJson(request, toDto(data.byId.get(m[1]) || {}), 200, DATA_VERSION + "_item_" + m[1], 3600, 86400);
       }
       m = p.match(/^\/Items\/([^\/]+)\/Images\/Primary/);
       if (m) {
-        const data = await loadData(url.origin, null, ctx);
+        const data = await loadAll(url.origin, ctx);
         return imagePrimary(data, m[1], url.origin);
       }
       m = p.match(/^\/Items\/([^\/]+)\/PlaybackInfo/);
       if (m) {
-        const data = await loadData(url.origin, null, ctx);
+        const data = await loadAll(url.origin, ctx);
         return cacheJson(request, playbackInfo(data, m[1], url.origin), 200, DATA_VERSION + "_play_" + m[1], 60, 300);
       }
       m = p.match(/^\/Videos\/([^\/]+)(\/stream)?/);
       if (m) {
-        const data = await loadData(url.origin, null, ctx);
+        const data = await loadAll(url.origin, ctx);
         return streamProxy(data, m[1], url, request, ctx);
       }
       m = p.match(/^\/Items\/([^\/]+)$/);
       if (m) {
-        const data = await loadData(url.origin, null, ctx);
+        const data = await loadAll(url.origin, ctx);
         const it = data.byId.get(m[1]);
         return it
           ? cacheJson(request, toDto(it), 200, DATA_VERSION + "_item_" + m[1], 3600, 86400)
@@ -778,11 +760,7 @@ export default {
       }
 
       if (p.endsWith("/Items")) {
-        const parentId = url.searchParams.get("ParentId");
-        const region = parentId && parentId.startsWith("view_") ? parentId.slice(5) : null;
-        const searchTerm = url.searchParams.get("searchTerm") || url.searchParams.get("SearchTerm") || "";
-        // 搜索或无地区：加载全量；有地区：加载分片（小得多）
-        const data = await loadData(url.origin, searchTerm.trim() ? null : region, ctx);
+        const data = await loadAll(url.origin, ctx);
         return cacheJson(request, itemsList(data, url), 200, listEtag(url), 3600, 86400);
       }
 
