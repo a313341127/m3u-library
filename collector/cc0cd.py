@@ -210,6 +210,7 @@ class CC0CDCollector(BaseCollector):
         want_category = kwargs.get("category")          # movie/tv/anime
         # --pages 0 表示全量（采到 pagecount）；显式判断避免 0 被 `or` 吞掉
         pages = int(kwargs["pages"]) if kwargs.get("pages") is not None else cfg["default_pages"]
+        start_page = int(kwargs.get("start_page") or 1)
         keyword = (kwargs.get("keyword") or "").strip()
         timeout = cfg["timeout"]
 
@@ -234,7 +235,7 @@ class CC0CDCollector(BaseCollector):
             for key in direct_keys:
                 api = direct[key]
                 n = self._collect_from_site(api, key, pages, want_category,
-                                            keyword, timeout, items)
+                                            keyword, timeout, items, start_page)
                 stats.append(f"{key}:{n}")
 
         # 2. 配置中心白名单源
@@ -300,7 +301,8 @@ class CC0CDCollector(BaseCollector):
     # --------------------------------------------------------------
     def _collect_from_site(self, api: str, site_name: str, pages: int,
                            want_category: Optional[str], keyword: str,
-                           timeout: int, items: List[ResourceItem]) -> int:
+                           timeout: int, items: List[ResourceItem],
+                           start_page: int = 1) -> int:
         """采一个源，返回本源的产出条数。
 
         先拉取源站 class 列表，把源站类型 ID 映射到 movie/tv/anime/variety，
@@ -356,7 +358,8 @@ class CC0CDCollector(BaseCollector):
             cat_label = config.CATEGORIES.get(cat, {}).get("label", cat)
             # 全量模式：pages<=0 时自动采到 pagecount（由首屏响应的 pagecount 决定上限）
             max_pages = pages if (pages and pages > 0) else 10 ** 9
-            pg = 1
+            pg = start_page
+            retry_limit = 4
             while pg <= max_pages:
                 params = {"ac": "list", "pg": pg}
                 if tid is not None:
@@ -364,12 +367,23 @@ class CC0CDCollector(BaseCollector):
                 if keyword:
                     params["wd"] = keyword
                 list_url = join_params(api, **params)
-                try:
-                    data = http_get_json(list_url, timeout=timeout)
-                except Exception as e:
-                    print(f"[cc0cd] [{site_name}][{cat_label}][{tname or '?'}] 列表第{pg}页失败: {e}")
+                # 列表页拉取具备重试与跳过能力：单次 429/网络抖动不再中断整源采集
+                data = None
+                for attempt in range(retry_limit):
+                    try:
+                        data = http_get_json(list_url, timeout=timeout)
+                        break
+                    except Exception as e:
+                        wait = delay * (2 ** attempt) + 2
+                        print(f"[cc0cd] [{site_name}][{cat_label}][{tname or '?'}] "
+                              f"列表第{pg}页第{attempt + 1}次失败: {e}；{wait:.0f}s 后重试")
+                        time.sleep(wait)
+                if data is None:
+                    print(f"[cc0cd] [{site_name}][{cat_label}][{tname or '?'}] "
+                          f"列表第{pg}页重试{retry_limit}次仍失败，跳过本页")
                     self.stats["failed_pages"] += 1
-                    break
+                    pg += 1
+                    continue
                 vod_list = data.get("list") or []
                 if not vod_list:
                     break

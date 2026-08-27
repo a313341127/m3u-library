@@ -1,0 +1,125 @@
+name: 部署（仅生成+发布，不采集）
+
+# 适用于：本地/CI 已完成采集（media.db 已就绪），只需把当前数据重新生成并部署到 Cloudflare Pages。
+# 手动在 Actions 页面 Run workflow 触发；也可被其他流程调用。
+on:
+  workflow_dispatch:
+    inputs:
+      REGEN_COVERS:
+        description: '是否重新生成分类封面（耗时但修字体/封面问题时用）'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: 生成 M3U / Web / 途播 Jellyfin 分片数据
+        run: |
+          python main.py generate --txt --best
+          python generate_movies_json.py
+
+      - name: 生成电影墙分类封面
+        if: ${{ inputs.REGEN_COVERS == 'true' }}
+        run: |
+          python -m pip install -q pillow
+          python scripts/generate_covers.py
+
+      - name: 递增 DATA_VERSION（避免客户端/途播缓存旧数据）
+        run: |
+          VER="$(date +%Y%m%d%H)"
+          sed -i "s/const DATA_VERSION = \".*\";/const DATA_VERSION = \"$VER\";/" output/_worker.js
+          echo "DATA_VERSION -> $VER"
+          grep "DATA_VERSION =" output/_worker.js
+
+      - name: 生成 _headers（M3U Content-Type 修正 + 禁止缓存）
+        run: |
+          cat > output/_headers <<'EOF'
+          /movie.m3u
+            Content-Type: application/vnd.apple.mpegurl
+            Cache-Control: max-age=0, must-revalidate
+          /tv.m3u
+            Content-Type: application/vnd.apple.mpegurl
+            Cache-Control: max-age=0, must-revalidate
+          /anime.m3u
+            Content-Type: application/vnd.apple.mpegurl
+            Cache-Control: max-age=0, must-revalidate
+          /variety.m3u
+            Content-Type: application/vnd.apple.mpegurl
+            Cache-Control: max-age=0, must-revalidate
+          /movie.txt
+            Content-Type: text/plain; charset=utf-8
+            Cache-Control: max-age=0, must-revalidate
+          /tv.txt
+            Content-Type: text/plain; charset=utf-8
+            Cache-Control: max-age=0, must-revalidate
+          /anime.txt
+            Content-Type: text/plain; charset=utf-8
+            Cache-Control: max-age=0, must-revalidate
+          /variety.txt
+            Content-Type: text/plain; charset=utf-8
+            Cache-Control: max-age=0, must-revalidate
+          /movie.best.m3u
+            Content-Type: application/vnd.apple.mpegurl
+            Cache-Control: max-age=0, must-revalidate
+          /tv.best.m3u
+            Content-Type: application/vnd.apple.mpegurl
+            Cache-Control: max-age=0, must-revalidate
+          /anime.best.m3u
+            Content-Type: application/vnd.apple.mpegurl
+            Cache-Control: max-age=0, must-revalidate
+          /variety.best.m3u
+            Content-Type: application/vnd.apple.mpegurl
+            Cache-Control: max-age=0, must-revalidate
+          /movie.best.txt
+            Content-Type: text/plain; charset=utf-8
+            Cache-Control: max-age=0, must-revalidate
+          /tv.best.txt
+            Content-Type: text/plain; charset=utf-8
+            Cache-Control: max-age=0, must-revalidate
+          /anime.best.txt
+            Content-Type: text/plain; charset=utf-8
+            Cache-Control: max-age=0, must-revalidate
+          /variety.best.txt
+            Content-Type: text/plain; charset=utf-8
+            Cache-Control: max-age=0, must-revalidate
+          /live.m3u
+            Content-Type: application/vnd.apple.mpegurl
+            Cache-Control: max-age=0, must-revalidate
+          /live.txt
+            Content-Type: text/plain; charset=utf-8
+            Cache-Control: max-age=0, must-revalidate
+          /index.html
+            Cache-Control: max-age=0, must-revalidate
+          EOF
+
+      - name: 部署到 Cloudflare Pages（裸域名 qinjin.pages.dev = 途播入口，由 main 分支提供）
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npx --yes wrangler@4 pages deploy output --project-name=qinjin --branch=main
+          npx --yes wrangler@4 pages deploy output --project-name=qinjin --branch=production
+
+      - name: 构建并部署分享站（带访问口令，独立项目 qs-agcl2）
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          python share/build.py
+          npx --yes wrangler@4 pages deploy share/dist --project-name=qs-agcl2 --branch=main

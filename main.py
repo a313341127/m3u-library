@@ -143,6 +143,8 @@ def cmd_collect(args):
         kwargs["keyword"] = args.keyword
     if args.pages:
         kwargs["pages"] = args.pages
+    if args.start_page and args.start_page > 1:
+        kwargs["start_page"] = args.start_page
     if args.sources:
         kwargs["sources"] = args.sources
     if args.category:
@@ -230,6 +232,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_col.add_argument("-k", "--keyword", default="", help="可选搜索关键字")
     p_col.add_argument("-c", "--category", choices=list(config.CATEGORIES), help="只采集指定分类: movie/tv/anime/variety")
     p_col.add_argument("--pages", type=int, help="每个采集源采集页数（每页约 20 条，默认 3；0 = 全量采集到最后一页）")
+    p_col.add_argument("--start-page", type=int, default=1, help="起始页码（断点续采用，默认 1）")
     p_col.add_argument("--sources", default="", help="只采集指定源（逗号分隔，如 360,旺旺；默认白名单全部）")
     p_col.add_argument("--txt", action="store_true", help="采集后同时生成 TXT 文本源")
     p_col.add_argument("--best", action="store_true", help="采集后同时生成单条最优版 M3U/TXT")

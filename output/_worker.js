@@ -44,7 +44,30 @@ async function loadAll(origin, ctx) {
     try {
       const res = await cachedFetch(dataUrl(origin), ctx);
       if (!res.ok) throw new Error("all.json " + res.status);
-      const json = await res.json();
+      const manifest = await res.json();
+      let movies = [];
+      if (manifest.sharded && manifest.cats) {
+        // 分片模式：按分类加载各自 cat_{cat}_{i}.json，合并为全量
+        for (const c of CAT_ORDER) {
+          const entry = manifest.cats[c];
+          if (!entry) continue;
+          const files = entry.files || (entry.file ? [entry.file] : []);
+          for (const f of files) {
+            try {
+              const r = await cachedFetch(origin + "/api/" + f + "?v=" + DATA_VERSION, ctx);
+              if (!r.ok) { console.warn("shard miss", f, r.status); continue; }
+              const j = await r.json();
+              if (j && j.movies) movies = movies.concat(j.movies);
+            } catch (e) {
+              console.warn("shard err", f, e);
+            }
+          }
+        }
+      } else if (manifest.movies) {
+        // 兼容旧版单文件 all.json
+        movies = manifest.movies;
+      }
+      const json = Object.assign({}, manifest, { movies });
       json.byId = new Map(json.movies.map((m) => [m.id, m]));
       // 按分类预建索引，分类视图直接取，避免每次全量过滤
       json.byCat = {};

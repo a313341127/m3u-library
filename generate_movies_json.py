@@ -265,64 +265,89 @@ def _sort_sources(sources):
     return sorted(sources, key=key)
 
 
+def _write_json(path, obj):
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(obj, f, ensure_ascii=False, separators=(",", ":"))
+
+
+# 单分片上限：Cloudflare Pages 单文件 25MB 限制，按 ~0.9KB/条预留安全余量。
+# 同时约束 Worker 内存（全量数据会常驻 CACHE_ALL），避免超大分类拖垮实例。
+CHUNK = 12000
+# 各分类安全上限（按热度降序后截断），总上限约 7 万条，控制在 Worker 内存与
+# 单文件 25MB 双重约束内，同时覆盖绝大多数“找片”场景。
+MAX_PER_CAT = {
+    "movie": 30000, "tv": 18000, "anime": 12000, "variety": 8000, "live": 2000,
+}
+
+
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
+    updated = datetime.datetime.now().isoformat(timespec="seconds")
 
     per_cat = {}
-    all_movies = []
+    cat_files = {}
+    total = 0
     for cat, prefix, label in JELLYFIN_CATS:
         if cat == "live":
             lst = build_live(prefix)
         else:
             lst = build_category(cat, prefix)
+        # 按热度降序，截断/分页时优先保留高热度影片
+        lst.sort(key=lambda m: m.get("pop") or 0, reverse=True)
+        cap = MAX_PER_CAT.get(cat)
+        if cap and len(lst) > cap:
+            print("分类 %s(%s): %d 部，按热度截断到 %d 部" % (label, cat, len(lst), cap))
+            lst = lst[:cap]
         per_cat[cat] = lst
-        all_movies.extend(lst)
-        print("分类 %s(%s): %d 部" % (label, cat, len(lst)))
+        total += len(lst)
 
-    # 1) 统一库入口：五分类合并 all.json（带 cat 字段）
-    all_payload = {
-        "updated": datetime.datetime.now().isoformat(timespec="seconds"),
-        "count": len(all_movies),
-        "movies": all_movies,
+        # 分片写入 cat_{cat}_{i}.json，避免单文件超过 25MB
+        files = []
+        n_chunks = max((len(lst) + CHUNK - 1) // CHUNK, 1)
+        for i in range(n_chunks):
+            chunk = lst[i * CHUNK:(i + 1) * CHUNK]
+            fname = "cat_%s_%d.json" % (cat, i)
+            _write_json(os.path.join(OUT_DIR, fname), {
+                "updated": updated, "cat": cat, "count": len(chunk),
+                "index": i, "movies": chunk,
+            })
+            files.append(fname)
+        cat_files[cat] = files
+        print("分类 %s(%s): %d 部 -> %d 个分片" % (label, cat, len(lst), len(files)))
+
+    # 1) 统一库入口：all.json 作为分片清单（manifest），worker 按需加载各 cat 分片
+    manifest = {
+        "updated": updated,
+        "count": total,
+        "sharded": True,
+        "cats": {
+            cat: {"count": len(per_cat[cat]), "files": cat_files[cat]}
+            for cat, _, _ in JELLYFIN_CATS
+        },
     }
-    out_all = os.path.join(OUT_DIR, "all.json")
-    with open(out_all, "w", encoding="utf-8") as f:
-        json.dump(all_payload, f, ensure_ascii=False, separators=(",", ":"))
-    print("生成 %s: %d 部, %.2f MB" % (
-        out_all, len(all_movies), os.path.getsize(out_all) / 1024 / 1024))
+    _write_json(os.path.join(OUT_DIR, "all.json"), manifest)
+    print("生成 all.json(manifest): %d 部, 分片文件 %d 个" % (
+        total, sum(len(v) for v in cat_files.values())))
 
-    # 2) 向后兼容：movies.json（仅电影）
+    # 2) 向后兼容：movies.json（仅电影，截断到单文件安全上限）
     movie_list = per_cat["movie"]
-    movies_payload = {
-        "updated": all_payload["updated"],
-        "count": len(movie_list),
-        "movies": movie_list,
-    }
-    with open(OUT_MOVIES, "w", encoding="utf-8") as f:
-        json.dump(movies_payload, f, ensure_ascii=False, separators=(",", ":"))
+    _write_json(OUT_MOVIES, {
+        "updated": updated, "count": len(movie_list[:CHUNK]),
+        "movies": movie_list[:CHUNK],
+    })
 
-    # 3) 向后兼容：电影地区分片
+    # 3) 向后兼容：电影地区分片（每地区截断到单文件安全上限）
     by_region = defaultdict(list)
     for m in movie_list:
         by_region[m.get("region") or "其他"].append(m)
     LIGHT_FIELDS = ("id", "name", "sort", "region", "year", "cover", "quality", "score", "pop", "sources", "cat")
-    region_files = []
     for region, rmovies in by_region.items():
-        light_movies = [{k: m[k] for k in LIGHT_FIELDS} for m in rmovies]
-        rpayload = {
-            "updated": all_payload["updated"],
-            "count": len(light_movies),
-            "region": region,
-            "movies": light_movies,
-        }
+        light = [{k: m[k] for k in LIGHT_FIELDS} for m in rmovies[:CHUNK]]
         safe_name = region.replace(" ", "_").replace("/", "_")
-        rpath = os.path.join(OUT_DIR, f"movies_{safe_name}.json")
-        with open(rpath, "w", encoding="utf-8") as f:
-            json.dump(rpayload, f, ensure_ascii=False, separators=(",", ":"))
-        region_files.append((region, len(light_movies), os.path.getsize(rpath)))
-    print("电影地区分片:")
-    for region, count, rsize in sorted(region_files, key=lambda x: -x[2]):
-        print("  %s: %d 部, %.2f MB" % (region, count, rsize / 1024 / 1024))
+        _write_json(os.path.join(OUT_DIR, f"movies_{safe_name}.json"), {
+            "updated": updated, "count": len(light), "region": region, "movies": light,
+        })
+    print("电影地区分片: %d 个" % len(by_region))
 
 
 if __name__ == "__main__":
