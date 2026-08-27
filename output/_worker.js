@@ -101,8 +101,13 @@ function listEtag(url) {
   const searchTerm = url.searchParams.get("searchTerm") || url.searchParams.get("SearchTerm") || "";
   const start = url.searchParams.get("StartIndex") || "0";
   const limit = url.searchParams.get("Limit") || "60";
-  const sortBy = url.searchParams.get("SortBy") || "ProductionYear";
-  return DATA_VERSION + "_list_" + [parentId, searchTerm, start, limit, sortBy].map(encodeURIComponent).join("_");
+  const sortBy = url.searchParams.get("SortBy") || "pop";
+  const sortOrder = url.searchParams.get("SortOrder") || "Descending";
+  return DATA_VERSION + "_list_" + [parentId, searchTerm, start, limit, sortBy, sortOrder].map(encodeURIComponent).join("_");
+}
+
+function emptyList(request, etag = DATA_VERSION + "_empty") {
+  return cacheJson(request, { Items: [], TotalRecordCount: 0 }, 200, etag, 3600, 86400);
 }
 
 function systemInfo() {
@@ -182,7 +187,8 @@ function itemsList(data, url) {
     url.searchParams.get("SearchTerm") ||
     url.searchParams.get("Search") ||
     "";
-  if (searchTerm.trim()) {
+  const hasSearch = searchTerm.trim().length > 0;
+  if (hasSearch) {
     const q = searchTerm.trim().toLowerCase();
     items = items.filter(
       (m) =>
@@ -194,21 +200,33 @@ function itemsList(data, url) {
   // 途播侧只暴露“有可播线路”的影片：过滤掉所有源都被封的片。
   items = items.filter((m) => tuboSources(m).length > 0);
 
-  const sortBy = (url.searchParams.get("SortBy") || "ProductionYear").split(",")[0];
-  const sortOrder = (url.searchParams.get("SortOrder") || "Descending").toLowerCase();
-  const dir = sortOrder === "ascending" ? 1 : -1;
+  const rawSortBy = (url.searchParams.get("SortBy") || "pop").split(",")[0];
+  const rawSortOrder = (url.searchParams.get("SortOrder") || "Descending").toLowerCase();
+  const dir = rawSortOrder === "ascending" ? 1 : -1;
+
+  // 途播客户端默认按 SortName 字母排序，导致首页总是显示“100天/100道/10间…”这类固定内容。
+  // 首页/分类视图（无搜索）默认按热度排序；搜索场景仍按名称排序最直观。
+  let sortBy = rawSortBy;
+  if (!hasSearch && (sortBy === "SortName" || sortBy === "ProductionYear" || sortBy === "")) {
+    sortBy = "pop";
+  }
+
   items = items.slice().sort((a, b) => {
     let av, bv;
     if (sortBy === "SortName") {
       av = a.sort || "";
       bv = b.sort || "";
       return av < bv ? -1 * dir : av > bv ? 1 * dir : 0;
-    } else if (sortBy === "DateCreated" || sortBy === "DatePlayed") {
-      av = a.pop || 0;
-      bv = b.pop || 0;
-    } else {
+    } else if (sortBy === "ProductionYear") {
       av = a.year || 0;
       bv = b.year || 0;
+    } else if (sortBy === "CommunityRating") {
+      av = a.score || 0;
+      bv = b.score || 0;
+    } else {
+      // 默认 pop 热度（hits * (score/10)^2）
+      av = a.pop || 0;
+      bv = b.pop || 0;
     }
     return av < bv ? -1 * dir : av > bv ? 1 * dir : 0;
   });
@@ -725,7 +743,13 @@ function isJellyfinPath(p) {
     p.startsWith("/Items") ||      // /Items 列表 + /Items/{id} 详情/播放信息
     p.startsWith("/Videos/") ||
     p === "/proxy" ||
-    p === "/Views"                 // 直接浏览器/调试入口
+    p === "/Views" ||             // 直接浏览器/调试入口
+    p === "/Genres" ||
+    p === "/MusicGenres" ||
+    p === "/Studios" ||
+    p === "/Persons" ||
+    p === "/Years" ||
+    p === "/Artists"
   );
 }
 
@@ -763,6 +787,12 @@ export default {
       if (p.endsWith("/Views")) {
         const data = await loadAll(url.origin, ctx);
         return cacheJson(request, views(data), 200, DATA_VERSION + "_views", 3600, 86400);
+      }
+
+      // 途播「风格/标签/演员/年份」Tab 会请求这些端点；返回空列表避免「格式不正确」报错。
+      if (p === "/Genres" || p === "/MusicGenres" || p === "/Studios" ||
+          p === "/Persons" || p === "/Years" || p === "/Artists") {
+        return emptyList(request, DATA_VERSION + p.replace("/", "_"));
       }
 
       let m = p.match(/^\/Users\/[^\/]+\/Items\/([^\/]+)$/);
