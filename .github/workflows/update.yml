@@ -19,6 +19,14 @@ on:
         description: '仅 full 模式：指定源逗号分隔（如 最大,爱奇艺,魔都）；留空=全部直接源+配置中心源'
         required: false
         default: ''
+      PAGE_START:
+        description: '仅 full 模式：起始页码（断点续采，默认 1）'
+        required: false
+        default: '1'
+      PAGE_CHUNK:
+        description: '仅 full 模式：本次采集页数（避免 6h 超时；留空=采到最后一页）'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -54,15 +62,25 @@ jobs:
           echo "本次采集源: $SOURCES"
           python main.py collect -n cc0cd --pages 1 --sources "$SOURCES"
 
-      - name: 全量采集（采到最后一页，可选指定源分批避免超时）
+      - name: 全量采集（分批，避免 6h 超时；指定 PAGE_START+PAGE_CHUNK 续采）
         if: ${{ inputs.MODE == 'full' }}
         run: |
           SRC=""
           if [ -n "${{ inputs.SOURCES }}" ]; then
             SRC="--sources ${{ inputs.SOURCES }}"
           fi
-          echo "全量模式采集源: ${{ inputs.SOURCES || '全部直接源+配置中心源' }}"
-          python main.py collect -n cc0cd --pages 0 $SRC
+          START="${{ inputs.PAGE_START }}"
+          CHUNK="${{ inputs.PAGE_CHUNK }}"
+          START_FLAG=""
+          PAGES_FLAG="--pages 0"
+          if [ -n "$START" ] && [ "$START" != "0" ]; then
+            START_FLAG="--start-page $START"
+          fi
+          if [ -n "$CHUNK" ] && [ "$CHUNK" != "0" ]; then
+            PAGES_FLAG="--pages $CHUNK"
+          fi
+          echo "全量分批: 源=${{ inputs.SOURCES || '全部' }} start=${START:-1} chunk=${CHUNK:-全量}"
+          python main.py collect -n cc0cd $PAGES_FLAG $START_FLAG $SRC --no-generate
 
       - name: 采集直播源（聚合源下载 + 测速择优，全量刷新）
         run: |
