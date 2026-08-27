@@ -206,6 +206,12 @@ COLLECTORS = {
             "量子": "https://cj.lziapi.com/api.php/provide/vod/",
             # 茅台：国内节点直连快（vodcnd02.uvjtih.cn 53ms 实测），141390 条大站
             "茅台": "https://caiji.maotaizy.cc/api.php/provide/vod/",
+            # 最大资源：122320 条大站，分类干净（电影/电视剧/综艺/动漫），国内播放域 179ms
+            "最大": "https://api.zuidapi.com/api.php/provide/vod/",
+            # 爱奇艺资源：66630 条，含里番动漫（已被 COLLECT_BLOCK_TYPES 过滤），国内播放域 177ms
+            "爱奇艺": "https://www.iqiyizyapi.com/api.php/provide/vod/",
+            # 魔都动漫：87699 条，偏动漫（含里番动漫会被过滤），播放域延迟偏高(1.2s)，仅作动漫补充
+            "魔都": "https://www.mdzyapi.com/api.php/provide/vod/",
         },
         "default_pages": 3,        # 每源默认采集页数（每页 20 条）
             "detail_batch": 20,        # 单次 ac=detail 批量查询的 vod_id 数

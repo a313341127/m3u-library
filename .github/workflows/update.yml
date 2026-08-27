@@ -6,6 +6,19 @@ on:
   schedule:
     - cron: '30 19 * * *'   # UTC 19:30 = 北京时间 03:30
   workflow_dispatch:
+    inputs:
+      MODE:
+        description: '采集模式：incremental=每日增量轮换；full=全量采集到最后一页'
+        required: false
+        default: 'incremental'
+        type: choice
+        options:
+          - incremental
+          - full
+      SOURCES:
+        description: '仅 full 模式：指定源逗号分隔（如 最大,爱奇艺,魔都）；留空=全部直接源+配置中心源'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -23,9 +36,10 @@ jobs:
           python-version: '3.13'
 
       - name: 增量采集（按天轮换，3 天一循环全覆盖）
+        if: ${{ inputs.MODE != 'full' }}
         run: |
           # 19 个直接 API 源按天数分 3 组轮换，配置中心 4 个源(360/旺旺/如意/率率)每天都采
-          DIRECT=("索尼" "金鹰" "红牛" "猫眼" "樱花" "非凡" "光速" "无尽" "速播" "极速" "火狐" "西瓜" "优酷" "百度" "豆瓣" "暴风" "星球" "量子" "茅台")
+          DIRECT=("索尼" "金鹰" "红牛" "猫眼" "樱花" "非凡" "光速" "无尽" "速播" "极速" "火狐" "西瓜" "优酷" "百度" "豆瓣" "暴风" "星球" "量子" "茅台" "最大" "爱奇艺" "魔都")
           DAY=$(( $(date +%s) / 86400 ))
           GROUP=$(( DAY % 3 ))
           SELECTED=()
@@ -39,6 +53,16 @@ jobs:
           SOURCES="360,旺旺,如意,率率,$(IFS=,; echo "${SELECTED[*]}")"
           echo "本次采集源: $SOURCES"
           python main.py collect -n cc0cd --pages 1 --sources "$SOURCES"
+
+      - name: 全量采集（采到最后一页，可选指定源分批避免超时）
+        if: ${{ inputs.MODE == 'full' }}
+        run: |
+          SRC=""
+          if [ -n "${{ inputs.SOURCES }}" ]; then
+            SRC="--sources ${{ inputs.SOURCES }}"
+          fi
+          echo "全量模式采集源: ${{ inputs.SOURCES || '全部直接源+配置中心源' }}"
+          python main.py collect -n cc0cd --pages 0 $SRC
 
       - name: 采集直播源（聚合源下载 + 测速择优，全量刷新）
         run: |

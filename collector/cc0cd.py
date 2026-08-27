@@ -208,7 +208,8 @@ class CC0CDCollector(BaseCollector):
     def fetch(self, **kwargs) -> List[ResourceItem]:
         cfg = config.COLLECTORS["cc0cd"]
         want_category = kwargs.get("category")          # movie/tv/anime
-        pages = int(kwargs.get("pages") or cfg["default_pages"])
+        # --pages 0 表示全量（采到 pagecount）；显式判断避免 0 被 `or` 吞掉
+        pages = int(kwargs["pages"]) if kwargs.get("pages") is not None else cfg["default_pages"]
         keyword = (kwargs.get("keyword") or "").strip()
         timeout = cfg["timeout"]
 
@@ -353,7 +354,10 @@ class CC0CDCollector(BaseCollector):
 
         for tid, tname, cat, mt in type_map:
             cat_label = config.CATEGORIES.get(cat, {}).get("label", cat)
-            for pg in range(1, pages + 1):
+            # 全量模式：pages<=0 时自动采到 pagecount（由首屏响应的 pagecount 决定上限）
+            max_pages = pages if (pages and pages > 0) else 10 ** 9
+            pg = 1
+            while pg <= max_pages:
                 params = {"ac": "list", "pg": pg}
                 if tid is not None:
                     params["t"] = tid
@@ -371,6 +375,9 @@ class CC0CDCollector(BaseCollector):
                     break
                 total_pages = data.get("pagecount") or 0
                 print(f"[cc0cd] [{site_name}][{cat_label}][{tname or '?'}] 列表第{pg}/{total_pages}页，{len(vod_list)} 条")
+                # 全量模式：首屏拿到 pagecount 后扩展上限，确保采到该源最后一页
+                if (not pages or pages <= 0) and total_pages:
+                    max_pages = total_pages
 
                 # 按 ID 批量拉详情
                 ids = [str(v.get("vod_id")) for v in vod_list if v.get("vod_id")]
@@ -397,6 +404,7 @@ class CC0CDCollector(BaseCollector):
                             self.stats["dropped"] += 1
                     time.sleep(delay)
                 time.sleep(delay)
+                pg += 1
         return total
 
     # --------------------------------------------------------------
