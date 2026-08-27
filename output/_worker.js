@@ -2,7 +2,7 @@
 // 部署在 qinjin.pages.dev
 
 const DATA_ORIGIN = "https://qinjin.pages.dev";
-const DATA_VERSION = "20260826x";
+const DATA_VERSION = "20260827b";
 // 数据源（cc0cd 苹果CMS）不提供真实时长字段，故不返回 RunTimeTicks，
 // 避免途播显示统一的虚假“1小时30分”。若日后采集到真实时长再补。
 const REGION_ORDER = [

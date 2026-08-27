@@ -6,10 +6,45 @@ import random
 from PIL import Image, ImageDraw, ImageFont
 
 OUTPUT_DIR = "output/covers"
-FONT_BOLD = "C:/Windows/Fonts/SOURCEHANSANSCN-HEAVY.OTF"
-FONT_REG = "C:/Windows/Fonts/SOURCEHANSANSCN-REGULAR.OTF"
-FONT_EN = "C:/Windows/Fonts/ARIAL.TTF"
 WIDTH, HEIGHT = 800, 450
+
+
+def find_font(candidates):
+    """跨平台字体查找：返回第一个存在的字体路径。"""
+    for path in candidates:
+        if path and os.path.exists(path):
+            return path
+    raise FileNotFoundError("找不到可用字体，尝试以下路径均不存在：" + "; ".join(candidates))
+
+
+# Windows 优先 SourceHan / Arial；Linux Actions 优先 Noto CJK / DejaVu / Liberation
+FONT_BOLD = find_font([
+    "C:/Windows/Fonts/SOURCEHANSANSCN-HEAVY.OTF",
+    "C:/Windows/Fonts/SOURCEHANSANSCN-BOLD.OTF",
+    "C:/Windows/Fonts/msyhbd.ttc",
+    "/usr/share/fonts/truetype/noto/NotoSansCJK-Bold.ttc",
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
+    "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+    "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+])
+FONT_REG = find_font([
+    "C:/Windows/Fonts/SOURCEHANSANSCN-REGULAR.OTF",
+    "C:/Windows/Fonts/msyh.ttc",
+    "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+    "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+])
+FONT_EN = find_font([
+    "C:/Windows/Fonts/ARIAL.TTF",
+    "C:/Windows/Fonts/ARIALBD.TTF",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
+    "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+])
 
 REGIONS = [
     ("中国大陆", "#C4502E", "#E07A3E", False),

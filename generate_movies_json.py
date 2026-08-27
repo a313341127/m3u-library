@@ -56,14 +56,28 @@ def norm_key(name: str, year) -> tuple:
     return (n, year)
 
 
-def popularity(hits, score) -> float:
+def popularity(hits, score, lines: int = 1, year: int = None) -> float:
+    """综合人气分：播放量按评分平方加权，低分大幅降权，无评分按 5 分兜底。
+    无播放量时用线路数兜底（源越多越热门），避免新片/0 播放量影片被完全埋没。
+    对异常高播放量取对数压缩，避免个别采集站虚报 hits 垄断首页；并给近年影片小幅加权。
+    """
+    import math
     h = hits or 0
+    lines = max(1, lines or 1)
     try:
         s = float(score)
     except (TypeError, ValueError):
         s = 0
     s = s if (isinstance(s, (int, float)) and 0 < s <= 10) else 5.0
-    return h * (s / 10.0) ** 2
+    # 播放量兜底：源多 => 更热门
+    effective_hits = h if h > 0 else lines * 1000
+    # 对数压缩：防止 80 万 vs 500 这种量级差把正常影片挤到后面
+    norm_hits = math.log1p(effective_hits) * 1000
+    base = norm_hits * (s / 10.0) ** 2
+    # 年份越近越吃香：2020 起每年 +5%（避免老片靠虚高播放量霸榜）
+    if year and year >= 2020:
+        base *= (1.0 + (year - 2020) * 0.05)
+    return base
 
 
 def main():
@@ -103,7 +117,7 @@ def main():
                 "quality": row["quality"] or "",
                 "score": row["score"] or 0,
                 "hits": row["hits"] or 0,
-                "pop": popularity(row["hits"], row["score"]),
+                "pop": popularity(row["hits"], row["score"], 1, year),
                 "sources": [u],
                 "_best_score": sc,
             }
@@ -126,11 +140,13 @@ def main():
                 rec["quality"] = row["quality"] or rec["quality"]
                 rec["overview"] = (row["description"] or rec["overview"])[:500]
                 rec["hits"] = row["hits"] or rec["hits"]
-                rec["pop"] = popularity(rec["hits"], rec["score"])
+                rec["pop"] = popularity(rec["hits"], rec["score"], len(rec["sources"]), rec["year"])
 
     movies = []
     for key in order:
         rec = merged[key]
+        # 最终人气分：用最终 hits/score/线路数/年份重新计算，确保新增线路也被计入兜底热度。
+        rec["pop"] = popularity(rec["hits"], rec["score"], len(rec["sources"]), rec["year"])
         sources = rec.pop("sources")
         rec.pop("_best_score", None)
         # 主线路：直链优先 → 国内可直连优先（途播默认播主线路，需是可直连流地址）
@@ -172,8 +188,8 @@ def main():
         by_region[m.get("region") or "其他"].append(m)
     region_files = []
     # 列表分片：去掉 overview（列表页用不到），详情页从全量 JSON 取。
-    # 但必须保留 sources：itemsList 要按 tuboSources() 过滤掉途播不可播源，否则地区视图会全空。
-    LIGHT_FIELDS = ("id", "name", "sort", "region", "year", "cover", "quality", "score", "sources")
+    # 必须保留 sources（itemsList 按 tuboSources() 过滤不可播源）和 pop（按人气排序）。
+    LIGHT_FIELDS = ("id", "name", "sort", "region", "year", "cover", "quality", "score", "pop", "sources")
     for region, rmovies in by_region.items():
         light_movies = [
             {k: m[k] for k in LIGHT_FIELDS}
