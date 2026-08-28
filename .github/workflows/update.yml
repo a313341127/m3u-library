@@ -5,7 +5,7 @@ name: 每日自动更新
 # -> 每个 run 在「提交数据库变更」步骤失败 -> 触发 GitHub 失败邮件。
 # 串行化后，后启动的 run 在 checkout 时即已包含前一个 run 推送的 media.db，推送为快进合并，不再冲突。
 concurrency:
-  group: ${{ github.workflow }}
+  group: qinjin-collection
   cancel-in-progress: false
 
 # 每天北京时间 03:30 自动增量采集 -> 生成 M3U/Web -> 生成途播 Jellyfin 数据 -> 部署 Cloudflare Pages -> 提交数据库
