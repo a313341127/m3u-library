@@ -13,6 +13,7 @@
 import json
 import html
 import re
+import hashlib
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
@@ -316,8 +317,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       width: 44px; height: 44px;
       border-radius: 10px;
       background: #232a33;
-      object-fit: contain;
-      padding: 4px;
+      object-fit: cover;
+      padding: 0;
     }
     .live-info { flex: 1; min-width: 0; }
     .live-name {
@@ -443,6 +444,115 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     }
     .btn-primary { background: var(--accent); color: #fff; }
     .btn-ghost { background: var(--bg); color: var(--text); }
+
+    /* ===== 沉浸式播放视图（dmhyy 风格：站内全屏播放 + 换源 + 续播） ===== */
+    .player-view {
+      position: fixed;
+      inset: 0;
+      z-index: 400;
+      display: none;
+      flex-direction: column;
+      background: #0b0d10;
+    }
+    .player-view.show { display: flex; }
+    .pv-top {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      background: rgba(16,19,24,0.97);
+      border-bottom: 1px solid var(--border);
+    }
+    .pv-back {
+      flex: 0 0 auto;
+      width: 34px; height: 34px;
+      border-radius: 50%;
+      border: none;
+      background: var(--card);
+      color: var(--text);
+      font-size: 22px; line-height: 1;
+      cursor: pointer;
+    }
+    .pv-back:active { transform: scale(0.92); }
+    .pv-title {
+      flex: 1; min-width: 0;
+      font-size: 15px; font-weight: 600;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .pv-actions { flex: 0 0 auto; display: flex; gap: 8px; }
+    .pv-act {
+      padding: 6px 13px; border-radius: 14px; border: 1px solid var(--border);
+      background: var(--card); color: var(--text); font-size: 13px; cursor: pointer;
+    }
+    .pv-act.primary { background: var(--accent); color: #fff; border-color: transparent; }
+    .pv-act:active { transform: scale(0.96); }
+    .pv-body {
+      flex: 1 1 auto;
+      display: flex;
+      min-height: 0;
+    }
+    .pv-stage {
+      flex: 1 1 auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #000;
+      min-width: 0;
+      position: relative;
+    }
+    .pv-video { width: 100%; max-height: 100%; background: #000; }
+    .pv-resume {
+      position: absolute;
+      left: 50%; bottom: 18px; transform: translateX(-50%);
+      padding: 9px 20px; border-radius: 22px; border: none;
+      background: rgba(255,71,87,0.94); color: #fff; font-size: 14px; font-weight: 600; cursor: pointer;
+      display: none;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+    }
+    .pv-resume.show { display: block; }
+    .pv-progress-bar {
+      position: absolute; left: 0; bottom: 0; height: 3px; background: var(--accent); width: 0;
+    }
+    .pv-side {
+      flex: 0 0 340px;
+      background: var(--bg);
+      border-left: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 16px;
+    }
+    .pv-meta { font-size: 13px; color: var(--text-secondary); margin: 0 0 18px; line-height: 1.7; }
+    .pv-section-title {
+      font-size: 12px; font-weight: 700; color: var(--text-secondary);
+      text-transform: uppercase; letter-spacing: .6px; margin: 0 0 10px;
+    }
+    .pv-sources { display: flex; flex-direction: column; gap: 8px; }
+    .pv-src {
+      display: flex; align-items: center; gap: 9px;
+      padding: 11px 13px; border-radius: 12px;
+      background: var(--card); border: 1px solid var(--border);
+      color: var(--text); font-size: 14px; cursor: pointer; text-align: left;
+      transition: border-color .15s, background .15s;
+    }
+    .pv-src:hover { border-color: var(--accent); }
+    .pv-src.active { background: var(--accent-light); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+    .pv-src .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-secondary); flex: 0 0 auto; }
+    .pv-src.active .dot { background: var(--accent); }
+    .pv-src.failed .dot { background: #ff4757; }
+    .pv-src .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    @media (max-width: 860px) {
+      .pv-body { flex-direction: column; }
+      .pv-side { flex: 0 0 auto; border-left: none; border-top: 1px solid var(--border); max-height: 44%; }
+    }
+    .continue-badge {
+      position: absolute; bottom: 8px; left: 8px;
+      padding: 2px 8px; border-radius: 10px;
+      font-size: 11px; font-weight: 700; color: #fff; background: rgba(255,71,87,0.92);
+      z-index: 2;
+    }
+    .continue-bar {
+      position: absolute; left: 0; bottom: 0; height: 3px; background: var(--accent); z-index: 2;
+    }
   </style>
 </head>
 <body>
@@ -484,20 +594,25 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   </main>
   <div class="toast" id="toast"></div>
 
-  <div class="modal" id="playerModal">
-    <div class="modal-backdrop" onclick="closePlayer()"></div>
-    <div class="modal-box">
-      <div class="modal-head">
-        <div class="modal-title" id="playerTitle"></div>
-        <button class="modal-close" onclick="closePlayer()" aria-label="关闭">&times;</button>
+  <div class="player-view" id="playerView">
+    <div class="pv-top">
+      <button class="pv-back" id="pvBack" aria-label="返回">&lsaquo;</button>
+      <div class="pv-title" id="pvTitle"></div>
+      <div class="pv-actions">
+        <button class="pv-act" id="pvCopy">复制链接</button>
+        <button class="pv-act primary" id="pvExternal">浏览器打开</button>
       </div>
-      <div class="modal-video">
-        <video id="playerVideo" controls playsinline></video>
-        <div class="modal-fallback" id="playerFallback" style="display:none">
-          <p>该链接无法在页面内直接播放（网页源或防盗链）</p>
-          <button class="btn btn-primary" onclick="openExternal()">浏览器打开</button>
-          <button class="btn btn-ghost" onclick="copyCurrent()">复制链接</button>
-        </div>
+    </div>
+    <div class="pv-body">
+      <div class="pv-stage" id="pvStage">
+        <video class="pv-video" id="pvVideo" controls playsinline></video>
+        <button class="pv-resume" id="pvResume"></button>
+        <div class="pv-progress-bar" id="pvProgressBar"></div>
+      </div>
+      <div class="pv-side" id="pvSide">
+        <div class="pv-meta" id="pvMeta"></div>
+        <div class="pv-section-title" id="pvSrcTitle">播放源</div>
+        <div class="pv-sources" id="pvSources"></div>
       </div>
     </div>
   </div>
@@ -675,43 +790,176 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     }
 
     let hlsPlayer = null;
+    let currentSources = [];
+    let currentSourceIdx = 0;
+    let currentItemKey = '';   // 进度记忆 key: cat|name|year
     let currentUrl = '';
+    let pvProgressTimer = null;
 
-    function isM3u8(url) { return true; }  // 直播源多为短链/PHP转发，一律交给 hls.js 尝试，失败自动 fallback
-
-    function openVideo(name, url) {
-      currentUrl = url;
-      $('playerTitle').textContent = name;
-      const video = $('playerVideo');
-      $('playerFallback').style.display = 'none';
-      video.style.display = 'block';
-      if (hlsPlayer) { hlsPlayer.destroy(); hlsPlayer = null; }
-      video.pause();
-      video.removeAttribute('src');
-      video.load();
-      if (isM3u8(url)) {
-        if (video.canPlayType('application/vnd.apple.mpegurl')) {
-          video.src = url;
-          video.play().catch(() => showFallback());
-        } else if (window.Hls && Hls.isSupported()) {
-          hlsPlayer = new Hls();
-          hlsPlayer.loadSource(url);
-          hlsPlayer.attachMedia(video);
-          hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
-          hlsPlayer.on(Hls.Events.ERROR, (ev, data) => { if (data.fatal) showFallback(); });
-        } else {
-          showFallback();
-        }
-      } else {
-        showFallback();
-      }
-      $('playerModal').classList.add('show');
-      document.body.style.overflow = 'hidden';
+    // 是否为 HLS：带 .m3u8/.m3u 或未知短链交给 hls.js；明确的视频文件走原生播放
+    function isHls(url) {
+      const u = (url || '').split('?')[0].toLowerCase();
+      if (u.endsWith('.m3u8') || u.endsWith('.m3u')) return true;
+      if (/\\.(mp4|webm|ogg|mov|mkv|flv)$/.test(u)) return false;
+      return true;
     }
 
-    function showFallback() {
-      $('playerVideo').style.display = 'none';
-      $('playerFallback').style.display = 'block';
+    function fmtTime(s) {
+      s = Math.max(0, Math.floor(s || 0));
+      const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
+      if (h > 0) return h + ':' + String(m).padStart(2, '0') + ':' + String(ss).padStart(2, '0');
+      return m + ':' + String(ss).padStart(2, '0');
+    }
+
+    function cardProgress(key) {
+      try {
+        const t = parseFloat(localStorage.getItem('pv_' + key) || '0') || 0;
+        const d = parseFloat(localStorage.getItem('pvd_' + key) || '0') || 0;
+        return { t, d };
+      } catch (e) { return { t: 0, d: 0 }; }
+    }
+
+    function readProgress(key) {
+      try { return parseFloat(localStorage.getItem('pv_' + key) || '0') || 0; } catch (e) { return 0; }
+    }
+
+    function saveProgress() {
+      if (!currentItemKey) return;
+      try {
+        const v = $('pvVideo');
+        if (v.duration && isFinite(v.duration)) {
+          localStorage.setItem('pvd_' + currentItemKey, String(v.duration));
+          if (v.currentTime > 5 && v.currentTime < v.duration - 5) {
+            localStorage.setItem('pv_' + currentItemKey, String(v.currentTime));
+          }
+        }
+      } catch (e) {}
+    }
+
+    function startProgressWatch() {
+      if (pvProgressTimer) clearInterval(pvProgressTimer);
+      pvProgressTimer = setInterval(() => {
+        const v = $('pvVideo');
+        if (v.duration && isFinite(v.duration)) {
+          const pct = (v.currentTime / v.duration) * 100;
+          $('pvProgressBar').style.width = pct.toFixed(1) + '%';
+          if (v.currentTime > 5 && v.currentTime < v.duration - 5) saveProgress();
+        }
+      }, 4000);
+    }
+
+    // 打开沉浸式播放视图（item 含 name/url/sources；live 由调用方包装）
+    function openPlayer(item, cat) {
+      currentItemKey = cat + '|' + (item.name || '') + '|' + (item.year || '');
+      currentSources = (item.sources && item.sources.length)
+        ? item.sources.slice() : [{ src: '默认线路', url: item.url }];
+      currentSourceIdx = 0;
+      $('pvTitle').textContent = item.name || '播放';
+      const meta = [item.region, item.year, item.quality, item.media_type]
+        .filter(Boolean).join(' · ');
+      $('pvMeta').textContent = meta || (cat === 'live' ? '直播频道' : '');
+      const video = $('pvVideo');
+      video.pause(); video.removeAttribute('src'); video.load();
+      if (hlsPlayer) { try { hlsPlayer.destroy(); } catch (e) {} hlsPlayer = null; }
+      // 重置续播标记/进度条，避免上一个影片的残留
+      $('pvResume').classList.remove('show');
+      $('pvResume').onclick = null;
+      $('pvProgressBar').style.width = '0%';
+      $('playerView').classList.add('show');
+      document.body.style.overflow = 'hidden';
+      renderSources();
+      loadSource(0, true);
+    }
+
+    function renderSources() {
+      const box = $('pvSources');
+      box.innerHTML = '';
+      $('pvSrcTitle').textContent = currentSources.length > 1
+        ? '播放源（' + currentSources.length + '）' : '播放源';
+      currentSources.forEach((s, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'pv-src' + (i === currentSourceIdx ? ' active' : '')
+          + (s._failed ? ' failed' : '');
+        btn.innerHTML = '<span class="dot"></span><span class="label">'
+          + htmlEscape(s.src || ('线路' + (i + 1))) + '</span>';
+        btn.onclick = () => {
+          if (i !== currentSourceIdx) { currentSourceIdx = i; renderSources(); loadSource(i, false); }
+        };
+        box.appendChild(btn);
+      });
+    }
+
+    function loadSource(idx, resume) {
+      const s = currentSources[idx];
+      if (!s) return;
+      currentUrl = s.url;
+      const video = $('pvVideo');
+      $('pvProgressBar').style.width = '0%';
+      video.pause(); video.removeAttribute('src'); video.load();
+      if (hlsPlayer) { try { hlsPlayer.destroy(); } catch (e) {} hlsPlayer = null; }
+      if (isHls(s.url)) {
+        if (video.canPlayType('application/vnd.apple.mpegurl')) {
+          video.src = s.url;
+          video.play().catch(() => {});
+        } else if (window.Hls && Hls.isSupported()) {
+          hlsPlayer = new Hls({ maxBufferLength: 30 });
+          hlsPlayer.loadSource(s.url);
+          hlsPlayer.attachMedia(video);
+          hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
+          hlsPlayer.on(Hls.Events.ERROR, (ev, data) => {
+            if (!data.fatal) return;
+            if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hlsPlayer.startLoad();
+            else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hlsPlayer.recoverMediaError();
+            else handleSourceFail(idx);
+          });
+        } else {
+          handleSourceFail(idx);
+        }
+      } else {
+        video.src = s.url;
+        video.play().catch(() => {});
+      }
+      startProgressWatch();
+      if (resume) {
+        const t = readProgress(currentItemKey);
+        if (t > 5) {
+          const btn = $('pvResume');
+          btn.textContent = '继续观看 · ' + fmtTime(t);
+          btn.onclick = () => {
+            if (isFinite(t) && t > 0) $('pvVideo').currentTime = t;
+            btn.classList.remove('show');
+            $('pvVideo').play().catch(() => {});
+          };
+          btn.classList.add('show');
+        }
+      }
+    }
+
+    // 某线路不可用：标记失败并自动切换到下一个可用源；都失败则提示浏览器打开
+    function handleSourceFail(idx) {
+      if (currentSources[idx]) currentSources[idx]._failed = true;
+      renderSources();
+      let next = -1;
+      for (let i = 0; i < currentSources.length; i++) {
+        if (i !== idx && !currentSources[i]._failed) { next = i; break; }
+      }
+      if (next >= 0) {
+        currentSourceIdx = next; renderSources(); loadSource(next, false);
+        showToast('线路' + (idx + 1) + '不可用，已切换');
+      } else {
+        showToast('该影片暂无法在页面内播放，请点「浏览器打开」');
+      }
+    }
+
+    function pvSeek(t) {
+      const v = $('pvVideo');
+      if (isFinite(t)) v.currentTime = Math.max(0, t);
+    }
+
+    function toggleFullscreen() {
+      const v = $('pvVideo');
+      if (!document.fullscreenElement) { if (v.requestFullscreen) v.requestFullscreen(); }
+      else { if (document.exitFullscreen) document.exitFullscreen(); }
     }
 
     function openExternal() { if (currentUrl) window.open(currentUrl, '_blank'); }
@@ -719,14 +967,30 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     function copyCurrent() { if (currentUrl) copyToClipboard(currentUrl); }
 
     function closePlayer() {
-      if (hlsPlayer) { hlsPlayer.destroy(); hlsPlayer = null; }
-      const video = $('playerVideo');
-      video.pause();
-      video.removeAttribute('src');
-      video.load();
-      $('playerModal').classList.remove('show');
+      saveProgress();
+      if (hlsPlayer) { try { hlsPlayer.destroy(); } catch (e) {} hlsPlayer = null; }
+      const video = $('pvVideo');
+      video.pause(); video.removeAttribute('src'); video.load();
+      $('playerView').classList.remove('show');
       document.body.style.overflow = '';
+      if (pvProgressTimer) { clearInterval(pvProgressTimer); pvProgressTimer = null; }
     }
+
+    // 播放视图内的键盘快捷键（避免在 video 原生控件聚焦时与其冲突）
+    document.addEventListener('keydown', e => {
+      if (!$('playerView').classList.contains('show')) return;
+      if (document.activeElement && document.activeElement.tagName === 'VIDEO') return;
+      const v = $('pvVideo');
+      if (e.key === 'Escape') { closePlayer(); }
+      else if (e.key === ' ') { e.preventDefault(); if (v.paused) v.play().catch(() => {}); else v.pause(); }
+      else if (e.key === 'ArrowRight') { pvSeek(v.currentTime + 10); }
+      else if (e.key === 'ArrowLeft') { pvSeek(v.currentTime - 10); }
+      else if (e.key === 'f' || e.key === 'F') { toggleFullscreen(); }
+    });
+
+    $('pvBack').onclick = closePlayer;
+    $('pvExternal').onclick = openExternal;
+    $('pvCopy').onclick = copyCurrent;
 
     function copyToClipboard(text) {
       if (navigator.clipboard) {
@@ -769,7 +1033,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         card.target = '_blank';
         card.onclick = e => {
           e.preventDefault();
-          openVideo(it.name, it.url);
+          openPlayer(it, currentCat);
         };
         const meta = [it.region, it.year, it.quality].filter(Boolean).join(' · ');
         card.innerHTML = `
@@ -785,6 +1049,21 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           </div>
         `;
         grid.appendChild(card);
+        // 续播标记：本地存过播放进度则显示「续」徽标 + 进度条
+        const cp = cardProgress(currentCat + '|' + it.name + '|' + (it.year || ''));
+        if (cp.t > 5) {
+          const poster = card.querySelector('.poster');
+          const badge = document.createElement('div');
+          badge.className = 'continue-badge';
+          badge.textContent = '续';
+          poster.appendChild(badge);
+          if (cp.d > 0) {
+            const bar = document.createElement('div');
+            bar.className = 'continue-bar';
+            bar.style.width = Math.min(100, (cp.t / cp.d) * 100) + '%';
+            poster.appendChild(bar);
+          }
+        }
       });
     }
 
@@ -816,7 +1095,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         const card = document.createElement('a');
         card.className = 'live-card';
         card.href = it.u;
-        card.onclick = e => { e.preventDefault(); openVideo(it.n, it.u); };
+        card.onclick = e => {
+          e.preventDefault();
+          openPlayer({ name: it.n, url: it.u, sources: [{ src: '直播线路', url: it.u }], year: '' }, 'live');
+        };
         card.innerHTML = `
           ${it.l ? `<img class="live-logo" src="${it.l}" loading="lazy" onerror="this.style.display='none'">`
                  : `<div class="live-logo"></div>`}
@@ -886,8 +1168,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 """
 
 
-def _item_to_json(it: dict) -> dict:
-    """把数据库条目转成页面需要的轻量字段"""
+def _item_to_json(it: dict, sources: list = None) -> dict:
+    """把数据库条目转成页面需要的轻量字段
+
+    sources: 该片所有播放线路（换源用），形如 [{"src": 源名, "url": 播放地址}, ...]；
+    单线路影片传入空列表即可（播放器自动隐藏换源面板）。
+    """
     try:
         score = round(float(it.get("_best_score") or 0), 1)
     except (TypeError, ValueError):
@@ -903,6 +1189,7 @@ def _item_to_json(it: dict) -> dict:
         "score": score,
         "hits": int(it.get("_best_hits") or 0),
         "lines": int(it.get("_lines") or 1),
+        "sources": sources or [],
     }
 
 
@@ -952,6 +1239,18 @@ def generate_index(output_dir: Path = None) -> Path:
     resources: Dict[str, List[dict]] = {}
     for cat in config.M3U_OUTPUT:
         items, _ = prepare_items(cat)
+        # 聚合每部影片的所有播放线路（换源用）：国内直连源已在 prepare_items 排最前，
+        # 截断到 8 条避免 JSON 过大；单线路影片 sources 为空列表。
+        src_map: Dict[tuple, list] = {}
+        for it in items:
+            key = (it["_clean_name"], it.get("year") or "")
+            url = it.get("url") or ""
+            if not url:
+                continue
+            lst = src_map.setdefault(key, [])
+            if len(lst) < 8:
+                lst.append({"src": it.get("source") or ("线路%d" % (len(lst) + 1)),
+                            "url": url})
         # 统计每部影片的线路数（多少个源收录，作为人气的兜底指标）；
         # 并聚合所有线路中最大的人气/评分（保留的线路可能来自无人气数据的源）
         agg: Dict[tuple, dict] = {}
@@ -969,8 +1268,10 @@ def generate_index(output_dir: Path = None) -> Path:
             it["_lines"] = a["lines"]
             it["_best_hits"] = a["hits"]
             it["_best_score"] = a["score"]
-        # Web 首页同样去重：每部影片只展示一条最优线路，避免搜索时满屏重复
-        resources[cat] = [_item_to_json(it) for it in _flat_best_items(items)]
+        # Web 首页同样去重：每部影片只展示一条最优线路，避免搜索时满屏重复；
+        # 同时把聚合到的全部线路（换源）一并带出。
+        resources[cat] = [_item_to_json(it, src_map.get((it["_clean_name"], it.get("year") or "")))
+                         for it in _flat_best_items(items)]
 
     categories = {
         cat: {"label": info["label"]}
@@ -1004,9 +1305,12 @@ def _load_live_json() -> List[dict]:
         key = f"{r['category']}|{r['name']}"
         if key in channels:
             continue  # list_live 已按延迟排序，首条即最优
+        # 封面改用本地生成的台标：与 generate_covers.generate_live_covers 的
+        # ch_id 公式一致（md5("cat|name")[:14]），guovin 外链 logo 常被截断失效。
+        ch_id = "l_" + hashlib.md5(key.encode("utf-8")).hexdigest()[:14]
         channels[key] = {
             "n": r["name"], "c": r["category"],
-            "l": r.get("logo") or "", "u": r["url"],
+            "l": f"/covers/live_{ch_id}.jpg", "u": r["url"],
             "lat": int(r.get("latency") or 0),
         }
     return list(channels.values())

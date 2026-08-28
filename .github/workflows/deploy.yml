@@ -13,6 +13,18 @@ on:
         options:
           - 'false'
           - 'true'
+  # 推送代码（非数据）变更时自动部署，使网页/worker 改动即时上线；
+  # 仅 data/media.db 的数据推送（来自采集定时任务）不匹配 paths，不触发，避免重复部署。
+  push:
+    branches: [main]
+    paths:
+      - 'generator/**'
+      - 'scripts/**'
+      - 'config.py'
+      - 'main.py'
+      - 'generate_movies_json.py'
+      - 'output/_worker.js'
+      - '.github/workflows/deploy.yml'
 
 permissions:
   contents: read
