@@ -35,6 +35,14 @@ on:
         description: '仅 full 模式：本次采集页数（避免 6h 超时；留空=采到最后一页）'
         required: false
         default: ''
+      SKIP_COVERS:
+        description: '跳过封面生成（大批量采集时为避免 6h 超时，可先跳过，后续每日运行再补）'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
 
 permissions:
   contents: write
@@ -110,6 +118,7 @@ jobs:
           python generate_movies_json.py
 
       - name: 生成电影墙分类封面
+        if: ${{ inputs.SKIP_COVERS != 'true' }}
         run: |
           python -m pip install -q pillow
           python scripts/generate_covers.py
