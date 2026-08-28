@@ -542,6 +542,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     .pv-src.active .dot { background: var(--accent); }
     .pv-src.failed .dot { background: #ff4757; }
     .pv-src .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pv-src.resolver { border-left: 3px solid #ff9f43; }
+    .pv-src.resolver.active { background: rgba(255,159,67,0.14); border-color: #ff9f43; color: #ff9f43; }
+    .pv-src.resolver.active .dot { background: #ff9f43; }
     @media (max-width: 860px) {
       .pv-body { flex-direction: column; }
       .pv-side { flex: 0 0 auto; border-left: none; border-top: 1px solid var(--border); max-height: 44%; }
@@ -638,6 +641,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     const CATEGORIES = __CATEGORIES__;
     const RESOURCES = __RESOURCES__;
     const LIVE = __LIVE__;
+    const RESOLVER_LINES = __RESOLVERS__;
     const LIVE_CATS = { cctv: '央视', satellite: '卫视', local: '地方', hmt: '港澳台' };
     const DIM_LABELS = { media_type: '类型', region: '地区', year: '年代' };
 
@@ -811,6 +815,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     let hlsPlayer = null;
     let currentSources = [];
     let currentSourceIdx = 0;
+    let currentBaseIdx = 0;    // 当前选中的原始源索引（解析线路基于此源）
     let currentItemKey = '';   // 进度记忆 key: cat|name|year
     let currentUrl = '';
     let pvProgressTimer = null;
@@ -875,6 +880,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       currentSources = (item.sources && item.sources.length)
         ? item.sources.slice() : [{ src: '默认线路', url: item.url }];
       currentSourceIdx = 0;
+      currentBaseIdx = 0;
       $('pvTitle').textContent = item.name || '播放';
       const meta = [item.region, item.year, item.quality, item.media_type]
         .filter(Boolean).join(' · ');
@@ -895,8 +901,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     function renderSources() {
       const box = $('pvSources');
       box.innerHTML = '';
-      $('pvSrcTitle').textContent = currentSources.length > 1
-        ? '播放源（' + currentSources.length + '）' : '播放源';
+      const resolverList = (window.RESOLVER_LINES || []).filter(r => r && r.url);
+      const total = currentSources.length + resolverList.length;
+      $('pvSrcTitle').textContent = total > 1 ? '播放源（' + total + '）' : '播放源';
+
+      // 原始源
       currentSources.forEach((s, i) => {
         const btn = document.createElement('button');
         btn.className = 'pv-src' + (i === currentSourceIdx ? ' active' : '')
@@ -904,10 +913,29 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         btn.innerHTML = '<span class="dot"></span><span class="label">'
           + htmlEscape(s.src || ('线路' + (i + 1))) + '</span>';
         btn.onclick = () => {
-          if (i !== currentSourceIdx) { currentSourceIdx = i; renderSources(); loadSource(i, false); }
+          if (i !== currentSourceIdx) { currentSourceIdx = i; currentBaseIdx = i; renderSources(); loadSource(i, false); }
         };
         box.appendChild(btn);
       });
+
+      // 解析线路（基于当前选中的原始源）
+      resolverList.forEach((r, i) => {
+        const idx = currentSources.length + i;
+        const isActive = idx === currentSourceIdx;
+        const btn = document.createElement('button');
+        btn.className = 'pv-src resolver' + (isActive ? ' active' : '');
+        btn.innerHTML = '<span class="dot"></span><span class="label">'
+          + htmlEscape(r.name || ('解析' + (i + 1))) + '</span>';
+        btn.onclick = () => {
+          if (idx !== currentSourceIdx) { currentSourceIdx = idx; renderSources(); loadSource(idx, false); }
+        };
+        box.appendChild(btn);
+      });
+    }
+
+    function buildResolverUrl(r, originalUrl) {
+      const tpl = (r && r.url) || '';
+      return tpl.replace(/\x7burl\x7d/g, encodeURIComponent(originalUrl || ''));
     }
 
     function clearLoadTimeout() {
@@ -924,7 +952,18 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     }
 
     function loadSource(idx, resume) {
-      const s = currentSources[idx];
+      const resolverList = (window.RESOLVER_LINES || []).filter(r => r && r.url);
+      const isResolver = idx >= currentSources.length;
+      let s;
+      if (isResolver) {
+        const r = resolverList[idx - currentSources.length];
+        const base = currentSources[currentBaseIdx] || currentSources[0] || {};
+        const resolverUrl = buildResolverUrl(r, base.url);
+        s = { src: r.name, url: resolverUrl, _resolver: r };
+      } else {
+        s = currentSources[idx];
+        currentBaseIdx = idx;
+      }
       if (!s) return;
       currentUrl = s.url;
       const video = $('pvVideo');
@@ -932,15 +971,51 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       video.pause(); video.removeAttribute('src'); video.load();
       if (hlsPlayer) { try { hlsPlayer.destroy(); } catch (e) {} hlsPlayer = null; }
       startLoadTimeout(idx);
-      if (isHls(s.url)) {
+
+      if (isResolver && s._resolver && s._resolver.mode === 'json') {
+        // json 模式：先 fetch 解析接口拿真实 URL（需接口支持 CORS）
+        fetchJsonResolver(s._resolver, s.url, idx, resume);
+        return;
+      }
+      playUrl(s.url, idx, resume);
+    }
+
+    function fetchJsonResolver(r, resolverUrl, idx, resume) {
+      fetch(resolverUrl, { method: 'GET', referrerPolicy: 'no-referrer' })
+        .then(resp => resp.json().catch(() => ({})))
+        .then(data => {
+          const realUrl = data && (data.url || data.data && data.data.url || data.m3u8 || data.playUrl);
+          if (realUrl) {
+            currentUrl = realUrl;
+            playUrl(realUrl, idx, resume);
+          } else {
+            clearLoadTimeout(); handleSourceFail(idx, true);
+          }
+        })
+        .catch(err => {
+          // fetch 跨域失败时 fallback 为 direct：直接播放解析接口 URL
+          if (r.url) {
+            const base = currentSources[currentBaseIdx] || currentSources[0] || {};
+            currentUrl = buildResolverUrl(r, base.url);
+            playUrl(currentUrl, idx, resume);
+          } else {
+            clearLoadTimeout(); handleSourceFail(idx, true);
+          }
+        });
+    }
+
+    function playUrl(url, idx, resume) {
+      const video = $('pvVideo');
+      startLoadTimeout(idx);
+      if (isHls(url)) {
         if (video.canPlayType('application/vnd.apple.mpegurl')) {
-          video.src = s.url;
+          video.src = url;
           video.onerror = () => { clearLoadTimeout(); video.onerror = null; handleSourceFail(idx); };
           video.onloadeddata = () => { clearLoadTimeout(); video.onerror = null; };
           video.play().catch(() => {});
         } else if (window.Hls && Hls.isSupported()) {
           hlsPlayer = new Hls({ maxBufferLength: 30, enableWorker: false });
-          hlsPlayer.loadSource(s.url);
+          hlsPlayer.loadSource(url);
           hlsPlayer.attachMedia(video);
           hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => { clearLoadTimeout(); video.play().catch(() => {}); });
           hlsPlayer.on(Hls.Events.ERROR, (ev, data) => {
@@ -963,7 +1038,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           clearLoadTimeout(); handleSourceFail(idx);
         }
       } else {
-        video.src = s.url;
+        video.src = url;
         video.onerror = () => { clearLoadTimeout(); video.onerror = null; handleSourceFail(idx); };
         video.onloadeddata = () => { clearLoadTimeout(); video.onerror = null; };
         video.play().catch(() => {});
@@ -985,16 +1060,19 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     }
 
     // 某线路不可用：标记失败并自动切换到下一个可用源；都失败则提示浏览器打开
-    function handleSourceFail(idx) {
-      if (currentSources[idx]) currentSources[idx]._failed = true;
+    // resolverFail=true 表示当前失败的是解析线路，不标记原始源
+    function handleSourceFail(idx, resolverFail) {
+      const resolverList = (window.RESOLVER_LINES || []).filter(r => r && r.url);
+      const isResolver = idx >= currentSources.length;
+      if (!isResolver && currentSources[idx]) currentSources[idx]._failed = true;
       renderSources();
       let next = -1;
       for (let i = 0; i < currentSources.length; i++) {
         if (i !== idx && !currentSources[i]._failed) { next = i; break; }
       }
       if (next >= 0) {
-        currentSourceIdx = next; renderSources(); loadSource(next, false);
-        showToast('线路' + (idx + 1) + '不可用，已切换');
+        currentSourceIdx = next; currentBaseIdx = next; renderSources(); loadSource(next, false);
+        showToast('线路不可用，已切换');
       } else {
         showToast('该影片暂无法在页面内播放，请点「浏览器打开」');
       }
@@ -1360,6 +1438,7 @@ def generate_index(output_dir: Path = None) -> Path:
     html_text = html_text.replace("__CATEGORIES__", json.dumps(categories, ensure_ascii=False))
     html_text = html_text.replace("__RESOURCES__", json.dumps(resources, ensure_ascii=False))
     html_text = html_text.replace("__LIVE__", json.dumps(live_data, ensure_ascii=False))
+    html_text = html_text.replace("__RESOLVERS__", json.dumps(getattr(config, "RESOLVER_LINES", []), ensure_ascii=False))
 
     out.write_text(html_text, encoding="utf-8")
     print(f"[OK] 已生成 {out}")

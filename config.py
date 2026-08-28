@@ -230,3 +230,24 @@ COLLECT_BLOCK_TYPES = (
     "发布会", "开机", "探班", "ai漫", "漫剧", "动态漫",
     "理论", "里番", "伦理剧", "情色",
 )
+
+# ---------- 网页播放器第三方解析线路 ----------
+# 当影片原始 URL 无法直接播放（被源站 Referer / CORS / 反爬拦截）时，
+# 可调用第三方解析接口重新包装出可播放地址。
+#
+# 支持两种 mode：
+#   - "direct": 将原始 URL 直接拼到解析接口 URL 中，让 video/hls.js 播放该接口。
+#               适合接口返回 302 跳转到真实 m3u8 的场景（最常见，且不受 CORS 限制）。
+#   - "json":   先 fetch 解析接口，从返回 JSON 的 url 字段取真实地址再播放。
+#               需要接口支持跨域（Access-Control-Allow-Origin），否则浏览器会拦截。
+#
+# URL 中必须包含 {url} 占位符，运行时会替换为 encodeURIComponent(原始URL)。
+# 示例：{ "name": "云播", "url": "https://jx.example.com/?url={url}", "mode": "direct" }
+RESOLVER_LINES = [
+    # {"name": "云播",   "url": "", "mode": "direct"},
+    # {"name": "YY蓝光", "url": "", "mode": "direct"},
+    # {"name": "CK蓝光", "url": "", "mode": "direct"},
+    # {"name": "极速",   "url": "", "mode": "direct"},
+    # {"name": "暴风",   "url": "", "mode": "direct"},
+    # {"name": "爱坤",   "url": "", "mode": "direct"},
+]
