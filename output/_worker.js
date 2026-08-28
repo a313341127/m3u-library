@@ -508,11 +508,11 @@ async function proxyFetch(target, origin, request, depth = 0, refOverride = null
     return new Response("invalid data uri", { status: 502 });
   }
 
-  const doFetch = async (referer) => {
+  const doFetch = async (referer, ua) => {
     const fetchInit = {
       redirect: "follow",
       headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "User-Agent": ua || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "Referer": referer,
         "Accept": "*/*",
       },
@@ -530,14 +530,26 @@ async function proxyFetch(target, origin, request, depth = 0, refOverride = null
 
   try {
     const ownRef = extractBaseReferer(target);
-    let upstream = await doFetch(ownRef);
-    // 防盗链：自身 origin 作 Referer 被拒(如文采分片 CDN p.hhwenjian.com)时，
-    // 改用 m3u8 来源站 referer 重试，通常即可取到分片。
-    if (!upstream.ok && refOverride && refOverride !== ownRef) {
-      const retry = await doFetch(refOverride);
-      if (retry.ok) upstream = retry;
+    // 反盗链策略矩阵：源站可能对 Referer/UA 有严格要求，依次尝试多种组合。
+    // 若某个组合返回 200，则直接采用，避免后续无效重试。
+    const strategies = [
+      { referer: ownRef },
+      ...(refOverride && refOverride !== ownRef ? [{ referer: refOverride }] : []),
+      { referer: "" },
+      { referer: "https://www.cc0cd.cc.cd/" },
+      { referer: "https://tv.cc0cd.cc.cd/" },
+      { referer: ownRef, ua: "Mozilla/5.0 (Linux; Android 10; SM-G960U) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36" },
+    ];
+    let upstream = null;
+    const seen = new Set();
+    for (const s of strategies) {
+      const key = (s.referer || "") + "|" + (s.ua || "");
+      if (seen.has(key)) continue;
+      seen.add(key);
+      upstream = await doFetch(s.referer, s.ua);
+      if (upstream.ok) break;
     }
-    if (!upstream.ok) return new Response("upstream " + upstream.status, { status: 502 });
+    if (!upstream || !upstream.ok) return new Response("upstream " + (upstream && upstream.status), { status: 502 });
     const ct = (upstream.headers.get("content-type") || "").toLowerCase();
     if (ct.includes("text/html") || ct.includes("html")) {
       const html = await upstream.text();

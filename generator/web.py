@@ -889,8 +889,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       currentItemKey = cat + '|' + (item.name || '') + '|' + (item.year || '');
       currentSources = (item.sources && item.sources.length)
         ? item.sources.slice() : [{ src: '默认线路', url: item.url }];
-      currentSourceIdx = 0;
+      // 默认首选服务端中转线路：可自定义 Referer/UA 绕过源站反盗链；
+      // 若中转失败再回退尝试直连源。直播保持直连，避免 worker 代理实时流。
+      const resolverList = (window.RESOLVER_LINES || []).filter(r => r && r.url);
       currentBaseIdx = 0;
+      currentSourceIdx = (resolverList.length > 0 && cat !== 'live') ? currentSources.length : 0;
       $('pvTitle').textContent = item.name || '播放';
       const meta = [item.region, item.year, item.quality, item.media_type]
         .filter(Boolean).join(' · ');
@@ -1069,41 +1072,44 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       }
     }
 
-    // 某线路不可用：标记失败并自动切换；直连全部失败则回落到中转线路；都没了提示浏览器打开
+    // 某线路不可用：标记失败并自动切换；优先顺序为 中转 > 直连，
+    // 因为服务端中转可自定义 Referer/UA，最能绕过源站反盗链。
     function handleSourceFail(idx, resolverFail) {
       const resolverList = (window.RESOLVER_LINES || []).filter(r => r && r.url);
       const isResolver = idx >= currentSources.length;
       if (!isResolver && currentSources[idx]) currentSources[idx]._failed = true;
       renderSources();
-      // 1) 先尝试下一个未失败的直连源
-      if (!isResolver) {
-        let next = -1;
+
+      // 尝试下一个未失败的原始源
+      const trySource = () => {
         for (let i = 0; i < currentSources.length; i++) {
-          if (i !== idx && !currentSources[i]._failed) { next = i; break; }
+          if (i !== idx && !currentSources[i]._failed) {
+            currentSourceIdx = i; currentBaseIdx = i; renderSources(); loadSource(i, false);
+            return true;
+          }
         }
-        if (next >= 0) {
-          currentSourceIdx = next; currentBaseIdx = next; renderSources(); loadSource(next, false);
-          showToast('线路不可用，已切换');
-          return;
+        return false;
+      };
+      // 尝试下一个未使用过的中转线路
+      const tryResolver = () => {
+        for (let j = 0; j < resolverList.length; j++) {
+          const ridx = currentSources.length + j;
+          if (ridx !== idx) {
+            currentSourceIdx = ridx; currentBaseIdx = 0; renderSources(); loadSource(ridx, false);
+            return true;
+          }
         }
-        // 2) 直连全部失败 -> 自动切到第一个中转线路
-        if (resolverList.length) {
-          const ridx = currentSources.length;
-          currentSourceIdx = ridx; currentBaseIdx = 0; renderSources(); loadSource(ridx, false);
-          showToast('直连源不可用，已切到中转线路');
-          return;
-        }
-        showToast('该影片暂无法在页面内播放，请点「浏览器打开」');
-        return;
-      }
-      // 3) 中转线路失败 -> 尝试下一个中转线路
-      for (let j = 1; j < resolverList.length; j++) {
-        const ridx = currentSources.length + j;
-        if (ridx !== idx) {
-          currentSourceIdx = ridx; renderSources(); loadSource(ridx, false);
-          showToast('中转线路不可用，已切换');
-          return;
-        }
+        return false;
+      };
+
+      if (isResolver) {
+        // 中转失败：回退尝试直连源；直连也失败再换其他中转
+        if (trySource()) { showToast('中转线路不可用，尝试直连'); return; }
+        if (tryResolver()) { showToast('中转线路不可用，已切换'); return; }
+      } else {
+        // 直连失败：先换其他直连；全部直连失败再切中转
+        if (trySource()) { showToast('线路不可用，已切换'); return; }
+        if (tryResolver()) { showToast('直连源不可用，已切到中转线路'); return; }
       }
       showToast('该影片暂无法在页面内播放，请点「浏览器打开」');
     }
