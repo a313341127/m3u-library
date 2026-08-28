@@ -90,6 +90,14 @@ jobs:
           echo "全量分批: 源=${{ inputs.SOURCES || '全部' }} start=${START:-1} chunk=${CHUNK:-全量}"
           python main.py collect -n cc0cd $PAGES_FLAG $START_FLAG $SRC --no-generate
 
+      - name: 清理失效播放片源（链接健康检测，增量+安全阀）
+        # 探测每条约播放 URL 的可达性，删除"确定死了"的链接（域名失联/连接拒绝/404/410）。
+        # 保守策略：403/401/530/超时一律视为"不确定"跳过（靠本站中转常能救活，误删风险高）。
+        # 增量：每次只检 --limit 条最久未检的 URL（配合每日运行逐步覆盖全库）；
+        # --apply 真删，且单次删除比例上限 5%（疑似源站整体故障时中止，防误删）。
+        run: |
+          python scripts/prune_dead.py --apply --limit 2000 --age-days 7 --concurrency 16
+
       - name: 采集直播源（聚合源下载 + 测速择优，全量刷新）
         run: |
           python main.py collect-live --no-generate
