@@ -1437,7 +1437,7 @@ def generate_index(output_dir: Path = None) -> Path:
                 continue
             lst = src_map.setdefault(key, [])
             if len(lst) < 8:
-                lst.append({"src": it.get("source") or ("线路%d" % (len(lst) + 1)),
+                lst.append({"src": it.get("line_name") or it.get("source") or ("线路%d" % (len(lst) + 1)),
                             "url": url})
         # 统计每部影片的线路数（多少个源收录，作为人气的兜底指标）；
         # 并聚合所有线路中最大的人气/评分（保留的线路可能来自无人气数据的源）

@@ -25,6 +25,8 @@ class ResourceItem:
     url: str = ""                   # 播放地址
     quality: str = ""               # 清晰度: 4K / 1080p / 720p
     raw_type_name: str = ""         # 采集站原始分类名（用于排查分类错误）
+    source: str = ""                # 采集器注册名（由 manager 入库时填充）
+    line_name: str = ""             # 播放线路名（如 文采/暴风/最大）
     hits: int = 0                   # 人气（源站播放量，用于排序）
     score: float = 0.0              # 评分（豆瓣等，0-10，0 表示无评分）
 

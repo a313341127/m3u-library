@@ -105,21 +105,41 @@ def extract_quality(text: str) -> str:
     return ""
 
 
-def extract_first_url(play_url: str) -> str:
-    """播放地址格式: 第01集$https://a.m3u8#第02集$https://b.m3u8
-    多个播放源用 $$$ 分隔。取第一个源的第一集直链。"""
+def extract_play_urls(play_url: str, play_from: str) -> List[Tuple[str, str]]:
+    """解析 AppleCMS 多线路播放地址。
+
+    格式:
+      vod_play_from = "文采$$$暴风$$$最大"
+      vod_play_url  = "第01集$url1#第02集$url2$$$urlA#urlB$$$..."
+
+    返回 [(line_name, first_url), ...]；每个线路只取第一条 URL。
+    若缺少 vod_play_from，则用 线路1/线路2... 兜底命名。
+    """
     if not play_url:
-        return ""
-    first_source = play_url.split("$$$")[0]
-    for seg in first_source.split("#"):
-        if "$" in seg:
-            url = seg.split("$", 1)[1].strip()
-        else:
-            url = seg.strip()
-        if url.startswith(("http://", "https://")):
-            return url
-    m = _URL_RE.search(play_url)
-    return m.group(0) if m else ""
+        return []
+    source_groups = play_url.split("$$$")
+    line_names = (play_from or "").split("$$$") if play_from else []
+    results = []
+    for idx, group in enumerate(source_groups):
+        group = group.strip()
+        if not group:
+            continue
+        line = line_names[idx].strip() if idx < len(line_names) else f"线路{idx + 1}"
+        for seg in group.split("#"):
+            if not seg.strip():
+                continue
+            if "$" in seg:
+                url = seg.split("$", 1)[1].strip()
+            else:
+                url = seg.strip()
+            if url.startswith(("http://", "https://")):
+                results.append((line, url))
+                break
+    # 兜底：实在解析不出时，用正则提取所有 URL 并顺序命名
+    if not results:
+        for idx, url in enumerate(_URL_RE.findall(play_url)):
+            results.append((f"线路{idx + 1}", url))
+    return results
 
 
 # ---------------------------------------------------------------- 分类映射
@@ -405,15 +425,15 @@ class CC0CDCollector(BaseCollector):
                         self.stats["failed_pages"] += 1
                         continue
                     for v in detail.get("list") or []:
-                        item = self._to_item(
+                        line_items = self._to_item(
                             v, want_category, keyword,
                             source_type_name=tname,
                             forced_category=cat,
                             forced_media_type=mt,
                         )
-                        if item:
-                            items.append(item)
-                            total += 1
+                        if line_items:
+                            items.extend(line_items)
+                            total += len(line_items)
                         else:
                             self.stats["dropped"] += 1
                     time.sleep(delay)
@@ -427,8 +447,8 @@ class CC0CDCollector(BaseCollector):
                  keyword: str,
                  source_type_name: str = "",
                  forced_category: Optional[str] = None,
-                 forced_media_type: Optional[str] = None) -> Optional[ResourceItem]:
-        """单条 vod 数据 -> ResourceItem；不符合要求返回 None
+                 forced_media_type: Optional[str] = None) -> List[ResourceItem]:
+        """单条 vod 数据 -> ResourceItem 列表（每个播放线路一条）；不符合要求返回空列表
 
         当通过源站类型 ID 采集时，传入 forced_category/forced_media_type 以类型 ID
         为准，避免源站在详情页把类型写错（如纪录片被标成科幻片）。
@@ -442,21 +462,23 @@ class CC0CDCollector(BaseCollector):
         else:
             classified = classify_category(raw_type_name, desc)
             if classified is None:
-                return None
+                return []
             category, media_type = classified
             if want_category and category != want_category:
-                return None
+                return []
 
         # 简介关键词二次修正（即使类型 ID 对了，media_type 仍可能被标错）
         if "纪录片" in desc or "documentary" in desc.lower():
             media_type = "纪录片"
 
         name = (v.get("vod_name") or "").strip()
-        url = extract_first_url(v.get("vod_play_url") or "")
-        if not name or not url:
-            return None
+        line_urls = extract_play_urls(
+            v.get("vod_play_url") or "", v.get("vod_play_from") or ""
+        )
+        if not name or not line_urls:
+            return []
         if keyword and keyword not in name and keyword not in desc:
-            return None
+            return []
 
         remarks = v.get("vod_remarks") or ""
         quality = extract_quality(remarks) or extract_quality(v.get("vod_pic") or "")
@@ -479,17 +501,25 @@ class CC0CDCollector(BaseCollector):
         if not (0 < score <= 10):
             score = 0.0
 
-        return ResourceItem(
-            name=name,
-            category=category,
-            media_type=media_type,
-            region=norm_region(v.get("vod_area") or ""),
-            year=year,
-            cover=(v.get("vod_pic") or "").strip(),
-            description=desc,
-            url=url,
-            quality=quality,
-            raw_type_name=raw_type_name,
-            hits=hits,
-            score=score,
-        )
+        region = norm_region(v.get("vod_area") or "")
+        cover = (v.get("vod_pic") or "").strip()
+        items = []
+        for line_name, url in line_urls:
+            if not url:
+                continue
+            items.append(ResourceItem(
+                name=name,
+                category=category,
+                media_type=media_type,
+                region=region,
+                year=year,
+                cover=cover,
+                description=desc,
+                url=url,
+                quality=quality,
+                raw_type_name=raw_type_name,
+                line_name=line_name,
+                hits=hits,
+                score=score,
+            ))
+        return items

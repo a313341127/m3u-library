@@ -171,7 +171,7 @@ def build_category(cat: str, prefix: str) -> list:
     con = sqlite3.connect(DB)
     con.row_factory = sqlite3.Row
     cur = con.execute(
-        "SELECT id,name,region,year,cover,description,url,quality,score,hits "
+        "SELECT id,name,region,year,cover,description,url,line_name,quality,score,hits "
         "FROM resources WHERE category=?", (cat,)
     )
     rows = cur.fetchall()
@@ -184,6 +184,7 @@ def build_category(cat: str, prefix: str) -> list:
         year = yi if (isinstance(yi, int) and 1900 <= yi <= 2026) else None
         key = norm_key(row["name"], year)
         u = (row["url"] or "").strip()
+        line_name = (row["line_name"] or "").strip() or "未知线路"
         if not u:
             continue
         if key not in merged:
@@ -202,15 +203,16 @@ def build_category(cat: str, prefix: str) -> list:
                 "score": row["score"] or 0,
                 "hits": row["hits"] or 0,
                 "pop": popularity(row["hits"], row["score"], 1, year),
-                "sources": [u],
+                "sources": [(line_name, u)],
                 "_best_score": sc,
             }
             merged[key] = rec
             order.append(key)
         else:
             rec = merged[key]
-            if u not in rec["sources"]:
-                rec["sources"].append(u)
+            # 按 URL 去重，同一 URL 只保留第一次出现的线路名
+            if u not in (p[1] for p in rec["sources"]):
+                rec["sources"].append((line_name, u))
             # 升级元数据：取封面更全、评分更高的那一行
             if not rec["cover"] and row["cover"]:
                 rec["cover"] = row["cover"]
@@ -231,10 +233,13 @@ def build_category(cat: str, prefix: str) -> list:
         rec = merged[key]
         # 最终人气分：用最终 hits/score/线路数/年份重新计算，确保新增线路也被计入兜底热度。
         rec["pop"] = popularity(rec["hits"], rec["score"], len(rec["sources"]), rec["year"])
-        sources = rec.pop("sources")
+        paired = rec.pop("sources")
         rec.pop("_best_score", None)
-        # 主线路：直链优先 → 国内可直连优先
-        primary_first = _sort_sources(sources)
+        # 主线路：直链优先 → 国内可直连优先（按 URL 排序，线路名同步移动）
+        primary_first = _sort_sources(paired)
+        # 输出：sources 保持 URL 列表（途播兼容），srcs 为对应线路名列表
+        urls = [p[1] for p in primary_first]
+        srcs = [p[0] for p in primary_first]
         movies.append({
             "id": prefix + hashlib.md5(
                 ("%s|%s" % (key[0], key[1])).encode("utf-8")
@@ -246,12 +251,13 @@ def build_category(cat: str, prefix: str) -> list:
             "year": rec["year"],
             "cover": rec["cover"],
             "overview": rec["overview"],
-            "url": primary_first[0] if primary_first else "",
             "quality": rec["quality"],
             "score": rec["score"],
             "hits": rec["hits"],
             "pop": rec["pop"],
-            "sources": primary_first,
+            "url": urls[0] if urls else "",
+            "sources": urls,
+            "srcs": srcs,
         })
     return movies
 
@@ -263,8 +269,11 @@ def _is_direct(u: str) -> bool:
 
 
 def _sort_sources(sources):
-    """排序：直链优先 → 国内可直连优先。"""
-    def key(u):
+    """排序：直链优先 → 国内可直连优先。
+    sources 为 [(line_name, url), ...]，按 url 排序并同步移动 line_name。
+    """
+    def key(item):
+        u = (item[1] or "").lower().split("?")[0]
         return (0 if _is_direct(u) else 1, 0 if _is_domestic(u) else 1)
     return sorted(sources, key=key)
 

@@ -19,6 +19,8 @@ on:
     branches: [main]
     paths:
       - 'generator/**'
+      - 'collector/**'
+      - 'core/**'
       - 'scripts/**'
       - 'config.py'
       - 'main.py'
