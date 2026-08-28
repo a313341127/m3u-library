@@ -34,8 +34,9 @@ jobs:
           python main.py generate --txt --best
           python generate_movies_json.py
 
-      - name: 生成电影墙分类封面
-        if: ${{ inputs.REGEN_COVERS == 'true' }}
+      - name: 生成电影墙分类封面 + 直播台标
+        # 封面是部署产物的一部分（途播分类视图 + 直播频道台标均依赖），必须每次都生成，
+        # 不可因 REGEN_COVERS=false 跳过，否则直播频道封面空白。
         run: |
           python -m pip install -q pillow
           python scripts/generate_covers.py
