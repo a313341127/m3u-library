@@ -1494,12 +1494,13 @@ def _load_live_json() -> List[dict]:
         key = f"{r['category']}|{r['name']}"
         if key in channels:
             continue  # list_live 已按延迟排序，首条即最优
-        # 封面改用本地生成的台标：与 generate_covers.generate_live_covers 的
-        # ch_id 公式一致（md5("cat|name")[:14]），guovin 外链 logo 常被截断失效。
+        # 优先使用采集源自带的真实台标 URL；外链缺失时再回退到本地生成封面
         ch_id = "l_" + hashlib.md5(key.encode("utf-8")).hexdigest()[:14]
+        logo = (r.get("logo") or "").strip()
+        cover = logo if logo else f"/covers/live_{ch_id}.jpg"
         channels[key] = {
             "n": r["name"], "c": r["category"],
-            "l": f"/covers/live_{ch_id}.jpg", "u": r["url"],
+            "l": cover, "u": r["url"],
             "lat": int(r.get("latency") or 0),
         }
     return list(channels.values())

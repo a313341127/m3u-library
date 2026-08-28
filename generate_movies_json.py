@@ -143,6 +143,10 @@ def build_live(prefix: str) -> list:
         ch_id = prefix + hashlib.md5(
             ("%s|%s" % (key[0], key[1])).encode("utf-8")
         ).hexdigest()[:14]
+        # 优先使用采集源自带的真实台标 URL；外链失效/缺失时回退到本地生成封面
+        cover = rec["cover"].strip() if rec["cover"] else ""
+        if not cover:
+            cover = "/covers/live_" + ch_id + ".jpg"
         channels.append({
             "id": ch_id,
             "cat": "live",
@@ -150,9 +154,7 @@ def build_live(prefix: str) -> list:
             "sort": rec["sort"],
             "region": rec["region"],
             "year": None,
-            # 直播台标改用本地生成的封面（guovin 外链 logo 常被截断/失效导致空白）。
-            # 封面文件由 scripts/generate_covers.py 的 generate_live_covers() 生成。
-            "cover": "/covers/live_" + ch_id + ".jpg",
+            "cover": cover,
             "overview": "",
             "quality": "",
             "score": 0,
