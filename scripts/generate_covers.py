@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
 """Generate region view cover images for Jellyfin/途播 (movie-app card style)."""
 import os
+import sys
 import math
 import random
 from PIL import Image, ImageDraw, ImageFont
+
+# 允许以 `python scripts/generate_covers.py` 方式运行时导入项目根包（collector/config）
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
 
 OUTPUT_DIR = "output/covers"
 WIDTH, HEIGHT = 800, 450
@@ -351,7 +357,7 @@ class FloatDraw:
         return self.draw.rounded_rectangle(self._intxy(xy), *args, **kwargs)
 
 
-def generate(badge_text, big_text, c1, c2, text_dark, label_en, icon_key, file_key):
+def generate(badge_text, big_text, c1, c2, text_dark, label_en, icon_key, file_key, prefix="view"):
     img = Image.new("RGB", (WIDTH, HEIGHT), hex_to_rgb(c1))
     draw = ImageDraw.Draw(img)
 
@@ -437,9 +443,47 @@ def generate(badge_text, big_text, c1, c2, text_dark, label_en, icon_key, file_k
                    (sx, sy + 6), (sx - 2, sy + 1), (sx - 7, sy), (sx - 2, sy - 1)], fill=star_c)
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    path = os.path.join(OUTPUT_DIR, f"view_{file_key}.jpg")
+    path = os.path.join(OUTPUT_DIR, f"{prefix}_{file_key}.jpg")
     img.save(path, "JPEG", quality=92)
     print("saved", path)
+
+
+# 直播分类配色（按频道大类）
+LIVE_COLORS = {
+    "cctv": ("#8E2323", "#C0392B", "央视频道"),
+    "satellite": ("#1B4B6B", "#2E86AB", "卫视频道"),
+    "local": ("#1E6F5C", "#2ECC9B", "地方频道"),
+    "hmt": ("#5B2C6F", "#8E44AD", "港澳台"),
+}
+
+
+def generate_live_covers():
+    """为每个去重后的直播频道生成台标风格封面（guovin 外链 logo 常截断/失效）。
+
+    封面文件名 live_{ch_id}.jpg 必须与 generate_movies_json.build_live 中的
+    ch_id 一致：ch_id = "l_" + md5("cat|name")[:14]，且封面路径写入 /covers/live_{ch_id}.jpg。
+    """
+    import hashlib
+    from collector.live import list_live
+
+    rows = list_live()
+    seen = set()
+    count = 0
+    for r in rows:
+        cat = r.get("category", "")
+        name = r.get("name", "")
+        display = r.get("display") or name
+        key = (cat, name)
+        if key in seen:
+            continue
+        seen.add(key)
+        ch_id = "l_" + hashlib.md5(("%s|%s" % (cat, name)).encode("utf-8")).hexdigest()[:14]
+        c1, c2, label = LIVE_COLORS.get(cat, ("#5D6D7E", "#8FA1B3", "直播"))
+        # 文件名 = prefix + "_" + file_key = "live_" + ch_id = "live_l_<hex>.jpg"
+        # 与 generate_movies_json.build_live 的封面路径 /covers/live_{ch_id}.jpg 对应。
+        generate("直播", display, c1, c2, False, "LIVE", "cat", ch_id, prefix="live")
+        count += 1
+    print("直播封面生成完成: %d 个频道" % count)
 
 
 # 统一库分类视图封面（途播 Jellyfin 后端）：电影/直播/剧集/综艺/动漫
@@ -457,3 +501,4 @@ if __name__ == "__main__":
         generate("电影", r, c1, c2, dark, "MOVIE", r, r)
     for badge, big, c1, c2, dark, en, icon, fkey in CATEGORY_COVERS:
         generate(badge, big, c1, c2, dark, en, icon, fkey)
+    generate_live_covers()

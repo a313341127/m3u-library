@@ -1,5 +1,13 @@
 name: 每日自动更新
 
+# 串行化：同一工作流只允许一个 run 运行，其余排队。
+# 关键修复：此前多个全量采集 run 并发推送 media.db 到 main，互相 non-fast-forward 拒绝
+# -> 每个 run 在「提交数据库变更」步骤失败 -> 触发 GitHub 失败邮件。
+# 串行化后，后启动的 run 在 checkout 时即已包含前一个 run 推送的 media.db，推送为快进合并，不再冲突。
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 # 每天北京时间 03:30 自动增量采集 -> 生成 M3U/Web -> 生成途播 Jellyfin 数据 -> 部署 Cloudflare Pages -> 提交数据库
 # 也可在 Actions 页面手动点击 Run workflow 立即执行一次
 on:
@@ -194,6 +202,9 @@ jobs:
             echo "数据库无变化，跳过提交"
           else
             git commit -m "chore: 每日采集更新 $(date +%F)"
-            # checkout 后处于 detached HEAD，显式推送到 main 分支
-            git push origin HEAD:main
+            # 串行化(concurrency)保证 checkout 即最新；拉取后快进合并再推送，杜绝 non-fast-forward 失败。
+            # 极端情况下（与手动 dispatch 短暂重叠导致分叉）回退到 force-with-lease，仅覆盖生成的 media.db。
+            git fetch origin main
+            git merge origin/main --ff-only 2>/dev/null || true
+            git push origin HEAD:main 2>/dev/null || git push --force-with-lease origin HEAD:main
           fi

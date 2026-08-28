@@ -225,14 +225,20 @@ function itemsList(data, url) {
 
   const rawSortBy = (url.searchParams.get("SortBy") || "pop").split(",")[0];
   const rawSortOrder = (url.searchParams.get("SortOrder") || "Descending").toLowerCase();
-  const dir = rawSortOrder === "ascending" ? 1 : -1;
 
-  // 途播客户端默认按 SortName 字母排序，导致首页总是显示“100天/100道/10间…”这类固定内容。
-  // 首页/分类视图（无搜索）默认按热度排序；搜索场景仍按名称排序最直观。
+  // 途播客户端默认按 SortName 字母排序，导致首页总是显示“100天/100道/10间…”这类固定内容；
+  // 另外若客户端发 DateCreated/升序，会把冷门老片顶到最前。
+  // 首页/分类视图（无搜索）强制按热度降序；搜索场景仍按名称排序最直观。
   let sortBy = rawSortBy;
-  if (!hasSearch && (sortBy === "SortName" || sortBy === "ProductionYear" || sortBy === "")) {
-    sortBy = "pop";
+  let forceDesc = false;
+  if (!hasSearch) {
+    if (sortBy === "SortName" || sortBy === "ProductionYear" || sortBy === "" ||
+        sortBy === "DateCreated" || sortBy === "PremiereDate" || sortBy === "Default") {
+      sortBy = "pop";
+    }
+    forceDesc = true;  // 首页永远热度降序，避免老片/冷门置顶
   }
+  const dir = forceDesc ? -1 : (rawSortOrder === "ascending" ? 1 : -1);
 
   items = items.slice().sort((a, b) => {
     let av, bv;
@@ -251,7 +257,13 @@ function itemsList(data, url) {
       av = a.pop || 0;
       bv = b.pop || 0;
     }
-    return av < bv ? -1 * dir : av > bv ? 1 * dir : 0;
+    let cmp = av < bv ? -1 : av > bv ? 1 : 0;
+    // 同热度时新片优先（年份降序）
+    if (cmp === 0 && sortBy === "pop") {
+      const ya = a.year || 0, yb = b.year || 0;
+      cmp = ya > yb ? 1 : ya < yb ? -1 : 0;
+    }
+    return cmp * dir;
   });
 
   const start = parseInt(url.searchParams.get("StartIndex") || "0", 10);
@@ -276,8 +288,14 @@ async function imagePrimary(data, id, origin) {
   }
   const m = data.byId.get(id);
   if (!m || !m.cover) return new Response("no cover", { status: 404 });
+  // 封面可能是外站 URL（电影海报）或本仓库生成的相对路径（/covers/live_xxx.jpg 直播台标）。
+  // 相对路径补成绝对地址，交给 ASSETS 静态托管。
+  let coverUrl = m.cover;
+  if (!/^https?:\/\//i.test(coverUrl)) {
+    coverUrl = origin + (coverUrl.startsWith("/") ? "" : "/") + coverUrl;
+  }
   try {
-    const upstream = await fetch(m.cover, {
+    const upstream = await fetch(coverUrl, {
       redirect: "follow",
       headers: {
         "User-Agent": "Mozilla/5.0",

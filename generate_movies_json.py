@@ -150,7 +150,9 @@ def build_live(prefix: str) -> list:
             "sort": rec["sort"],
             "region": rec["region"],
             "year": None,
-            "cover": rec["cover"],
+            # 直播台标改用本地生成的封面（guovin 外链 logo 常被截断/失效导致空白）。
+            # 封面文件由 scripts/generate_covers.py 的 generate_live_covers() 生成。
+            "cover": "/covers/live_" + ch_id + ".jpg",
             "overview": "",
             "quality": "",
             "score": 0,
@@ -292,8 +294,8 @@ def main():
             lst = build_live(prefix)
         else:
             lst = build_category(cat, prefix)
-        # 按热度降序，截断/分页时优先保留高热度影片
-        lst.sort(key=lambda m: m.get("pop") or 0, reverse=True)
+        # 按热度降序，截断/分页时优先保留高热度影片；同热度新片优先（年份降序）
+        lst.sort(key=lambda m: ((m.get("pop") or 0), (m.get("year") or 0)), reverse=True)
         cap = MAX_PER_CAT.get(cat)
         if cap and len(lst) > cap:
             print("分类 %s(%s): %d 部，按热度截断到 %d 部" % (label, cat, len(lst), cap))
