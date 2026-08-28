@@ -38,7 +38,12 @@ def run_collector(name: str, **kwargs) -> Dict[str, object]:
     updated = 0
     for item in items:
         d = item.to_dict()
-        rid = db.add_resource(source=collector.name, **d)
+        # ResourceItem 已含 source 字段，但采集器不填（默认空）；
+        # 此处用采集器注册名覆盖，避免与下方 **d 展开冲突（079afc4 给
+        # ResourceItem 加了 source 字段后，若仍写 source=collector.name 会
+        # 触发 "got multiple values for keyword argument 'source'" 崩溃）。
+        d["source"] = collector.name
+        rid = db.add_resource(**d)
         if rid:
             inserted += 1
             continue
