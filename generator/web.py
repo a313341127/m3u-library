@@ -641,7 +641,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     const CATEGORIES = __CATEGORIES__;
     const RESOURCES = __RESOURCES__;
     const LIVE = __LIVE__;
-    const RESOLVER_LINES = __RESOLVERS__;
+    // 内置中转线路：服务端代理拉流（同源返回，规避浏览器 CORS/反盗链），等价于 dmhyy 的代理播放
+    const BUILTIN_RESOLVERS = [
+      { name: '本站中转', url: location.origin + '/proxy?u={url}', mode: 'direct' }
+    ];
+    const RESOLVER_LINES = BUILTIN_RESOLVERS.concat(__RESOLVERS__ || []);
     const LIVE_CATS = { cctv: '央视', satellite: '卫视', local: '地方', hmt: '港澳台' };
     const DIM_LABELS = { media_type: '类型', region: '地区', year: '年代' };
 
@@ -824,6 +828,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
     // 是否为 HLS：带 .m3u8/.m3u 或未知短链交给 hls.js；明确的视频文件走原生播放
     function isHls(url) {
+      // 中转线路 /proxy?u=... 需看内部原始地址判断真实类型
+      if (url && url.indexOf('/proxy?u=') >= 0) {
+        const m = url.match(/[?&]u=([^&]+)/);
+        if (m) { try { return isHls(decodeURIComponent(m[1])); } catch (e) {} }
+        return true;
+      }
       const u = (url || '').split('?')[0].toLowerCase();
       if (u.endsWith('.m3u8') || u.endsWith('.m3u')) return true;
       if (/\\.(mp4|webm|ogg|mov|mkv|flv)$/.test(u)) return false;
@@ -1059,23 +1069,43 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       }
     }
 
-    // 某线路不可用：标记失败并自动切换到下一个可用源；都失败则提示浏览器打开
-    // resolverFail=true 表示当前失败的是解析线路，不标记原始源
+    // 某线路不可用：标记失败并自动切换；直连全部失败则回落到中转线路；都没了提示浏览器打开
     function handleSourceFail(idx, resolverFail) {
       const resolverList = (window.RESOLVER_LINES || []).filter(r => r && r.url);
       const isResolver = idx >= currentSources.length;
       if (!isResolver && currentSources[idx]) currentSources[idx]._failed = true;
       renderSources();
-      let next = -1;
-      for (let i = 0; i < currentSources.length; i++) {
-        if (i !== idx && !currentSources[i]._failed) { next = i; break; }
-      }
-      if (next >= 0) {
-        currentSourceIdx = next; currentBaseIdx = next; renderSources(); loadSource(next, false);
-        showToast('线路不可用，已切换');
-      } else {
+      // 1) 先尝试下一个未失败的直连源
+      if (!isResolver) {
+        let next = -1;
+        for (let i = 0; i < currentSources.length; i++) {
+          if (i !== idx && !currentSources[i]._failed) { next = i; break; }
+        }
+        if (next >= 0) {
+          currentSourceIdx = next; currentBaseIdx = next; renderSources(); loadSource(next, false);
+          showToast('线路不可用，已切换');
+          return;
+        }
+        // 2) 直连全部失败 -> 自动切到第一个中转线路
+        if (resolverList.length) {
+          const ridx = currentSources.length;
+          currentSourceIdx = ridx; currentBaseIdx = 0; renderSources(); loadSource(ridx, false);
+          showToast('直连源不可用，已切到中转线路');
+          return;
+        }
         showToast('该影片暂无法在页面内播放，请点「浏览器打开」');
+        return;
       }
+      // 3) 中转线路失败 -> 尝试下一个中转线路
+      for (let j = 1; j < resolverList.length; j++) {
+        const ridx = currentSources.length + j;
+        if (ridx !== idx) {
+          currentSourceIdx = ridx; renderSources(); loadSource(ridx, false);
+          showToast('中转线路不可用，已切换');
+          return;
+        }
+      }
+      showToast('该影片暂无法在页面内播放，请点「浏览器打开」');
     }
 
     function pvSeek(t) {
