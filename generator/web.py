@@ -29,6 +29,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>秦哥影视资源</title>
   <meta name="theme-color" content="#101318">
+  <!-- 国内 CDN 常因 Referer 反盗链拒绝页面内播放，全局无 Referer 可让 hls.js / video 直接播放 -->
+  <meta name="referrer" content="no-referrer">
   <style>
     :root {
       --bg: #101318;
@@ -553,6 +555,19 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     .continue-bar {
       position: absolute; left: 0; bottom: 0; height: 3px; background: var(--accent); z-index: 2;
     }
+    .load-more {
+      grid-column: 1 / -1;
+      padding: 14px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .2s;
+    }
+    .load-more:hover { background: var(--accent-light); border-color: var(--accent); color: var(--accent); }
   </style>
 </head>
 <body>
@@ -605,7 +620,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     </div>
     <div class="pv-body">
       <div class="pv-stage" id="pvStage">
-        <video class="pv-video" id="pvVideo" controls playsinline></video>
+        <video class="pv-video" id="pvVideo" controls playsinline referrerpolicy="no-referrer"></video>
         <button class="pv-resume" id="pvResume"></button>
         <div class="pv-progress-bar" id="pvProgressBar"></div>
       </div>
@@ -631,6 +646,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     let liveFilter = '';
     let searchQuery = '';
     let currentSort = 'pop';   // pop=人气 / latest=最新 / score=评分 / chan=频道序 / lat=延迟
+    let displayLimit = 200;    // 首屏最多渲染条目数，避免大列表卡顿
+    const PAGE_SIZE = 200;
+    let searchTimer = null;
 
     const $ = id => document.getElementById(id);
 
@@ -676,7 +694,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         const btn = document.createElement('button');
         btn.className = 'sort-btn' + (currentSort === key ? ' active' : '');
         btn.textContent = label;
-        btn.onclick = () => { currentSort = key; render(); };
+        btn.onclick = () => { currentSort = key; displayLimit = PAGE_SIZE; renderGridOnly(); };
         bar.appendChild(btn);
       });
     }
@@ -693,6 +711,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           activeFilters = { media_type: '', region: '', year: '' };
           liveFilter = '';
           currentSort = key === 'live' ? 'chan' : 'pop';
+          displayLimit = PAGE_SIZE;
           render();
         };
         tabs.appendChild(btn);
@@ -705,7 +724,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       const all = document.createElement('span');
       all.className = 'tag' + (!liveFilter ? ' active' : '');
       all.textContent = '全部';
-      all.onclick = () => { liveFilter = ''; render(); };
+      all.onclick = () => { liveFilter = ''; displayLimit = PAGE_SIZE; render(); };
       c.appendChild(all);
       const counts = {};
       LIVE.forEach(it => { counts[it.c] = (counts[it.c] || 0) + 1; });
@@ -713,7 +732,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         const span = document.createElement('span');
         span.className = 'tag' + (liveFilter === key ? ' active' : '');
         span.textContent = label + ' ' + (counts[key] || 0);
-        span.onclick = () => { liveFilter = key; render(); };
+        span.onclick = () => { liveFilter = key; displayLimit = PAGE_SIZE; render(); };
         c.appendChild(span);
       });
     }
@@ -724,13 +743,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       const all = document.createElement('span');
       all.className = 'tag' + (!activeFilters[dim] ? ' active' : '');
       all.textContent = '全部';
-      all.onclick = () => { activeFilters[dim] = ''; render(); };
+      all.onclick = () => { activeFilters[dim] = ''; displayLimit = PAGE_SIZE; render(); };
       c.appendChild(all);
       values.forEach(v => {
         const span = document.createElement('span');
         span.className = 'tag' + (activeFilters[dim] === v ? ' active' : '');
         span.textContent = v;
-        span.onclick = () => { activeFilters[dim] = v; render(); };
+        span.onclick = () => { activeFilters[dim] = v; displayLimit = PAGE_SIZE; render(); };
         c.appendChild(span);
       });
     }
@@ -795,6 +814,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     let currentItemKey = '';   // 进度记忆 key: cat|name|year
     let currentUrl = '';
     let pvProgressTimer = null;
+    let loadTimeout = null;
+    let loadStartIdx = -1;
 
     // 是否为 HLS：带 .m3u8/.m3u 或未知短链交给 hls.js；明确的视频文件走原生播放
     function isHls(url) {
@@ -889,6 +910,19 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       });
     }
 
+    function clearLoadTimeout() {
+      if (loadTimeout) { clearTimeout(loadTimeout); loadTimeout = null; }
+      loadStartIdx = -1;
+    }
+
+    function startLoadTimeout(idx) {
+      clearLoadTimeout();
+      loadStartIdx = idx;
+      loadTimeout = setTimeout(() => {
+        if (loadStartIdx === idx) handleSourceFail(idx);
+      }, 8000);
+    }
+
     function loadSource(idx, resume) {
       const s = currentSources[idx];
       if (!s) return;
@@ -897,26 +931,41 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       $('pvProgressBar').style.width = '0%';
       video.pause(); video.removeAttribute('src'); video.load();
       if (hlsPlayer) { try { hlsPlayer.destroy(); } catch (e) {} hlsPlayer = null; }
+      startLoadTimeout(idx);
       if (isHls(s.url)) {
         if (video.canPlayType('application/vnd.apple.mpegurl')) {
           video.src = s.url;
+          video.onerror = () => { clearLoadTimeout(); video.onerror = null; handleSourceFail(idx); };
+          video.onloadeddata = () => { clearLoadTimeout(); video.onerror = null; };
           video.play().catch(() => {});
         } else if (window.Hls && Hls.isSupported()) {
-          hlsPlayer = new Hls({ maxBufferLength: 30 });
+          hlsPlayer = new Hls({ maxBufferLength: 30, enableWorker: false });
           hlsPlayer.loadSource(s.url);
           hlsPlayer.attachMedia(video);
-          hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
+          hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => { clearLoadTimeout(); video.play().catch(() => {}); });
           hlsPlayer.on(Hls.Events.ERROR, (ev, data) => {
             if (!data.fatal) return;
-            if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hlsPlayer.startLoad();
-            else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hlsPlayer.recoverMediaError();
-            else handleSourceFail(idx);
+            if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+              const code = (data.response && data.response.code) || 0;
+              // 403/401/530 多为源站反盗链/拉黑，重试无效，直接切源
+              if (code === 403 || code === 401 || code === 530 || code === 0) {
+                clearLoadTimeout(); handleSourceFail(idx);
+              } else {
+                hlsPlayer.startLoad();
+              }
+            } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+              hlsPlayer.recoverMediaError();
+            } else {
+              clearLoadTimeout(); handleSourceFail(idx);
+            }
           });
         } else {
-          handleSourceFail(idx);
+          clearLoadTimeout(); handleSourceFail(idx);
         }
       } else {
         video.src = s.url;
+        video.onerror = () => { clearLoadTimeout(); video.onerror = null; handleSourceFail(idx); };
+        video.onloadeddata = () => { clearLoadTimeout(); video.onerror = null; };
         video.play().catch(() => {});
       }
       startProgressWatch();
@@ -968,6 +1017,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
     function closePlayer() {
       saveProgress();
+      clearLoadTimeout();
       if (hlsPlayer) { try { hlsPlayer.destroy(); } catch (e) {} hlsPlayer = null; }
       const video = $('pvVideo');
       video.pause(); video.removeAttribute('src'); video.load();
@@ -1017,16 +1067,18 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       const grid = $('grid');
       grid.className = 'grid';
       grid.innerHTML = '';
-      $('resultCount').textContent = items.length + ' 部';
+      const total = items.length;
+      const shown = items.slice(0, displayLimit);
+      $('resultCount').textContent = total > shown.length ? shown.length + ' / ' + total + ' 部' : total + ' 部';
       $('sectionName').textContent = CATEGORIES[currentCat].label;
-      if (!items.length) {
+      if (!shown.length) {
         grid.innerHTML = `<div class="empty">
           <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/></svg>
           <div>没有找到相关资源</div>
         </div>`;
         return;
       }
-      items.forEach(it => {
+      shown.forEach(it => {
         const card = document.createElement('a');
         card.className = 'card';
         card.href = it.url;
@@ -1065,6 +1117,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           }
         }
       });
+      if (total > shown.length) {
+        const more = document.createElement('button');
+        more.className = 'load-more';
+        more.textContent = '加载更多（还剩 ' + (total - shown.length) + ' 部）';
+        more.onclick = () => { displayLimit += PAGE_SIZE; renderGrid(items); };
+        grid.appendChild(more);
+      }
     }
 
     function htmlEscape(s) {
@@ -1082,16 +1141,18 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       const grid = $('grid');
       grid.className = 'live-grid';
       grid.innerHTML = '';
-      $('resultCount').textContent = items.length + ' 个频道';
+      const total = items.length;
+      const shown = items.slice(0, displayLimit);
+      $('resultCount').textContent = total > shown.length ? shown.length + ' / ' + total + ' 个频道' : total + ' 个频道';
       $('sectionName').textContent = '直播';
-      if (!items.length) {
+      if (!shown.length) {
         grid.innerHTML = `<div class="empty">
           <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/></svg>
           <div>没有找到相关频道</div>
         </div>`;
         return;
       }
-      items.forEach(it => {
+      shown.forEach(it => {
         const card = document.createElement('a');
         card.className = 'live-card';
         card.href = it.u;
@@ -1110,6 +1171,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         `;
         grid.appendChild(card);
       });
+      if (total > shown.length) {
+        const more = document.createElement('button');
+        more.className = 'load-more';
+        more.textContent = '加载更多（还剩 ' + (total - shown.length) + ' 个频道）';
+        more.onclick = () => { displayLimit += PAGE_SIZE; renderLiveGrid(items); };
+        grid.appendChild(more);
+      }
     }
 
     function filterLive() {
@@ -1131,6 +1199,14 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       return arr;
     }
 
+    function renderGridOnly() {
+      if (currentCat === 'live') {
+        renderLiveGrid(sortLive(filterLive()));
+      } else {
+        renderGrid(sortItems(filterItems(RESOURCES[currentCat])));
+      }
+    }
+
     function render() {
       const isLive = currentCat === 'live';
       initTabs();
@@ -1142,23 +1218,21 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       $('search').placeholder = isLive ? '搜索频道...' : '搜索片名...';
       if (isLive) {
         makeLiveTags();
-        renderLiveGrid(sortLive(filterLive()));
-        return;
+      } else {
+        makeTags('typeTags', 'media_type', getFilterValues(currentCat, 'media_type'));
+        makeTags('regionTags', 'region', getFilterValues(currentCat, 'region'));
+        makeTags('eraTags', 'year', getFilterValues(currentCat, 'year'));
       }
-      makeTags('typeTags', 'media_type', getFilterValues(currentCat, 'media_type'));
-      makeTags('regionTags', 'region', getFilterValues(currentCat, 'region'));
-      makeTags('eraTags', 'year', getFilterValues(currentCat, 'year'));
-      const items = sortItems(filterItems(RESOURCES[currentCat]));
-      renderGrid(items);
+      renderGridOnly();
     }
 
     $('search').addEventListener('input', e => {
       searchQuery = e.target.value.trim();
-      if (currentCat === 'live') {
-        renderLiveGrid(sortLive(filterLive()));
-      } else {
-        renderGrid(sortItems(filterItems(RESOURCES[currentCat])));
-      }
+      if (searchTimer) clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => {
+        displayLimit = PAGE_SIZE;
+        renderGridOnly();
+      }, 300);
     });
 
     render();
