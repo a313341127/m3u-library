@@ -189,6 +189,63 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     @media (min-width: 640px) { .grid { grid-template-columns: repeat(3, 1fr); } }
     @media (min-width: 900px) { .grid { grid-template-columns: repeat(4, 1fr); } }
     @media (min-width: 1200px) { .grid { grid-template-columns: repeat(5, 1fr); } }
+    .home-view { display: none; }
+    .home-sec { margin: 0 0 26px; }
+    .home-sec-head {
+      display: flex; align-items: baseline; justify-content: space-between;
+      gap: 12px; margin: 0 0 12px;
+    }
+    .home-sec-title { font-size: 16px; font-weight: 600; margin: 0; }
+    .home-more {
+      flex: 0 0 auto; background: none; border: none; padding: 0;
+      color: var(--text-secondary); font-size: 13px; cursor: pointer;
+    }
+    .home-more:hover { color: var(--accent); }
+    .home-row {
+      display: grid; grid-auto-flow: column; grid-auto-columns: 42%;
+      gap: 10px; overflow-x: auto; padding-bottom: 6px;
+      scrollbar-width: thin;
+    }
+    @media (min-width: 640px) { .home-row { grid-auto-columns: 30%; } }
+    @media (min-width: 900px) { .home-row { grid-auto-columns: 22%; } }
+    @media (min-width: 1200px) {
+      .home-row { grid-auto-flow: row; grid-template-columns: repeat(6, 1fr); overflow-x: visible; }
+    }
+    .hcard { cursor: pointer; }
+    .hcard-poster {
+      position: relative; width: 100%; aspect-ratio: 2 / 3;
+      border-radius: 10px; overflow: hidden; background: var(--card);
+    }
+    .hcard-poster img {
+      width: 100%; height: 100%; object-fit: cover; display: block;
+      transition: transform .25s;
+    }
+    .hcard:hover .hcard-poster img { transform: scale(1.05); }
+    .hcard-score {
+      position: absolute; top: 6px; right: 6px;
+      padding: 2px 7px; border-radius: 8px;
+      background: rgba(0,0,0,0.66); color: #ffcc4d;
+      font-size: 11px; font-weight: 600;
+    }
+    .hcard-rank {
+      position: absolute; top: 6px; left: 6px;
+      width: 22px; height: 22px; border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--accent); color: #fff; font-size: 12px; font-weight: 600;
+    }
+    .hcard-tag {
+      position: absolute; bottom: 6px; left: 6px;
+      padding: 2px 7px; border-radius: 8px;
+      background: rgba(0,0,0,0.66); color: #fff; font-size: 11px;
+    }
+    .hcard-title {
+      margin: 7px 0 2px; font-size: 13px; font-weight: 500;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .hcard-sub {
+      font-size: 11.5px; color: var(--text-secondary);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
     .card {
       background: var(--card);
       border-radius: 16px;
@@ -204,7 +261,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     .poster {
       position: relative;
       width: 100%;
-      padding-top: 140%;
+      padding-top: 150%;
       background: #232a33;
       overflow: hidden;
     }
@@ -250,6 +307,16 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       background: rgba(255,159,10,0.92);
     }
     .score-badge.high { background: rgba(255,71,87,0.92); }
+    .ep-badge {
+      position: absolute;
+      bottom: 8px; right: 8px;
+      padding: 3px 7px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #fff;
+      background: rgba(0,0,0,0.65);
+    }
     .sort-group {
       display: flex;
       gap: 6px;
@@ -531,6 +598,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       padding: 16px;
     }
     .pv-meta { font-size: 13px; color: var(--text-secondary); margin: 0 0 18px; line-height: 1.7; }
+    .pv-desc {
+      font-size: 12.5px; line-height: 1.8; color: var(--text-secondary);
+      margin: 0 0 18px; max-height: 6.2em; overflow: hidden;
+    }
+    .pv-desc:empty { display: none; }
     .pv-section-title {
       font-size: 12px; font-weight: 700; color: var(--text-secondary);
       text-transform: uppercase; letter-spacing: .6px; margin: 0 0 10px;
@@ -555,6 +627,77 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     @media (max-width: 860px) {
       .pv-body { flex-direction: column; }
       .pv-side { flex: 0 0 auto; border-left: none; border-top: 1px solid var(--border); max-height: 44%; }
+    }
+    .detail-view {
+      position: fixed;
+      inset: 0;
+      z-index: 380;
+      display: none;
+      flex-direction: column;
+      background: var(--bg);
+    }
+    .detail-view.show { display: flex; }
+    .dv-top {
+      flex: 0 0 auto;
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 14px;
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+    }
+    .dv-body {
+      flex: 1 1 auto; overflow-y: auto; min-height: 0;
+      display: flex; flex-direction: column; gap: 16px;
+      padding: 16px;
+    }
+    .dv-poster {
+      flex: 0 0 auto; width: 100%; max-width: 200px; margin: 0 auto;
+      border-radius: 12px; overflow: hidden; background: var(--card);
+      aspect-ratio: 2 / 3;
+    }
+    .dv-poster img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .dv-info { flex: 1 1 auto; min-width: 0; }
+    .dv-title { font-size: 19px; font-weight: 600; margin: 0 0 8px; line-height: 1.35; }
+    .dv-meta { font-size: 13px; color: var(--text-secondary); margin: 0 0 12px; line-height: 1.7; }
+    .dv-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
+    .dv-tag {
+      padding: 3px 10px; border-radius: 12px; font-size: 12px;
+      background: var(--card); border: 1px solid var(--border); color: var(--text-secondary);
+    }
+    .dv-tag.score { background: var(--accent-light); border-color: transparent; color: var(--accent); font-weight: 600; }
+    .dv-desc {
+      font-size: 13px; line-height: 1.85; color: var(--text-secondary);
+      margin: 0 0 6px; max-height: 7.4em; overflow: hidden;
+    }
+    .dv-desc.open { max-height: none; }
+    .dv-desc-toggle { font-size: 12px; color: var(--accent); cursor: pointer; margin: 0 0 16px; }
+    .dv-actions { display: flex; gap: 10px; margin: 0 0 20px; flex-wrap: wrap; }
+    .dv-play {
+      padding: 11px 26px; border-radius: 22px; border: none;
+      background: var(--accent); color: #fff; font-size: 15px; font-weight: 600; cursor: pointer;
+    }
+    .dv-play:active { transform: scale(0.97); }
+    .dv-ghost {
+      padding: 11px 18px; border-radius: 22px; border: 1px solid var(--border);
+      background: var(--card); color: var(--text); font-size: 14px; cursor: pointer;
+    }
+    .dv-section-title { font-size: 12px; font-weight: 700; color: var(--text-secondary); }
+    .dv-sources { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .dv-src {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 12px; border-radius: 12px;
+      background: var(--card); border: 1px solid var(--border);
+      color: var(--text); font-size: 13px; cursor: pointer; text-align: left;
+    }
+    .dv-src:hover { border-color: var(--accent); }
+    .dv-src .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    @media (min-width: 900px) {
+      .dv-body { flex-direction: row; align-items: flex-start; padding: 24px; gap: 24px; }
+      .dv-poster { flex: 0 0 240px; max-width: none; margin: 0; }
+      .dv-sources { grid-template-columns: repeat(3, 1fr); }
+    }
+    @media (min-width: 1200px) {
+      .dv-body { max-width: 1100px; margin: 0 auto; width: 100%; }
+      .dv-poster { flex: 0 0 280px; }
     }
     .continue-badge {
       position: absolute; bottom: 8px; left: 8px;
@@ -608,7 +751,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       <div class="filter-label">频道分类</div>
       <div class="filter-tags" id="liveTags"></div>
     </div>
-    <div class="section-title">
+    <div class="section-title" id="sectionBar">
       <span style="display:flex;align-items:baseline;gap:8px;">
         <span id="sectionName">全部</span>
         <span class="count" id="resultCount">0</span>
@@ -616,8 +759,34 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       <div class="sort-group" id="sortGroup"></div>
     </div>
     <div class="grid" id="grid"></div>
+    <div class="home-view" id="homeView"></div>
   </main>
   <div class="toast" id="toast"></div>
+
+  <div class="detail-view" id="detailView">
+    <div class="dv-top">
+      <button class="pv-back" id="dvBack" aria-label="返回">&lsaquo;</button>
+      <div class="pv-title" id="dvTopTitle"></div>
+    </div>
+    <div class="dv-body">
+      <div class="dv-poster">
+        <img id="dvPoster" alt="" referrerpolicy="no-referrer" loading="lazy">
+      </div>
+      <div class="dv-info">
+        <h1 class="dv-title" id="dvTitle"></h1>
+        <div class="dv-meta" id="dvMeta"></div>
+        <div class="dv-tags" id="dvTags"></div>
+        <div class="dv-desc" id="dvDesc"></div>
+        <div class="dv-desc-toggle" id="dvDescToggle"></div>
+        <div class="dv-actions">
+          <button class="dv-play" id="dvPlay">立即播放</button>
+          <button class="dv-ghost" id="dvCopy">复制链接</button>
+        </div>
+        <div class="dv-section-title">播放线路</div>
+        <div class="dv-sources" id="dvSources"></div>
+      </div>
+    </div>
+  </div>
 
   <div class="player-view" id="playerView">
     <div class="pv-top">
@@ -636,6 +805,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       </div>
       <div class="pv-side" id="pvSide">
         <div class="pv-meta" id="pvMeta"></div>
+        <div class="pv-desc" id="pvDesc"></div>
         <div class="pv-section-title" id="pvSrcTitle">播放源</div>
         <div class="pv-sources" id="pvSources"></div>
       </div>
@@ -660,7 +830,7 @@ __DATA_SCRIPTS__
     const LIVE_CATS = { cctv: '央视', satellite: '卫视', local: '地方', hmt: '港澳台' };
     const DIM_LABELS = { media_type: '类型', region: '地区', year: '年代' };
 
-    let currentCat = 'movie';
+    let currentCat = 'home';
     let activeFilters = { media_type: '', region: '', year: '' };
     let liveFilter = '';
     let searchQuery = '';
@@ -725,14 +895,7 @@ __DATA_SCRIPTS__
         const btn = document.createElement('button');
         btn.className = 'tab' + (key === currentCat ? ' active' : '');
         btn.textContent = info.label;
-        btn.onclick = () => {
-          currentCat = key;
-          activeFilters = { media_type: '', region: '', year: '' };
-          liveFilter = '';
-          currentSort = key === 'live' ? 'chan' : 'pop';
-          displayLimit = PAGE_SIZE;
-          render();
-        };
+        btn.onclick = () => switchCat(key);
         tabs.appendChild(btn);
       });
     }
@@ -896,6 +1059,90 @@ __DATA_SCRIPTS__
     }
 
     // 打开沉浸式播放视图（item 含 name/url/sources；live 由调用方包装）
+    // 简介按分类分片存放：首次打开某分类的详情页时才加载，
+    // 避免首屏多下载 12.48 MiB（详见 _write_desc_shards 说明）。
+    const _descLoaded = {};
+    function loadDescs(cat, cb) {
+      if (cat === 'live' || _descLoaded[cat]) { if (cb) cb(); return; }
+      _descLoaded[cat] = true;
+      const s = document.createElement('script');
+      s.src = '/web/desc_' + encodeURIComponent(cat) + '.js';
+      s.onload = function () { if (cb) cb(); };
+      s.onerror = function () { if (cb) cb(); };
+      document.head.appendChild(s);
+    }
+
+    function getDesc(cat, item) {
+      const m = (window.__DESCS__ || {})[cat];
+      if (!m) return '';
+      return m[(item.name || '') + '|' + (item.year || '')] || '';
+    }
+
+    let currentDetail = null;
+
+    function openDetail(item, cat) {
+      currentDetail = { item: item, cat: cat };
+      $('dvTopTitle').textContent = item.name || '';
+      $('dvTitle').textContent = item.name || '';
+      $('dvMeta').textContent = [item.year, item.region, item.media_type]
+        .filter(Boolean).join(' · ');
+
+      const tags = [];
+      if (item.score > 0) tags.push('<span class="dv-tag score">' + item.score + ' 分</span>');
+      if (item.quality) tags.push('<span class="dv-tag">' + htmlEscape(item.quality) + '</span>');
+      // 源站是整剧集单地址（无分集数据），用「全集」角标替代 dmhyy 的选集模块
+      tags.push('<span class="dv-tag">'
+        + (cat === 'tv' || cat === 'anime' || cat === 'variety' ? '全集' : '正片') + '</span>');
+      if (item.lines > 1) tags.push('<span class="dv-tag">' + item.lines + ' 条线路</span>');
+      $('dvTags').innerHTML = tags.join('');
+
+      const img = $('dvPoster');
+      if (item.cover) { img.style.display = ''; img.src = item.cover; }
+      else { img.style.display = 'none'; img.removeAttribute('src'); }
+      img.onerror = function () { img.style.display = 'none'; };
+
+      const descBox = $('dvDesc');
+      const toggle = $('dvDescToggle');
+      descBox.textContent = '简介加载中…';
+      descBox.classList.remove('open');
+      toggle.textContent = '';
+      toggle.onclick = null;
+      loadDescs(cat, function () {
+        // 异步期间用户可能已切换到别的条目
+        if (!currentDetail || currentDetail.item !== item) return;
+        const d = getDesc(cat, item);
+        descBox.textContent = d || '暂无简介';
+        if (d && d.length > 60) {
+          toggle.textContent = '展开';
+          toggle.onclick = function () {
+            const open = descBox.classList.toggle('open');
+            this.textContent = open ? '收起' : '展开';
+          };
+        }
+      });
+
+      const box = $('dvSources');
+      box.innerHTML = '';
+      const list = (item.sources && item.sources.length)
+        ? item.sources : [{ src: '默认线路', url: item.url }];
+      list.forEach(function (s, i) {
+        const b = document.createElement('button');
+        b.className = 'dv-src';
+        b.innerHTML = '<span class="label">' + htmlEscape(s.src || ('线路' + (i + 1))) + '</span>';
+        b.onclick = function () { closeDetail(); openPlayer(item, cat); };
+        box.appendChild(b);
+      });
+
+      $('detailView').classList.add('show');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeDetail() {
+      $('detailView').classList.remove('show');
+      document.body.style.overflow = '';
+      currentDetail = null;
+    }
+
     function openPlayer(item, cat) {
       currentItemKey = cat + '|' + (item.name || '') + '|' + (item.year || '');
       currentSources = (item.sources && item.sources.length)
@@ -909,6 +1156,15 @@ __DATA_SCRIPTS__
       const meta = [item.region, item.year, item.quality, item.media_type]
         .filter(Boolean).join(' · ');
       $('pvMeta').textContent = meta || (cat === 'live' ? '直播频道' : '');
+      // 播放页展示简介（dmhyy 播放页同样是 标题/年份·地区/简介 三件套）。
+      // 简介按分类分片、按需加载，直播无简介。
+      const descEl = $('pvDesc');
+      descEl.textContent = '';
+      const itemKey = currentItemKey;
+      loadDescs(cat, function () {
+        if (currentItemKey !== itemKey) return;
+        descEl.textContent = getDesc(cat, item) || '';
+      });
       const video = $('pvVideo');
       video.pause(); video.removeAttribute('src'); video.load();
       if (hlsPlayer) { try { hlsPlayer.destroy(); } catch (e) {} hlsPlayer = null; }
@@ -1153,6 +1409,15 @@ __DATA_SCRIPTS__
 
     // 播放视图内的键盘快捷键（避免在 video 原生控件聚焦时与其冲突）
     document.addEventListener('keydown', e => {
+      // 详情页在最上层时，Esc 关闭详情页、Enter 直接播放
+      if ($('detailView').classList.contains('show')) {
+        if (e.key === 'Escape') { closeDetail(); }
+        else if (e.key === 'Enter') {
+          const d = currentDetail;
+          if (d) { e.preventDefault(); closeDetail(); openPlayer(d.item, d.cat); }
+        }
+        return;
+      }
       if (!$('playerView').classList.contains('show')) return;
       if (document.activeElement && document.activeElement.tagName === 'VIDEO') return;
       const v = $('pvVideo');
@@ -1166,6 +1431,18 @@ __DATA_SCRIPTS__
     $('pvBack').onclick = closePlayer;
     $('pvExternal').onclick = openExternal;
     $('pvCopy').onclick = copyCurrent;
+
+    $('dvBack').onclick = closeDetail;
+    $('dvPlay').onclick = function () {
+      const d = currentDetail;
+      if (d) { closeDetail(); openPlayer(d.item, d.cat); }
+    };
+    $('dvCopy').onclick = function () {
+      const d = currentDetail;
+      if (!d) return;
+      const s = d.item.sources || [];
+      copyToClipboard((s[0] && s[0].url) || d.item.url || '');
+    };
 
     function copyToClipboard(text) {
       if (navigator.clipboard) {
@@ -1210,7 +1487,9 @@ __DATA_SCRIPTS__
         card.target = '_blank';
         card.onclick = e => {
           e.preventDefault();
-          openPlayer(it, currentCat);
+          // dmhyy 式：点卡片先进入详情页（海报/元信息/简介/线路），
+          // 详情页再点「立即播放」进入播放器。直播频道没有详情页，保持直接播放。
+          openDetail(it, currentCat);
         };
         const meta = [it.region, it.year, it.quality].filter(Boolean).join(' · ');
         card.innerHTML = `
@@ -1219,6 +1498,8 @@ __DATA_SCRIPTS__
             <div class="play-icon"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div>
             ${it.quality ? `<span class="quality-badge">${htmlEscape(it.quality)}</span>` : ''}
             ${it.score > 0 ? `<span class="score-badge${it.score >= 8 ? ' high' : ''}">${it.score.toFixed(1)}</span>` : ''}
+            ${(currentCat === 'tv' || currentCat === 'anime' || currentCat === 'variety')
+              ? '<span class="ep-badge">全集</span>' : ''}
           </div>
           <div class="info">
             <div class="name">${htmlEscape(it.name)}</div>
@@ -1332,15 +1613,104 @@ __DATA_SCRIPTS__
       }
     }
 
+    function switchCat(cat) {
+      currentCat = cat;
+      activeFilters = { media_type: '', region: '', year: '' };
+      liveFilter = '';
+      currentSort = cat === 'live' ? 'chan' : 'pop';
+      displayLimit = PAGE_SIZE;
+      render();
+    }
+
+    function hcardHtml(it, rank) {
+      const score = it.score > 0 ? it.score.toFixed(1) : '';
+      const sub = [it.year, it.media_type].filter(Boolean).join(' · ');
+      let h = '<div class="hcard-poster">';
+      if (rank) h += '<span class="hcard-rank">' + rank + '</span>';
+      if (score) h += '<span class="hcard-score">' + score + '</span>';
+      if (it.lines > 1) h += '<span class="hcard-tag">' + it.lines + ' 线路</span>';
+      if (it.cover) {
+        // 注意：不要在这里写内联 onerror——本模板是 HTML 里的 <script> 块，
+        // 内联引号会被提前截断导致语法错误。onerror 在 renderHome 里用 JS 绑定。
+        h += '<img src="' + htmlEscape(it.cover) + '" loading="lazy" referrerpolicy="no-referrer">';
+      }
+      h += '</div>'
+        + '<div class="hcard-title">' + htmlEscape(it.name) + '</div>'
+        + '<div class="hcard-sub">' + htmlEscape(sub) + '</div>';
+      return h;
+    }
+
+    function renderHome() {
+      const box = $('homeView');
+      box.innerHTML = '';
+      const cats = Object.keys(RESOURCES).filter(c => RESOURCES[c] && RESOURCES[c].length);
+
+      const addSection = (title, entries, moreCat, ranked) => {
+        if (!entries.length) return;
+        const sec = document.createElement('section');
+        sec.className = 'home-sec';
+        const head = document.createElement('div');
+        head.className = 'home-sec-head';
+        const h = document.createElement('h2');
+        h.className = 'home-sec-title';
+        h.textContent = title;
+        head.appendChild(h);
+        if (moreCat) {
+          const more = document.createElement('button');
+          more.className = 'home-more';
+          more.textContent = '更多 ›';
+          more.onclick = () => switchCat(moreCat);
+          head.appendChild(more);
+        }
+        sec.appendChild(head);
+        const row = document.createElement('div');
+        row.className = 'home-row';
+        entries.forEach((e, i) => {
+          const card = document.createElement('div');
+          card.className = 'hcard';
+          card.innerHTML = hcardHtml(e.it, ranked ? (i + 1) : 0);
+          const img = card.querySelector('.hcard-poster img');
+          if (img) img.onerror = function () { this.style.visibility = 'hidden'; };
+          card.onclick = () => openDetail(e.it, e.cat);
+          row.appendChild(card);
+        });
+        sec.appendChild(row);
+        box.appendChild(sec);
+      };
+
+      const all = [];
+      cats.forEach(c => RESOURCES[c].forEach(it => all.push({ it: it, cat: c })));
+
+      // 热播榜：全站按人气取前 10（对齐 dmhyy 的排行榜模块）
+      addSection('热播榜',
+        all.slice().sort((a, b) => (b.it.hits || 0) - (a.it.hits || 0)).slice(0, 10), '', true);
+      // 最近更新：按采集更新时间倒序（updated 只到日期，同日按人气排）
+      addSection('最近更新',
+        all.slice().sort((a, b) => (b.it.updated || '').localeCompare(a.it.updated || '')
+          || (b.it.hits || 0) - (a.it.hits || 0)).slice(0, 18), '', false);
+      // 各分类板块：按评分取前 12
+      cats.forEach(c => {
+        addSection((CATEGORIES[c] && CATEGORIES[c].label) || c,
+          RESOURCES[c].slice().sort((a, b) => (b.score || 0) - (a.score || 0)
+            || (b.hits || 0) - (a.hits || 0)).slice(0, 12).map(it => ({ it: it, cat: c })), c, false);
+      });
+    }
+
     function render() {
       const isLive = currentCat === 'live';
+      const isHome = currentCat === 'home';
       initTabs();
       initSortGroup();
-      $('mediaFilters').style.display = isLive ? 'none' : '';
-      $('regionFilterSec').style.display = isLive ? 'none' : '';
-      $('mediaFiltersYear').style.display = isLive ? 'none' : '';
+      // 首页：隐藏筛选/排序/结果条，只展示多板块
+      $('mediaFilters').style.display = (isLive || isHome) ? 'none' : '';
+      $('regionFilterSec').style.display = (isLive || isHome) ? 'none' : '';
+      $('mediaFiltersYear').style.display = (isLive || isHome) ? 'none' : '';
       $('liveFilterSec').style.display = isLive ? '' : 'none';
+      $('sectionBar').style.display = isHome ? 'none' : '';
+      $('grid').style.display = isHome ? 'none' : '';
+      $('homeView').style.display = isHome ? 'block' : 'none';
       $('search').placeholder = isLive ? '搜索频道...' : '搜索片名...';
+      if (isHome) { renderHome(); return; }
       if (isLive) {
         makeLiveTags();
       } else {
@@ -1388,6 +1758,8 @@ def _item_to_json(it: dict, sources: list = None) -> dict:
         "score": score,
         "hits": int(it.get("_best_hits") or 0),
         "lines": int(it.get("_lines") or 1),
+        # 只取日期部分（YYYY-MM-DD）用于「最近更新」排序，比完整时间戳省一半体积
+        "updated": (it.get("updated_at") or "")[:10],
         "sources": sources or [],
     }
 
@@ -1436,6 +1808,7 @@ def generate_index(output_dir: Path = None) -> Path:
     out.parent.mkdir(parents=True, exist_ok=True)
 
     resources: Dict[str, List[dict]] = {}
+    desc_map: Dict[str, Dict[str, str]] = {}
     for cat in config.M3U_OUTPUT:
         items, _ = prepare_items(cat)
         # 聚合每部影片的所有播放线路（换源用）：国内直连源已在 prepare_items 排最前，
@@ -1469,13 +1842,24 @@ def generate_index(output_dir: Path = None) -> Path:
             it["_best_score"] = a["score"]
         # Web 首页同样去重：每部影片只展示一条最优线路，避免搜索时满屏重复；
         # 同时把聚合到的全部线路（换源）一并带出。
+        flat = _flat_best_items(items)
         resources[cat] = [_item_to_json(it, src_map.get((it["_clean_name"], it.get("year") or "")))
-                         for it in _flat_best_items(items)]
+                         for it in flat]
+        # 简介单独收集：主分片不放简介（全量简介 11.98 MiB，会让首屏从 13 MiB 涨到
+        # 25 MiB，手机端体验很差），改为按分类生成独立分片，打开详情页时按需加载。
+        dmap: Dict[str, str] = {}
+        for it in flat:
+            jkey = _desc_key(it.get("_clean_name") or clean_title(it["name"]),
+                             _normalize_year(it.get("year")))
+            d = (it.get("description") or "").strip()
+            if d:
+                dmap[jkey] = d[:DESC_MAX_CHARS]
+        desc_map[cat] = dmap
 
-    categories = {
-        cat: {"label": info["label"]}
-        for cat, info in config.CATEGORIES.items()
-    }
+    # 首页放在第一位（dmhyy 式多板块：热播榜 / 最近更新 / 各分类板块）
+    categories: Dict[str, dict] = {"home": {"label": "首页"}}
+    for cat, info in config.CATEGORIES.items():
+        categories[cat] = {"label": info["label"]}
     # 直播 Tab（频道已按 分类顺序+频道号+延迟 排好，Web 端展示最优线路）
     live_data = _load_live_json()
     if live_data:
@@ -1486,6 +1870,8 @@ def generate_index(output_dir: Path = None) -> Path:
     html_text = html_text.replace("__RESOLVERS__", json.dumps(getattr(config, "RESOLVER_LINES", []), ensure_ascii=False))
     # 全量数据分片外置（不再内联进 index.html）：见 _write_data_shards 说明。
     html_text = html_text.replace("__DATA_SCRIPTS__", _write_data_shards(resources, live_data, out.parent))
+    # 简介按分类单独分片，详情页按需加载（不进首屏，见 _write_desc_shards 说明）。
+    _write_desc_shards(desc_map, out.parent)
 
     out.write_text(html_text, encoding="utf-8")
     print(f"[OK] 已生成 {out}")
@@ -1495,6 +1881,15 @@ def generate_index(output_dir: Path = None) -> Path:
 # 单个数据分片的大小上限（字节）。Cloudflare Pages 单文件上限 25 MiB，取 6 MiB 留足余量：
 # 入库爱奇艺/魔都后全量数据在 40 MiB 量级，分片后可稳定部署且远低于上限。
 SHARD_MAX_BYTES = 6 * 1024 * 1024
+
+# 详情页简介的最大字数（超出截断）。平均简介 173 字，400 字足够详情页展示，
+# 少数超长简介（最长 3428 字）截断后不影响阅读。
+DESC_MAX_CHARS = 400
+
+
+def _desc_key(name: str, year: str) -> str:
+    """简介分片的键，必须与 _item_to_json 输出的 name+year 严格一致。"""
+    return "%s|%s" % (name or "", year or "")
 
 
 def _write_shard(path, cat: str, json_items: List[str]) -> None:
@@ -1559,9 +1954,36 @@ def _write_data_shards(resources: Dict[str, list], live_data: List[dict], out_di
         "      for (var i = 0; i < a.length; i++) r.push(a[i]);\n"
         "    };\n"
         "    window.__LIVESET__ = function (a) { window.__LIVE_DATA__ = a; };\n"
+        "    window.__DESCS__ = {};\n"
+        "    window.__DESC__ = function (c, m) { window.__DESCS__[c] = m; };\n"
         "  </script>"
     )
     return "\n".join([header] + scripts)
+
+
+def _write_desc_shards(desc_map: Dict[str, Dict[str, str]], out_dir) -> None:
+    """把简介按分类写成独立分片 output/web/desc_{cat}.js，供详情页按需加载。
+
+    背景：全量简介 11.98 MiB，若并入主分片会让首屏从 13 MiB 涨到 25 MiB，
+    手机端加载体验很差（且逼近 Cloudflare Pages 单文件 25 MiB 上限）。
+    改为按分类独立分片后，首屏大小不变，只有用户首次打开某分类的详情页时才
+    加载该分类的简介（movie 7.1 MiB / tv 2.9 / anime 1.5 / variety 0.5），
+    且同一会话内只加载一次。
+    """
+    web_dir = out_dir / "web"
+    web_dir.mkdir(parents=True, exist_ok=True)
+    for old in web_dir.glob("desc_*.js"):
+        try:
+            old.unlink()
+        except OSError:
+            pass
+    for cat, dmap in desc_map.items():
+        if not dmap:
+            continue
+        (web_dir / f"desc_{cat}.js").write_text(
+            "window.__DESC__(" + json.dumps(cat) + ","
+            + json.dumps(dmap, ensure_ascii=False) + ");\n",
+            encoding="utf-8")
 
 
 def _load_live_json() -> List[dict]:
