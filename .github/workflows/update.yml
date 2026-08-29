@@ -111,6 +111,14 @@ jobs:
           python main.py collect-live --no-generate
           python main.py generate --txt --best
 
+      - name: 采集直播台标到本地固定存储
+        # 把每个直播频道的台标下载到 data/live_logos/（进 git 固定），部署时由 generate_covers 同步到
+        # output/covers/live/。本机走代理、CI 直连；单条失败不影响其余。即便 CDN 不可达也只是缺少部分台标，
+        # 不影响整体流水线，故设 continue-on-error。
+        continue-on-error: true
+        run: |
+          python scripts/fetch_live_logos.py --workers 16
+
       - name: 生成途播 Jellyfin 后端数据（api/movies.json + 地区分片）
         # 关键：途播后端 worker 在运行时 fetch 此 JSON 渲染海报墙。
         # 此前工作流只生成 M3U/Web，从不生成它，导致途播每日更新“看似完成”实则数据没变。
@@ -214,7 +222,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/media.db
+          git add data/media.db data/live_logos/
           if git diff --cached --quiet; then
             echo "数据库无变化，跳过提交"
           else

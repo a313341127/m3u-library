@@ -38,6 +38,10 @@ from collections import defaultdict
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, ROOT)
+
+# 固定的本地台标目录（data/live_logos/，已进 git；部署时同步到 output/covers/live/）。
+# 途播优先引用这里的真实台标，彻底摆脱易失效的外链 CDN。
+_LIVE_LOGO_ROOT = os.path.join(ROOT, "data", "live_logos")
 import config  # noqa: E402
 from generator.m3u import _region_bucket, _is_domestic  # noqa: E402
 
@@ -143,9 +147,12 @@ def build_live(prefix: str) -> list:
         ch_id = prefix + hashlib.md5(
             ("%s|%s" % (key[0], key[1])).encode("utf-8")
         ).hexdigest()[:14]
-        # 优先使用采集源自带的真实台标 URL；外链失效/缺失时回退到本地生成封面
-        cover = rec["cover"].strip() if rec["cover"] else ""
-        if not cover:
+        # 优先使用固定的本地台标（data/live_logos 已进 git，部署时同步到 /covers/live/），
+        # 不再依赖易失效的外链 CDN；没有本地真台标（冷门地方台，源站未收录）则回退
+        # 本地生成的渐变封面——比失效外链可靠（实测外链约 39% 404 且浏览器常有反盗链）。
+        if os.path.exists(os.path.join(_LIVE_LOGO_ROOT, ch_id + ".png")):
+            cover = "/covers/live/" + ch_id + ".png"
+        else:
             cover = "/covers/live_" + ch_id + ".jpg"
         channels.append({
             "id": ch_id,

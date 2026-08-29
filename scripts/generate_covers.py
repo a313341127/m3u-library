@@ -4,6 +4,7 @@ import os
 import sys
 import math
 import random
+import shutil
 from PIL import Image, ImageDraw, ImageFont
 
 # 允许以 `python scripts/generate_covers.py` 方式运行时导入项目根包（collector/config）
@@ -457,14 +458,45 @@ LIVE_COLORS = {
 }
 
 
+def sync_live_logos():
+    """把固定的本地台标（data/live_logos/*.png，已进 git）同步到 output/covers/live/，
+    随 Pages 部署后被网页与途播引用（/covers/live/{ch_id}.png）。
+
+    这样直播台标彻底摆脱易失效的外链 CDN——即便源站 logo 挂了，本地副本仍在。
+    """
+    src = os.path.join(ROOT, "data", "live_logos")
+    if not os.path.isdir(src):
+        return
+    dst = os.path.join(OUTPUT_DIR, "live")
+    os.makedirs(dst, exist_ok=True)
+    n = 0
+    for fn in os.listdir(src):
+        if not fn.endswith(".png"):
+            continue
+        s = os.path.join(src, fn)
+        d = os.path.join(dst, fn)
+        if not os.path.exists(d) or os.path.getsize(d) != os.path.getsize(s):
+            shutil.copy2(s, d)
+            n += 1
+    if n:
+        print("台标同步: %d 个新增/更新 -> %s" % (n, dst))
+
+
 def generate_live_covers():
     """为每个去重后的直播频道生成台标风格封面（guovin 外链 logo 常截断/失效）。
 
     封面文件名 live_{ch_id}.jpg 必须与 generate_movies_json.build_live 中的
     ch_id 一致：ch_id = "l_" + md5("cat|name")[:14]，且封面路径写入 /covers/live_{ch_id}.jpg。
+
+    注意：优先使用的是 fetch_live_logos.py 下载到 data/live_logos/ 的真实台标
+    （已进 git、部署时由 sync_live_logos 同步到 output/covers/live/），本函数生成的
+    渐变封面仅作为「未采集到台标」频道的兜底。
     """
     import hashlib
     from collector.live import list_live
+
+    # 先把固定的本地台标同步到部署目录（供网页/途播引用）
+    sync_live_logos()
 
     rows = list_live()
     seen = set()

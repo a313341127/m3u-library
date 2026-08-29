@@ -13,6 +13,7 @@
 import json
 import html
 import re
+import os
 import hashlib
 from datetime import datetime
 from pathlib import Path
@@ -20,6 +21,12 @@ from typing import Dict, List
 
 import config
 from generator.m3u import clean_title, prepare_items, _flat_best_items
+
+# 固定的本地台标目录（data/live_logos/，已进 git；部署时同步到 output/covers/live/）。
+# 网页与途播优先引用这里的真实台标，彻底摆脱易失效的外链 CDN。
+_LIVE_LOGO_ROOT = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "live_logos")
+
 
 
 HTML_TEMPLATE = """<!DOCTYPE html>
@@ -637,10 +644,14 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js"></script>
 
+__DATA_SCRIPTS__
+
   <script>
     const CATEGORIES = __CATEGORIES__;
-    const RESOURCES = __RESOURCES__;
-    const LIVE = __LIVE__;
+    // 全量数据已分片为 output/web/data_*.js（Cloudflare Pages 单文件上限 25 MiB，
+    // 内联会导致 index.html 超限、部署失败）。分片脚本同步加载后写入这些全局变量。
+    const RESOURCES = window.__RESOURCES__ || {};
+    const LIVE = window.__LIVE_DATA__ || [];
     // 内置中转线路：服务端代理拉流（同源返回，规避浏览器 CORS/反盗链），等价于 dmhyy 的代理播放
     const BUILTIN_RESOLVERS = [
       { name: '本站中转', url: location.origin + '/proxy?u={url}', mode: 'direct' }
@@ -1472,13 +1483,85 @@ def generate_index(output_dir: Path = None) -> Path:
 
     html_text = HTML_TEMPLATE
     html_text = html_text.replace("__CATEGORIES__", json.dumps(categories, ensure_ascii=False))
-    html_text = html_text.replace("__RESOURCES__", json.dumps(resources, ensure_ascii=False))
-    html_text = html_text.replace("__LIVE__", json.dumps(live_data, ensure_ascii=False))
     html_text = html_text.replace("__RESOLVERS__", json.dumps(getattr(config, "RESOLVER_LINES", []), ensure_ascii=False))
+    # 全量数据分片外置（不再内联进 index.html）：见 _write_data_shards 说明。
+    html_text = html_text.replace("__DATA_SCRIPTS__", _write_data_shards(resources, live_data, out.parent))
 
     out.write_text(html_text, encoding="utf-8")
     print(f"[OK] 已生成 {out}")
     return out
+
+
+# 单个数据分片的大小上限（字节）。Cloudflare Pages 单文件上限 25 MiB，取 6 MiB 留足余量：
+# 入库爱奇艺/魔都后全量数据在 40 MiB 量级，分片后可稳定部署且远低于上限。
+SHARD_MAX_BYTES = 6 * 1024 * 1024
+
+
+def _write_shard(path, cat: str, json_items: List[str]) -> None:
+    """把一个分类的一批条目写成 window.__RES__(cat, [...]) 的分片脚本。"""
+    with path.open("w", encoding="utf-8") as f:
+        f.write("window.__RES__(" + json.dumps(cat) + ",[\n")
+        f.write(",\n".join(json_items))
+        f.write("\n]);\n")
+
+
+def _write_data_shards(resources: Dict[str, list], live_data: List[dict], out_dir) -> str:
+    """把全量数据分片写到 out_dir/web/data_*.js，返回注入 index.html 的 <script> 标签串。
+
+    背景（关键）：
+      Cloudflare Pages 单文件上限 25 MiB。此前把全量资源 JSON 直接内联进 index.html，
+      入库爱奇艺（+3.5 万条）后 index.html 涨到 25.6 MiB —— 部署直接失败，
+      而 update.yml 的「提交数据库变更」在部署之后，于是那批采集数据全部丢失。
+      改为分片外部脚本后，index.html 只保留应用外壳（几十 KB），数据按 6 MiB 切分，
+      用同步 <script src> 加载，渲染逻辑无需改动（仍是同步读取全局变量）。
+    """
+    web_dir = out_dir / "web"
+    web_dir.mkdir(parents=True, exist_ok=True)
+    # 清理旧分片，避免分类/条目变化后残留文件造成重复数据
+    for old in list(web_dir.glob("data_*.js")) + list(web_dir.glob("live.js")):
+        try:
+            old.unlink()
+        except OSError:
+            pass
+
+    scripts: List[str] = []
+    for cat, items in resources.items():
+        buf: List[str] = []
+        size = 0
+        part = 0
+        for it in items:
+            s = json.dumps(it, ensure_ascii=False)
+            if buf and size + len(s) > SHARD_MAX_BYTES:
+                _write_shard(web_dir / f"data_{cat}_{part}.js", cat, buf)
+                scripts.append(f'  <script src="/web/data_{cat}_{part}.js"></script>')
+                part += 1
+                buf, size = [], 0
+            buf.append(s)
+            size += len(s)
+        if buf:
+            _write_shard(web_dir / f"data_{cat}_{part}.js", cat, buf)
+            scripts.append(f'  <script src="/web/data_{cat}_{part}.js"></script>')
+
+    if live_data:
+        live_path = web_dir / "live.js"
+        live_path.write_text(
+            "window.__LIVESET__(" + json.dumps(live_data, ensure_ascii=False) + ");\n",
+            encoding="utf-8")
+        scripts.append('  <script src="/web/live.js"></script>')
+
+    # 先定义全局容器与合并函数，再按序加载各分片
+    header = (
+        "  <script>\n"
+        "    window.__RESOURCES__ = {};\n"
+        "    window.__LIVE_DATA__ = [];\n"
+        "    window.__RES__ = function (c, a) {\n"
+        "      var r = window.__RESOURCES__[c] = window.__RESOURCES__[c] || [];\n"
+        "      for (var i = 0; i < a.length; i++) r.push(a[i]);\n"
+        "    };\n"
+        "    window.__LIVESET__ = function (a) { window.__LIVE_DATA__ = a; };\n"
+        "  </script>"
+    )
+    return "\n".join([header] + scripts)
 
 
 def _load_live_json() -> List[dict]:
@@ -1494,10 +1577,17 @@ def _load_live_json() -> List[dict]:
         key = f"{r['category']}|{r['name']}"
         if key in channels:
             continue  # list_live 已按延迟排序，首条即最优
-        # 优先使用采集源自带的真实台标 URL；外链缺失时再回退到本地生成封面
+        # 优先使用固定的本地台标（data/live_logos 已进 git，部署时同步到 /covers/live/），
+        # 不再依赖易失效的外链 CDN；本地台标缺失时回退外链，最后回退渐变封面。
         ch_id = "l_" + hashlib.md5(key.encode("utf-8")).hexdigest()[:14]
         logo = (r.get("logo") or "").strip()
-        cover = logo if logo else f"/covers/live_{ch_id}.jpg"
+        if os.path.exists(os.path.join(_LIVE_LOGO_ROOT, ch_id + ".png")):
+            cover = f"/covers/live/{ch_id}.png"
+        else:
+            # 没有本地真台标（多为冷门地方台，源站未收录）：回退到本地生成的渐变封面
+            # （带频道名，比失效外链可靠——实测外链约 39% 404 且浏览器常有反盗链）。
+            # generate_covers 在 generate 之后执行，故此处不做文件存在性检查。
+            cover = f"/covers/live_{ch_id}.jpg"
         channels[key] = {
             "n": r["name"], "c": r["category"],
             "l": cover, "u": r["url"],
