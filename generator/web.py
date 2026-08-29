@@ -130,9 +130,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       border: none;
       background: var(--card);
       font-size: 15px;
+      color: var(--text);
+      caret-color: var(--accent);
       outline: none;
       box-shadow: var(--shadow);
     }
+    .search::placeholder { color: var(--text-secondary); opacity: 1; }
     .filter-section {
       margin-bottom: 16px;
     }
@@ -1050,6 +1053,8 @@ __DATA_SCRIPTS__
     let loadTimeout = null;
     let loadStartIdx = -1;
     let playerToken = 0;       // 每次开播自增，用于丢弃过期的异步线路检测结果
+    let loadTimer = null;      // 加载秒表 timer（显示“加载中… X.Xs”）
+    let loadTimerSec = 0;
 
     // 是否为 HLS：带 .m3u8/.m3u 或未知短链交给 hls.js；明确的视频文件走原生播放
     function isHls(url) {
@@ -1202,7 +1207,7 @@ __DATA_SCRIPTS__
         if (!u) return resolve(null);
         let done = false;
         const finish = v => { if (!done) { done = true; clearTimeout(timer); resolve(v); } };
-        const timer = setTimeout(() => finish(null), ms || 9000);
+        const timer = setTimeout(() => finish(null), ms || 4000);
         fetch(location.origin + '/probe?u=' + encodeURIComponent(u), { cache: 'no-store' })
           .then(r => r.json().catch(() => ({})))
           .then(d => finish(!!(d && d.ok)))
@@ -1227,6 +1232,21 @@ __DATA_SCRIPTS__
     }
     function hideLoading() {
       $('pvLoading').classList.remove('show');
+    }
+
+    // 加载秒表：只显示“加载中… X.Xs”，避免用户对着一堆线路检测信息发懵
+    function startLoadTimer() {
+      stopLoadTimer();
+      loadTimerSec = 0;
+      updateLoadTimer();
+      loadTimer = setInterval(updateLoadTimer, 100);
+    }
+    function updateLoadTimer() {
+      loadTimerSec += 0.1;
+      showLoading('加载中… ' + loadTimerSec.toFixed(1) + 's');
+    }
+    function stopLoadTimer() {
+      if (loadTimer) { clearInterval(loadTimer); loadTimer = null; }
     }
 
     // 返回候选线路的下标数组：直连源在前、中转线路在后
@@ -1298,6 +1318,7 @@ __DATA_SCRIPTS__
 
       // 点了具体线路（详情页/换源）→ 直接播，不再探测；
       // 否则先并发体检所有线路，挑第一条可用的播。
+      startLoadTimer();
       if (typeof startIdx === 'number' && startIdx >= 0) {
         showHint('');
         loadSource(currentSourceIdx, true);
@@ -1309,7 +1330,6 @@ __DATA_SCRIPTS__
         loadSource(currentSourceIdx, true);
         return;
       }
-      showHint('正在检测 ' + order.length + ' 条线路…');
       const picked = currentSourceIdx;
       Promise.all(order.map(i => probeUrl(urlOfIdx(i)))).then(function (res) {
         if (myToken !== playerToken) return;         // 用户已切到别的影片
@@ -1324,17 +1344,18 @@ __DATA_SCRIPTS__
         for (let k = 0; k < order.length; k++) {
           if (order[k] < currentSources.length) currentSources[order[k]]._probe = res[k];
         }
-        let target = okIdx >= 0 ? okIdx : (unknownIdx >= 0 ? unknownIdx : picked);
         const okCount = res.filter(v => v === true).length;
-        if (okCount === 0) {
-          showHint('未检测到高置信可用线路，正在逐条尝试…', true);
-        } else {
-          showHint('已选出可用线路（' + okCount + '/' + order.length + ' 条可播）');
-          setTimeout(() => { if (myToken === playerToken) showHint(''); }, 2500);
-        }
+        const unknownCount = res.filter(v => v === null).length;
+        let target = okIdx >= 0 ? okIdx : (unknownIdx >= 0 ? unknownIdx : picked);
         currentSourceIdx = target;
         if (target >= 0 && target < currentSources.length) currentBaseIdx = target;
         renderSources();
+        if (okCount === 0 && unknownCount === 0) {
+          // 全部明确不可达：直接报失效，不再让用户空等超时
+          stopLoadTimer();
+          showLoading('当前资源暂不可用<br><span style="font-size:12px;color:#aab">所有线路均无法连接</span>');
+          return;
+        }
         loadSource(target, true);
       });
     }
@@ -1411,8 +1432,8 @@ __DATA_SCRIPTS__
       clearLoadTimeout();
       loadStartIdx = idx;
       loadTimeout = setTimeout(() => {
-        if (loadStartIdx === idx) handleSourceFail(idx);
-      }, 8000);
+        if (loadStartIdx === idx) handleSourceFail(idx, false, 'timeout');
+      }, 12000);
     }
 
     function loadSource(idx, resume) {
@@ -1430,8 +1451,6 @@ __DATA_SCRIPTS__
       }
       if (!s) return;
       currentUrl = s.url;
-      const srcName = htmlEscape(s.src || '默认线路');
-      showLoading('正在连接 <b>' + srcName + '</b> …<br><span style="font-size:12px;color:#aab">源站拉流较慢，请稍候</span>');
       const video = $('pvVideo');
       $('pvProgressBar').style.width = '0%';
       video.pause(); video.removeAttribute('src'); video.load();
@@ -1473,22 +1492,22 @@ __DATA_SCRIPTS__
     function playUrl(url, idx, resume) {
       const video = $('pvVideo');
       // 缓冲/可播事件：缓冲时显示遮罩，开始播放即隐藏（断流/拖动 seek 也会触发）
-      video.onwaiting = () => showLoading('视频缓冲中…');
-      video.onplaying = () => { hideLoading(); clearLoadTimeout(); };
-      video.oncanplay = () => { hideLoading(); clearLoadTimeout(); };
+      video.onwaiting = () => { if (!loadTimer) showLoading('视频缓冲中…'); };
+      video.onplaying = () => { stopLoadTimer(); hideLoading(); clearLoadTimeout(); };
+      video.oncanplay = () => { stopLoadTimer(); hideLoading(); clearLoadTimeout(); };
       video.onpause = () => { if (!video.seeking) hideLoading(); };
       startLoadTimeout(idx);
       if (isHls(url)) {
         if (video.canPlayType('application/vnd.apple.mpegurl')) {
           video.src = url;
           video.onerror = () => { video.onerror = null; handleSourceFail(idx); };
-          video.onloadeddata = () => { video.onerror = null; hideLoading(); clearLoadTimeout(); };
+          video.onloadeddata = () => { video.onerror = null; stopLoadTimer(); hideLoading(); clearLoadTimeout(); };
           video.play().catch(() => {});
         } else if (window.Hls && Hls.isSupported()) {
           hlsPlayer = new Hls({ maxBufferLength: 30, enableWorker: false });
           hlsPlayer.loadSource(url);
           hlsPlayer.attachMedia(video);
-          hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => { hideLoading(); clearLoadTimeout(); video.play().catch(() => {}); });
+          hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => { stopLoadTimer(); hideLoading(); clearLoadTimeout(); video.play().catch(() => {}); });
           hlsPlayer.on(Hls.Events.ERROR, (ev, data) => {
             if (!data.fatal) return;
             if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
@@ -1511,7 +1530,7 @@ __DATA_SCRIPTS__
       } else {
         video.src = url;
         video.onerror = () => { video.onerror = null; handleSourceFail(idx); };
-        video.onloadeddata = () => { video.onerror = null; hideLoading(); clearLoadTimeout(); };
+        video.onloadeddata = () => { video.onerror = null; stopLoadTimer(); hideLoading(); clearLoadTimeout(); };
         video.play().catch(() => {});
       }
       startProgressWatch();
@@ -1532,12 +1551,13 @@ __DATA_SCRIPTS__
 
     // 某线路不可用：标记失败并自动切换；优先顺序为 中转 > 直连，
     // 因为服务端中转可自定义 Referer/UA，最能绕过源站反盗链。
-    function handleSourceFail(idx, resolverFail) {
+    function handleSourceFail(idx, resolverFail, reason) {
       const resolverList = (window.RESOLVER_LINES || []).filter(r => r && r.url);
       const isResolver = idx >= currentSources.length;
       if (!isResolver && currentSources[idx]) currentSources[idx]._failed = true;
       renderSources();
       clearLoadTimeout();
+      stopLoadTimer();
 
       // 尝试下一个未失败的原始源：优先跳过预检已判定失效的线路，减少无谓等待
       const trySource = () => {
@@ -1573,8 +1593,11 @@ __DATA_SCRIPTS__
         if (trySource()) { showToast('线路不可用，已切换'); return; }
         if (tryResolver()) { showToast('直连源不可用，已切到中转线路'); return; }
       }
-      // 全部失败后保留遮罩提示，提示用户手动切换其他线路
-      showLoading('当前线路均无法播放<br><span style="font-size:12px;color:#aab">请手动切换下方其他线路</span>');
+      // 全部失败后保留遮罩提示，区分“超时”与“不可用”
+      const reasonText = reason === 'timeout'
+        ? '连接超时，当前网络/源站响应较慢'
+        : '当前资源暂不可用，所有线路均无法连接';
+      showLoading(reasonText + '<br><span style="font-size:12px;color:#aab">请手动切换下方其他线路</span>');
     }
 
     function pvSeek(t) {
@@ -1591,6 +1614,7 @@ __DATA_SCRIPTS__
     function closePlayer() {
       saveProgress();
       clearLoadTimeout();
+      stopLoadTimer();
       if (hlsPlayer) { try { hlsPlayer.destroy(); } catch (e) {} hlsPlayer = null; }
       const video = $('pvVideo');
       video.pause(); video.removeAttribute('src'); video.load();
