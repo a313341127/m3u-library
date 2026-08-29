@@ -30,6 +30,7 @@ from typing import Dict, List, Optional, Tuple
 
 import config
 from core.database import Database
+from generator import health as _health  # noqa: E402
 
 
 # ---------------------------------------------------------------- 标题清洗
@@ -161,7 +162,7 @@ def prepare_items(category: str) -> Tuple[List[dict], Dict[str, int]]:
     raw = [dict(r) for r in db.list_resources(category=category)]
     items = [i for i in raw if i.get("url")]
     stats = {"raw": len(items), "dropped_no_url": len(raw) - len(items),
-             "duplicates": 0, "lines": 0}
+             "duplicates": 0, "lines": 0, "dead_dropped": 0}
 
     # 先按资源聚合（名称+年份+地区），组内再做 URL 去重 + 国内优先
     groups: Dict[tuple, List[dict]] = defaultdict(list)
@@ -182,8 +183,14 @@ def prepare_items(category: str) -> Tuple[List[dict], Dict[str, int]]:
                 continue
             seen_url.add(u)
             uniq.append(it)
-        # 组内：国内可直连线路排最前，其次保持原顺序
-        uniq.sort(key=lambda it: 0 if _is_domestic(it.get("url")) else 1)
+        # 线路体检：剔除域名级已确认失效的线路（源站 CDN 跑路，任何播放器都放不出来）
+        if _health.enabled():
+            kept = [it for it in uniq if _health.playable(it.get("url") or "")]
+            stats["dead_dropped"] += len(uniq) - len(kept)
+            uniq = kept
+        # 组内：可用度（直连优先）→ 国内可直连线路，其次保持原顺序
+        uniq.sort(key=lambda it: (_health.rank(it.get("url")),
+                                  0 if _is_domestic(it.get("url")) else 1))
         result.extend(uniq)
         stats["lines"] += len(uniq)
     return result, stats

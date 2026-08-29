@@ -668,6 +668,58 @@ function proxyRoute(url, request) {
   return proxyFetch(u, url.origin, request, 0, rf || null);
 }
 
+// 线路预检：开播前并发探测所有线路是否可取到流，前端据此挑第一条可用线路，
+// 避免用户对着死链空等 8 秒超时。只读取前 1KB，成本极低。
+async function probeRoute(url) {
+  const u = url.searchParams.get("u");
+  if (!u) return json({ ok: false, error: "missing u" }, 400);
+  let target;
+  try { target = new URL(u); } catch (_) { return json({ ok: false, error: "bad url" }, 400); }
+  const rfOverride = url.searchParams.get("rf");
+  const ownRef = extractBaseReferer(u);
+  const strategies = [
+    ...(rfOverride ? [rfOverride] : []),
+    ownRef,
+    "",
+    "https://www.cc0cd.cc.cd/",
+    "https://tv.cc0cd.cc.cd/",
+  ];
+  const isStreamCt = ct =>
+    ct.includes("mpegurl") || ct.includes("vnd.apple") || ct.includes("x-mpegurl")
+    || ct.includes("mp4") || ct.includes("video/") || ct.includes("octet-stream");
+  const looksStream = /\.(m3u8|m3u|mp4|ts|flv)(\?|$)/i.test(target.pathname);
+
+  let last = 0, lastCt = "";
+  const seen = new Set();
+  for (const ref of strategies) {
+    if (seen.has(ref)) continue;
+    seen.add(ref);
+    try {
+      const r = await fetch(u, {
+        redirect: "follow",
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          "Referer": ref,
+          "Range": "bytes=0-1023",
+          "Accept": "*/*",
+        },
+      });
+      const ct = (r.headers.get("content-type") || "").toLowerCase();
+      last = r.status; lastCt = ct;
+      const ok = (r.status === 200 || r.status === 206) && (isStreamCt(ct) || looksStream);
+      try { await r.arrayBuffer(); } catch (_) {}
+      if (ok) {
+        return json({ ok: true, status: r.status, ref: ref || "", cdn: target.host }, 200,
+          { "Access-Control-Allow-Origin": "*", "Cache-Control": "private, max-age=120" });
+      }
+    } catch (e) {
+      last = 0; lastCt = "fetch-error";
+    }
+  }
+  return json({ ok: false, status: last, ct: lastCt, cdn: target.host }, 200,
+    { "Access-Control-Allow-Origin": "*", "Cache-Control": "private, max-age=120" });
+}
+
 function detectContainer(url) {
   const lower = url.toLowerCase();
   if (lower.includes(".m3u8") || lower.includes(".m3u")) return "m3u8";
@@ -796,6 +848,7 @@ function isJellyfinPath(p) {
     p.startsWith("/Items") ||      // /Items 列表 + /Items/{id} 详情/播放信息
     p.startsWith("/Videos/") ||
     p === "/proxy" ||
+    p === "/probe" ||             // 线路预检：前端开播前并发探测，避免死链空等
     p === "/Views" ||             // 直接浏览器/调试入口
     p === "/Genres" ||
     p === "/MusicGenres" ||
@@ -820,6 +873,7 @@ export default {
         return cacheJson(request, systemInfo(), 200, DATA_VERSION + "_sys", 3600, 86400);
       if (p === "/System/Ping") return new Response("pong", { status: 200 });
       if (p === "/proxy") return proxyRoute(url, request);
+      if (p === "/probe") return probeRoute(url);
 
       if (p.endsWith("/Users/AuthenticateByName") && request.method === "POST") {
         let username = "tubo";

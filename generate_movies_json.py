@@ -30,6 +30,7 @@ all.json 结构: {"updated": "...", "count": N, "movies": [ {...}, ... ]}
 import json
 import sys
 import os
+import glob
 import re
 import datetime
 import hashlib
@@ -44,6 +45,7 @@ sys.path.insert(0, ROOT)
 _LIVE_LOGO_ROOT = os.path.join(ROOT, "data", "live_logos")
 import config  # noqa: E402
 from generator.m3u import _region_bucket, _is_domestic  # noqa: E402
+from generator import health as _health  # noqa: E402
 
 DB = os.path.join(ROOT, "data", "media.db")
 OUT_DIR = os.path.join(ROOT, "output", "api")
@@ -141,7 +143,10 @@ def build_live(prefix: str) -> list:
     channels = []
     for key in order:
         rec = merged[key]
-        sources = rec.pop("sources")
+        # 直播保持直连（不进 worker 代理），仅剔除已确认失效的线路
+        sources = [u for u in rec.pop("sources") if _health.playable(u)]
+        if not sources:
+            continue  # 该频道所有线路都失效，丢弃避免途播点开黑屏
         cat = key[0]
         # id 稳定：由 分类+频道名 决定
         ch_id = prefix + hashlib.md5(
@@ -247,6 +252,9 @@ def build_category(cat: str, prefix: str) -> list:
         # 输出：sources 保持 URL 列表（途播兼容），srcs 为对应线路名列表
         urls = [p[1] for p in primary_first]
         srcs = [p[0] for p in primary_first]
+        # 所有线路都失效的影片直接丢弃，避免途播墙出现「点开黑屏」的死片
+        if not urls:
+            continue
         movies.append({
             "id": prefix + hashlib.md5(
                 ("%s|%s" % (key[0], key[1])).encode("utf-8")
@@ -276,13 +284,18 @@ def _is_direct(u: str) -> bool:
 
 
 def _sort_sources(sources):
-    """排序：直链优先 → 国内可直连优先。
+    """排序：线路体检可用优先 → 直链优先 → 国内可直连优先。
+
     sources 为 [(line_name, url), ...]，按 url 排序并同步移动 line_name。
+    已确认失效的线路（域名体检判 dead）会被剔除，避免途播/网页切到死链。
     """
     def key(item):
         u = (item[1] or "").lower().split("?")[0]
-        return (0 if _is_direct(u) else 1, 0 if _is_domestic(u) else 1)
-    return sorted(sources, key=key)
+        return (_health.rank(item[1]), 0 if _is_direct(u) else 1,
+                0 if _is_domestic(u) else 1)
+    out = [p for p in sources if _health.playable(p[1])]
+    # 全集都失效时返回空集（绝不回退到死链，否则途播会点到打不开的影片）
+    return sorted(out, key=key)
 
 
 def _write_json(path, obj):
@@ -302,6 +315,13 @@ MAX_PER_CAT = {
 
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
+    # 先清理上一轮可能残留的更高序号分片（分类条数下降时旧分片不会被覆盖，
+    # 若放任会在 Pages 留下孤立文件、并干扰本地校验）
+    for _f in glob.glob(os.path.join(OUT_DIR, "cat_*.json")):
+        try:
+            os.remove(_f)
+        except OSError:
+            pass
     updated = datetime.datetime.now().isoformat(timespec="seconds")
 
     per_cat = {}

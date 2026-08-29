@@ -21,6 +21,7 @@ from typing import Dict, List
 
 import config
 from generator.m3u import clean_title, prepare_items, _flat_best_items
+from generator import health as _health
 
 # 固定的本地台标目录（data/live_logos/，已进 git；部署时同步到 output/covers/live/）。
 # 网页与途播优先引用这里的真实台标，彻底摆脱易失效的外链 CDN。
@@ -590,6 +591,14 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     .pv-progress-bar {
       position: absolute; left: 0; bottom: 0; height: 3px; background: var(--accent); width: 0;
     }
+    /* 线路检测提示：开播前并发探测所有线路，避免用户对着死链空等 */
+    .pv-hint {
+      position: absolute; left: 0; right: 0; top: 0; padding: 10px 14px;
+      font-size: 12.5px; color: #ffd7a1; background: rgba(0,0,0,0.55);
+      backdrop-filter: blur(2px); pointer-events: none; display: none; z-index: 3;
+    }
+    .pv-hint.show { display: block; }
+    .pv-hint.err { color: #ffb3b3; }
     .pv-side {
       flex: 0 0 340px;
       background: var(--bg);
@@ -624,6 +633,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     .pv-src.resolver { border-left: 3px solid #ff9f43; }
     .pv-src.resolver.active { background: rgba(255,159,67,0.14); border-color: #ff9f43; color: #ff9f43; }
     .pv-src.resolver.active .dot { background: #ff9f43; }
+    /* 预检判定失效的线路：置灰并标注，用户仍可强行点播 */
+    .pv-src.dead { opacity: .45; }
+    .pv-src.dead .label::after { content: ' · 已失效'; font-size: 11px; color: var(--text-secondary); }
     @media (max-width: 860px) {
       .pv-body { flex-direction: column; }
       .pv-side { flex: 0 0 auto; border-left: none; border-top: 1px solid var(--border); max-height: 44%; }
@@ -802,6 +814,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <video class="pv-video" id="pvVideo" controls playsinline referrerpolicy="no-referrer"></video>
         <button class="pv-resume" id="pvResume"></button>
         <div class="pv-progress-bar" id="pvProgressBar"></div>
+        <div class="pv-hint" id="pvHint"></div>
       </div>
       <div class="pv-side" id="pvSide">
         <div class="pv-meta" id="pvMeta"></div>
@@ -999,6 +1012,7 @@ __DATA_SCRIPTS__
     let pvProgressTimer = null;
     let loadTimeout = null;
     let loadStartIdx = -1;
+    let playerToken = 0;       // 每次开播自增，用于丢弃过期的异步线路检测结果
 
     // 是否为 HLS：带 .m3u8/.m3u 或未知短链交给 hls.js；明确的视频文件走原生播放
     function isHls(url) {
@@ -1129,7 +1143,8 @@ __DATA_SCRIPTS__
         const b = document.createElement('button');
         b.className = 'dv-src';
         b.innerHTML = '<span class="label">' + htmlEscape(s.src || ('线路' + (i + 1))) + '</span>';
-        b.onclick = function () { closeDetail(); openPlayer(item, cat); };
+        // 点哪条线路就播哪条（对齐 dmhyy：点片源即弹出播放器并加载该源）
+        b.onclick = function () { closeDetail(); openPlayer(item, cat, i); };
         box.appendChild(b);
       });
 
@@ -1143,7 +1158,53 @@ __DATA_SCRIPTS__
       currentDetail = null;
     }
 
-    function openPlayer(item, cat) {
+    // 开播前并发探测每条线路是否可取到流（走 worker /probe，服务端发起，不受浏览器跨域限制）。
+    // 目的：先剔除已失效线路，直接落到第一条可用线路，避免用户对着死链空等超时。
+    function probeUrl(u, ms) {
+      return new Promise(function (resolve) {
+        if (!u) return resolve(null);
+        let done = false;
+        const finish = v => { if (!done) { done = true; clearTimeout(timer); resolve(v); } };
+        const timer = setTimeout(() => finish(null), ms || 9000);
+        fetch(location.origin + '/probe?u=' + encodeURIComponent(u), { cache: 'no-store' })
+          .then(r => r.json().catch(() => ({})))
+          .then(d => finish(!!(d && d.ok)))
+          .catch(() => finish(null));
+      });
+    }
+
+    function showHint(text, isErr) {
+      const h = $('pvHint');
+      if (!text) { h.classList.remove('show'); return; }
+      h.textContent = text;
+      h.classList.toggle('err', !!isErr);
+      h.classList.add('show');
+    }
+
+    // 返回候选线路的下标数组：直连源在前、中转线路在后
+    function candidateOrder(cat) {
+      const resolverList = (window.RESOLVER_LINES || []).filter(r => r && r.url);
+      const order = [];
+      for (let i = 0; i < currentSources.length; i++) order.push(i);
+      if (cat !== 'live') {
+        for (let j = 0; j < resolverList.length; j++) order.push(currentSources.length + j);
+      }
+      return order;
+    }
+
+    function urlOfIdx(idx) {
+      const resolverList = (window.RESOLVER_LINES || []).filter(r => r && r.url);
+      if (idx < currentSources.length) {
+        const s = currentSources[idx];
+        return s ? s.url : '';
+      }
+      const r = resolverList[idx - currentSources.length];
+      const base = currentSources[currentBaseIdx] || currentSources[0] || {};
+      return r ? buildResolverUrl(r, base.url) : '';
+    }
+
+    function openPlayer(item, cat, startIdx) {
+      const myToken = ++playerToken;
       currentItemKey = cat + '|' + (item.name || '') + '|' + (item.year || '');
       currentSources = (item.sources && item.sources.length)
         ? item.sources.slice() : [{ src: '默认线路', url: item.url }];
@@ -1151,7 +1212,12 @@ __DATA_SCRIPTS__
       // 若中转失败再回退尝试直连源。直播保持直连，避免 worker 代理实时流。
       const resolverList = (window.RESOLVER_LINES || []).filter(r => r && r.url);
       currentBaseIdx = 0;
-      currentSourceIdx = (resolverList.length > 0 && cat !== 'live') ? currentSources.length : 0;
+      if (typeof startIdx === 'number' && startIdx >= 0) {
+        currentSourceIdx = startIdx;             // 详情页点了具体线路 → 就播那一条
+        currentBaseIdx = Math.min(startIdx, currentSources.length - 1);
+      } else {
+        currentSourceIdx = (resolverList.length > 0 && cat !== 'live') ? currentSources.length : 0;
+      }
       $('pvTitle').textContent = item.name || '播放';
       const meta = [item.region, item.year, item.quality, item.media_type]
         .filter(Boolean).join(' · ');
@@ -1175,7 +1241,49 @@ __DATA_SCRIPTS__
       $('playerView').classList.add('show');
       document.body.style.overflow = 'hidden';
       renderSources();
-      loadSource(0, true);
+
+      // 点了具体线路（详情页/换源）→ 直接播，不再探测；
+      // 否则先并发体检所有线路，挑第一条可用的播。
+      if (typeof startIdx === 'number' && startIdx >= 0) {
+        showHint('');
+        loadSource(currentSourceIdx, true);
+        return;
+      }
+      const order = candidateOrder(cat);
+      if (order.length <= 1 || cat === 'live') {
+        showHint('');
+        loadSource(currentSourceIdx, true);
+        return;
+      }
+      showHint('正在检测 ' + order.length + ' 条线路…');
+      const picked = currentSourceIdx;
+      Promise.all(order.map(i => probeUrl(urlOfIdx(i)))).then(function (res) {
+        if (myToken !== playerToken) return;         // 用户已切到别的影片
+        let okIdx = -1, unknownIdx = -1;
+        for (let k = 0; k < order.length; k++) {
+          const idx = order[k];
+          // 探测的是中转线路时，底层取的是当前 base 源；base 不可达则中转也无意义
+          if (res[k] === true && okIdx < 0) okIdx = idx;
+          else if (res[k] === null && unknownIdx < 0) unknownIdx = idx;
+        }
+        // 把探测结论记到线路上，供列表置灰展示
+        for (let k = 0; k < order.length; k++) {
+          if (order[k] < currentSources.length) currentSources[order[k]]._probe = res[k];
+        }
+        let target = okIdx >= 0 ? okIdx : (unknownIdx >= 0 ? unknownIdx : picked);
+        const okCount = res.filter(v => v === true).length;
+        if (okCount === 0) {
+          showHint('未检测到高置信可用线路，正在逐条尝试…', true);
+        } else {
+          showHint('已选出可用线路（' + okCount + '/' + order.length + ' 条可播）');
+          setTimeout(() => { if (myToken === playerToken) showHint(''); }, 2500);
+        }
+        currentSourceIdx = target;
+        if (target >= currentSources.length) currentBaseIdx = 0;
+        else currentBaseIdx = target;
+        renderSources();
+        loadSource(target, true);
+      });
     }
 
     function renderSources() {
@@ -1189,7 +1297,8 @@ __DATA_SCRIPTS__
       currentSources.forEach((s, i) => {
         const btn = document.createElement('button');
         btn.className = 'pv-src' + (i === currentSourceIdx ? ' active' : '')
-          + (s._failed ? ' failed' : '');
+          + (s._failed ? ' failed' : '')
+          + (s._probe === false ? ' dead' : '');
         btn.innerHTML = '<span class="dot"></span><span class="label">'
           + htmlEscape(s.src || ('线路' + (i + 1))) + '</span>';
         btn.onclick = () => {
@@ -1347,10 +1456,13 @@ __DATA_SCRIPTS__
       if (!isResolver && currentSources[idx]) currentSources[idx]._failed = true;
       renderSources();
 
-      // 尝试下一个未失败的原始源
+      // 尝试下一个未失败的原始源：优先跳过预检已判定失效的线路，减少无谓等待
       const trySource = () => {
-        for (let i = 0; i < currentSources.length; i++) {
-          if (i !== idx && !currentSources[i]._failed) {
+        for (let pass = 0; pass < 2; pass++) {
+          for (let i = 0; i < currentSources.length; i++) {
+            const s = currentSources[i];
+            if (i === idx || s._failed) continue;
+            if (pass === 0 && s._probe === false) continue;
             currentSourceIdx = i; currentBaseIdx = i; renderSources(); loadSource(i, false);
             return true;
           }
@@ -1754,7 +1866,8 @@ def _item_to_json(it: dict, sources: list = None) -> dict:
         "year": _normalize_year(it.get("year")),
         "quality": it.get("quality") or "",
         "cover": it.get("cover") or "",
-        "url": it.get("url") or "",
+        # 网页侧统一走「可播地址」：能直连就直连，否则换成本站同源中转
+        "url": _health.play_url(it.get("url") or "") or it.get("url") or "",
         "score": score,
         "hits": int(it.get("_best_hits") or 0),
         "lines": int(it.get("_lines") or 1),
@@ -1809,8 +1922,16 @@ def generate_index(output_dir: Path = None) -> Path:
 
     resources: Dict[str, List[dict]] = {}
     desc_map: Dict[str, Dict[str, str]] = {}
+    _drop_dead = os.environ.get("WEB_KEEP_DEAD", "0") != "1"
+    _dead_stat: Dict[str, int] = {}
     for cat in config.M3U_OUTPUT:
         items, _ = prepare_items(cat)
+        # 线路体检：剔除已确认全线失效的播放地址（源站 CDN 大面积跑路，
+        # 不剔的话 3/4 的卡片点了必然黑屏）。可用线路中「能直连」的排最前。
+        if _drop_dead:
+            kept = [it for it in items if _health.playable(it.get("url") or "")]
+            _dead_stat[cat] = len(items) - len(kept)
+            items = kept
         # 聚合每部影片的所有播放线路（换源用）：国内直连源已在 prepare_items 排最前，
         # 截断到 8 条避免 JSON 过大；单线路影片 sources 为空列表。
         src_map: Dict[tuple, list] = {}
@@ -1821,8 +1942,16 @@ def generate_index(output_dir: Path = None) -> Path:
                 continue
             lst = src_map.setdefault(key, [])
             if len(lst) < 8:
+                play = _health.play_url(url)
+                if play is None:
+                    continue
+                # _rank 仅用于排序（直连优先、需中转的靠后），落盘前移除
                 lst.append({"src": it.get("line_name") or it.get("source") or ("线路%d" % (len(lst) + 1)),
-                            "url": url})
+                            "url": play, "_rank": _health.rank(url)})
+        for lst in src_map.values():
+            lst.sort(key=lambda s: s.get("_rank", 1))
+            for s in lst:
+                s.pop("_rank", None)
         # 统计每部影片的线路数（多少个源收录，作为人气的兜底指标）；
         # 并聚合所有线路中最大的人气/评分（保留的线路可能来自无人气数据的源）
         agg: Dict[tuple, dict] = {}
@@ -1875,6 +2004,11 @@ def generate_index(output_dir: Path = None) -> Path:
 
     out.write_text(html_text, encoding="utf-8")
     print(f"[OK] 已生成 {out}")
+    n_host, n_ok = _health.stats()
+    kept = sum(len(v) for v in resources.values())
+    print(f"[线路体检] 域名 {n_ok}/{n_host} 可用；剔除失效线路 {sum(_dead_stat.values())} 条；"
+          f"可播条目 {kept}" + ("（各类：%s）" % ", ".join(
+              f"{k} -{v}" for k, v in _dead_stat.items() if v) if _dead_stat else ""))
     return out
 
 
@@ -1998,7 +2132,10 @@ def _load_live_json() -> List[dict]:
     for r in rows:
         key = f"{r['category']}|{r['name']}"
         if key in channels:
-            continue  # list_live 已按延迟排序，首条即最优
+            # 已选中的线路若被体检判定失效，且当前这条可用，则替换（list_live 已按延迟排序）
+            prev = channels[key]
+            if _health.playable(prev["u"]) or not _health.playable(r["url"]):
+                continue
         # 优先使用固定的本地台标（data/live_logos 已进 git，部署时同步到 /covers/live/），
         # 不再依赖易失效的外链 CDN；本地台标缺失时回退外链，最后回退渐变封面。
         ch_id = "l_" + hashlib.md5(key.encode("utf-8")).hexdigest()[:14]
