@@ -275,7 +275,7 @@ function itemsList(data, url) {
   };
 }
 
-async function imagePrimary(data, id, origin) {
+async function imagePrimary(data, id, origin, request) {
   // 地区视图封面（兼容 pathname 编码/未编码）
   if (id.startsWith("view_")) {
     let region = id.slice(5);
@@ -291,35 +291,61 @@ async function imagePrimary(data, id, origin) {
   // 封面可能是外站 URL（电影海报）或本仓库生成的相对路径（/covers/live_xxx.jpg 直播台标）。
   // 相对路径补成绝对地址，交给 ASSETS 静态托管。
   let coverUrl = m.cover;
+
+  // 直播频道按请求尺寸做封面适配：
+  // 客户端网格视图会请求较大尺寸封面并把原图拉伸铺满，真实台标（细长条 CCTV 等）会被放得巨大。
+  // 对明显是大图/卡片的请求，改用 16:9 横向渐变封面或卡片版台标，列表视图仍用真实台标小图。
+  if (id.startsWith("l_") && request) {
+    try {
+      const imgUrl = new URL(request.url);
+      const mw = parseInt(imgUrl.searchParams.get("maxWidth") || imgUrl.searchParams.get("width") || imgUrl.searchParams.get("fillWidth") || "0", 10);
+      const mh = parseInt(imgUrl.searchParams.get("maxHeight") || imgUrl.searchParams.get("height") || imgUrl.searchParams.get("fillHeight") || "0", 10);
+      const target = Math.max(mw, mh);
+      if (target >= 240) {
+        // 优先使用卡片版（真实 logo 居中 + 渐变背景）；该文件不存在时 ASSETS 会 404，由下方兜底捕获。
+        coverUrl = "/covers/live/" + id + "_card.jpg";
+      }
+    } catch (_) {}
+  }
+
   if (!/^https?:\/\//i.test(coverUrl)) {
     coverUrl = origin + (coverUrl.startsWith("/") ? "" : "/") + coverUrl;
   }
-  try {
-    const upstream = await fetch(coverUrl, {
-      redirect: "follow",
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        "Referer": origin + "/",
-      },
-    });
-    if (!upstream.ok) return new Response("upstream error", { status: 502 });
-    const headers = new Headers(upstream.headers);
-    headers.set("Access-Control-Allow-Origin", "*");
-    headers.delete("content-length");
-    const ext = (m.cover.split("?")[0].split(".").pop() || "").toLowerCase();
-    const MAP = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp", gif: "image/gif" };
-    const ctype = upstream.headers.get("content-type") || MAP[ext] || "image/jpeg";
-    headers.set("Content-Type", ctype);
-    headers.set("Cache-Control", "public, max-age=86400");
-    headers.set("CDN-Cache-Control", "public, max-age=86400");
-    return new Response(upstream.body, {
-      status: upstream.status,
-      statusText: upstream.statusText,
-      headers,
-    });
-  } catch (e) {
-    return new Response("fetch failed: " + e, { status: 502 });
+  // 对大尺寸直播封面做兜底：卡片版不存在时回退到横向渐变封面。
+  const fallbackUrls = [];
+  if (id.startsWith("l_") && coverUrl.includes("/_card.jpg")) {
+    fallbackUrls.push(origin + "/covers/live_" + id + ".jpg");
   }
+
+  for (const tryUrl of [coverUrl, ...fallbackUrls]) {
+    try {
+      const upstream = await fetch(tryUrl, {
+        redirect: "follow",
+        headers: {
+          "User-Agent": "Mozilla/5.0",
+          "Referer": origin + "/",
+        },
+      });
+      if (!upstream.ok) continue;
+      const headers = new Headers(upstream.headers);
+      headers.set("Access-Control-Allow-Origin", "*");
+      headers.delete("content-length");
+      const ext = (tryUrl.split("?")[0].split(".").pop() || "").toLowerCase();
+      const MAP = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp", gif: "image/gif" };
+      const ctype = upstream.headers.get("content-type") || MAP[ext] || "image/jpeg";
+      headers.set("Content-Type", ctype);
+      headers.set("Cache-Control", "public, max-age=86400");
+      headers.set("CDN-Cache-Control", "public, max-age=86400");
+      return new Response(upstream.body, {
+        status: upstream.status,
+        statusText: upstream.statusText,
+        headers,
+      });
+    } catch (e) {
+      continue;
+    }
+  }
+  return new Response("upstream error", { status: 502 });
 }
 
 function rewriteM3u8(text, base, origin) {
@@ -910,7 +936,7 @@ export default {
       m = p.match(/^\/Items\/([^\/]+)\/Images\/Primary/);
       if (m) {
         const data = await loadAll(url.origin, ctx);
-        return imagePrimary(data, m[1], url.origin);
+        return imagePrimary(data, m[1], url.origin, request);
       }
       m = p.match(/^\/Items\/([^\/]+)\/PlaybackInfo/);
       if (m) {

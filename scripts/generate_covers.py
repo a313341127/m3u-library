@@ -517,6 +517,93 @@ def generate_live_covers():
         count += 1
     print("直播封面生成完成: %d 个频道" % count)
 
+    # 同时生成带真实台标的卡片版封面，供网格视图使用
+    generate_live_card_covers()
+
+
+def generate_live_card_covers():
+    """为有真实台标的直播频道生成卡片版封面（800x450）。
+
+    途播网格视图会请求较大尺寸封面并把原图拉伸铺满，真实台标（尤其是 CCTV
+    等细长条 logo）会被放得巨大。卡片版把真实 logo 等比居中、留渐变背景，
+    比例与网格卡片匹配，避免拉伸变形。
+
+    输出：output/covers/live/{ch_id}_card.jpg
+    """
+    import hashlib
+    from collector.live import list_live
+
+    logo_dir = os.path.join(ROOT, "data", "live_logos")
+    if not os.path.isdir(logo_dir):
+        return
+
+    out_dir = os.path.join(OUTPUT_DIR, "live")
+    os.makedirs(out_dir, exist_ok=True)
+
+    rows = list_live()
+    seen = set()
+    count = 0
+    for r in rows:
+        cat = r.get("category", "")
+        name = r.get("name", "")
+        display = r.get("display") or name
+        key = (cat, name)
+        if key in seen:
+            continue
+        seen.add(key)
+        ch_id = "l_" + hashlib.md5(("%s|%s" % (cat, name)).encode("utf-8")).hexdigest()[:14]
+        logo_path = os.path.join(logo_dir, ch_id + ".png")
+        if not os.path.exists(logo_path):
+            continue
+
+        c1, c2, _ = LIVE_COLORS.get(cat, ("#5D6D7E", "#8FA1B3", "直播"))
+        # 800x450 横向画布，与现有渐变封面一致
+        img = Image.new("RGB", (WIDTH, HEIGHT), hex_to_rgb(c1))
+        draw = ImageDraw.Draw(img)
+        linear_gradient(draw, WIDTH, HEIGHT, c1, c2, angle=145)
+
+        # 叠加极淡噪点纹理，与现有风格统一
+        grain = overlay()
+        gd = ImageDraw.Draw(grain)
+        draw_noise_texture(gd, WIDTH, HEIGHT, "#FFFFFF", 6, seed=hash(ch_id) % 100000)
+        img = Image.alpha_composite(img.convert("RGBA"), grain).convert("RGB")
+
+        try:
+            logo = Image.open(logo_path).convert("RGBA")
+        except Exception as e:
+            print("台标打开失败 %s: %s" % (logo_path, e))
+            continue
+
+        # 等比缩放，最大宽度 520、最大高度 300，保留透明通道用于居中粘贴
+        logo.thumbnail((520, 300), Image.Resampling.LANCZOS)
+        lw, lh = logo.size
+        x = (WIDTH - lw) // 2
+        y = (HEIGHT - lh) // 2
+        img.paste(logo, (x, y), logo)
+
+        # 底部居中加频道名，便于无文字渲染的视图也能识别
+        try:
+            name_font = ImageFont.truetype(FONT_REG, 28)
+            bbox = draw.textbbox((0, 0), display, font=name_font)
+            tw = bbox[2] - bbox[0]
+            tx = (WIDTH - tw) // 2
+            ty = HEIGHT - 64
+            # 半透明底条提升可读性
+            overlay_bar = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
+            bd = ImageDraw.Draw(overlay_bar)
+            bd.rectangle([0, ty - 10, WIDTH, HEIGHT], fill=(0, 0, 0, 80))
+            img = Image.alpha_composite(img.convert("RGBA"), overlay_bar).convert("RGB")
+            draw = ImageDraw.Draw(img)
+            draw.text((tx, ty), display, fill="#FFFFFF", font=name_font)
+        except Exception:
+            pass
+
+        out_path = os.path.join(out_dir, ch_id + "_card.jpg")
+        img.save(out_path, "JPEG", quality=92)
+        count += 1
+
+    print("直播卡片封面生成完成: %d 个频道" % count)
+
 
 # 统一库分类视图封面（途播 Jellyfin 后端）：电影/直播/剧集/综艺/动漫
 CATEGORY_COVERS = [
