@@ -599,6 +599,24 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     }
     .pv-hint.show { display: block; }
     .pv-hint.err { color: #ffb3b3; }
+    /* 加载/缓冲遮罩：点源后立即可见，避免黑屏干等（对齐 dmhyy 的加载反馈） */
+    .pv-loading {
+      position: absolute; inset: 0; z-index: 4;
+      display: none; flex-direction: column; align-items: center; justify-content: center;
+      gap: 16px; background: rgba(0,0,0,0.62); pointer-events: none;
+    }
+    .pv-loading.show { display: flex; }
+    .pv-spinner {
+      width: 46px; height: 46px; border-radius: 50%;
+      border: 4px solid rgba(255,255,255,0.22);
+      border-top-color: var(--accent);
+      animation: pv-spin 0.9s linear infinite;
+    }
+    .pv-loading-text {
+      font-size: 13.5px; color: #e8edf2; text-align: center; line-height: 1.7;
+      max-width: 86%; padding: 0 12px;
+    }
+    @keyframes pv-spin { to { transform: rotate(360deg); } }
     .pv-side {
       flex: 0 0 340px;
       background: var(--bg);
@@ -815,6 +833,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <button class="pv-resume" id="pvResume"></button>
         <div class="pv-progress-bar" id="pvProgressBar"></div>
         <div class="pv-hint" id="pvHint"></div>
+        <div class="pv-loading" id="pvLoading">
+          <div class="pv-spinner"></div>
+          <div class="pv-loading-text" id="pvLoadingText"></div>
+        </div>
       </div>
       <div class="pv-side" id="pvSide">
         <div class="pv-meta" id="pvMeta"></div>
@@ -1181,6 +1203,17 @@ __DATA_SCRIPTS__
       h.classList.add('show');
     }
 
+    // 加载/缓冲遮罩：点源后立即显示，缓冲/换源时给出可见反馈
+    function showLoading(text) {
+      const el = $('pvLoading');
+      const t = $('pvLoadingText');
+      if (text) t.innerHTML = text;
+      el.classList.add('show');
+    }
+    function hideLoading() {
+      $('pvLoading').classList.remove('show');
+    }
+
     // 返回候选线路的下标数组：直连源在前、中转线路在后
     function candidateOrder(cat) {
       const resolverList = (window.RESOLVER_LINES || []).filter(r => r && r.url);
@@ -1238,6 +1271,7 @@ __DATA_SCRIPTS__
       $('pvResume').classList.remove('show');
       $('pvResume').onclick = null;
       $('pvProgressBar').style.width = '0%';
+      hideLoading();
       $('playerView').classList.add('show');
       document.body.style.overflow = 'hidden';
       renderSources();
@@ -1355,6 +1389,8 @@ __DATA_SCRIPTS__
       }
       if (!s) return;
       currentUrl = s.url;
+      const srcName = htmlEscape(s.src || '默认线路');
+      showLoading('正在连接 <b>' + srcName + '</b> …<br><span style="font-size:12px;color:#aab">源站拉流较慢，请稍候</span>');
       const video = $('pvVideo');
       $('pvProgressBar').style.width = '0%';
       video.pause(); video.removeAttribute('src'); video.load();
@@ -1395,18 +1431,22 @@ __DATA_SCRIPTS__
 
     function playUrl(url, idx, resume) {
       const video = $('pvVideo');
+      // 缓冲/可播事件：缓冲时显示遮罩，开始播放即隐藏（断流/拖动 seek 也会触发）
+      video.onwaiting = () => showLoading('视频缓冲中…');
+      video.onplaying = () => hideLoading();
+      video.oncanplay = () => hideLoading();
       startLoadTimeout(idx);
       if (isHls(url)) {
         if (video.canPlayType('application/vnd.apple.mpegurl')) {
           video.src = url;
           video.onerror = () => { clearLoadTimeout(); video.onerror = null; handleSourceFail(idx); };
-          video.onloadeddata = () => { clearLoadTimeout(); video.onerror = null; };
+          video.onloadeddata = () => { clearLoadTimeout(); video.onerror = null; hideLoading(); };
           video.play().catch(() => {});
         } else if (window.Hls && Hls.isSupported()) {
           hlsPlayer = new Hls({ maxBufferLength: 30, enableWorker: false });
           hlsPlayer.loadSource(url);
           hlsPlayer.attachMedia(video);
-          hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => { clearLoadTimeout(); video.play().catch(() => {}); });
+          hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => { clearLoadTimeout(); hideLoading(); video.play().catch(() => {}); });
           hlsPlayer.on(Hls.Events.ERROR, (ev, data) => {
             if (!data.fatal) return;
             if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
@@ -1516,6 +1556,7 @@ __DATA_SCRIPTS__
       video.pause(); video.removeAttribute('src'); video.load();
       $('playerView').classList.remove('show');
       document.body.style.overflow = '';
+      hideLoading();
       if (pvProgressTimer) { clearInterval(pvProgressTimer); pvProgressTimer = null; }
     }
 
