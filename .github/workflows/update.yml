@@ -104,7 +104,7 @@ jobs:
         # 增量：每次只检 --limit 条最久未检的 URL（配合每日运行逐步覆盖全库）；
         # --apply 真删，且单次删除比例上限 5%（疑似源站整体故障时中止，防误删）。
         run: |
-          python scripts/prune_dead.py --apply --limit 2000 --age-days 7 --concurrency 16
+          python scripts/prune_dead.py --apply --limit 5000 --age-days 3 --concurrency 16
 
       - name: 刷新播放线路域名体检表（供生成期剔除死链）
         # 按域名聚合所有播放地址，探测 direct/refer/proxy 三种取流方式可用性，写入
@@ -112,9 +112,11 @@ jobs:
         # 从根上解决「点了播不了」。失败不阻断流水线（沿用上一份体检表）。
         continue-on-error: true
         run: |
-          python scripts/check_source_health.py --workers 24
+          python scripts/check_source_health.py --workers 24 --min-urls 1 --samples 2
 
       - name: 采集直播源（聚合源下载 + 测速择优，全量刷新）
+        env:
+          WEB_STRICT_HEALTH: 1
         run: |
           python main.py collect-live --no-generate
           python main.py generate --txt --best
@@ -130,6 +132,8 @@ jobs:
       - name: 生成途播 Jellyfin 后端数据（api/movies.json + 地区分片）
         # 关键：途播后端 worker 在运行时 fetch 此 JSON 渲染海报墙。
         # 此前工作流只生成 M3U/Web，从不生成它，导致途播每日更新“看似完成”实则数据没变。
+        env:
+          WEB_STRICT_HEALTH: 1
         run: |
           python generate_movies_json.py
 

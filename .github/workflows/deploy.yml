@@ -44,6 +44,8 @@ jobs:
           python-version: '3.13'
 
       - name: 生成 M3U / Web / 途播 Jellyfin 分片数据
+        env:
+          WEB_STRICT_HEALTH: 1
         run: |
           python main.py generate --txt --best
           python generate_movies_json.py

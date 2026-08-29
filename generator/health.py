@@ -19,9 +19,34 @@ _PATH = os.path.join(_ROOT, "data", "host_health.json")
 
 _data = None
 _enabled = os.environ.get("USE_HOST_HEALTH", "1") != "0"
+# 严格模式：只有经过体检且确认可播的源才保留（unknown 也剔除）
+_strict = os.environ.get("WEB_STRICT_HEALTH", os.environ.get("STRICT_HEALTH", "0")) == "1"
+
+_DB_PATH = os.path.join(_ROOT, "data", "media.db")
+_url_health_cache = None
 
 # 排序权重：能直连的最优先（延迟最低、不占 CF 带宽），中转兜底
 _RANK = {"direct": 0, "unknown": 1, "refer": 2, "proxy": 3, "dead": 9}
+
+
+def _load_url_health():
+    """读取 prune_dead.py 写入的 url_health 表，返回 {url: status}。"""
+    global _url_health_cache
+    if _url_health_cache is not None:
+        return _url_health_cache
+    out = {}
+    try:
+        import sqlite3
+        con = sqlite3.connect(_DB_PATH)
+        try:
+            rows = con.execute("SELECT url, status FROM url_health").fetchall()
+            out = {u: s for u, s in rows}
+        finally:
+            con.close()
+    except Exception:
+        pass
+    _url_health_cache = out
+    return out
 
 
 def load(force: bool = False) -> dict:
@@ -63,8 +88,20 @@ def rank(url: str) -> int:
 
 
 def playable(url: str) -> bool:
-    """是否还有希望播出来（未体检的一律放行，避免误杀）"""
-    return mode(url) != "dead"
+    """是否还有希望播出来。严格模式下未体检(unknown)或已失效均剔除。"""
+    if not url:
+        return False
+    # URL 级：prune_dead.py 已确认死亡的直接剔除
+    if _load_url_health().get(url) == "dead":
+        return False
+    m = mode(url)
+    if m == "dead":
+        return False
+    if _strict:
+        # 有体检数据时才对 unknown 严格，避免体检表缺失时把库清空
+        if load() and m == "unknown":
+            return False
+    return True
 
 
 def proxied(url: str) -> str:
