@@ -1,0 +1,26 @@
+{
+  "爱奇艺": {
+    "run_id": "33235916715",
+    "status": "success",
+    "fails": 0,
+    "last_inputs": {
+      "MODE": "full",
+      "SOURCES": "爱奇艺",
+      "PAGE_START": "1",
+      "PAGE_CHUNK": "350",
+      "SKIP_COVERS": "false"
+    }
+  },
+  "魔都": {
+    "run_id": "33235968987",
+    "status": "success",
+    "fails": 0,
+    "last_inputs": {
+      "MODE": "full",
+      "SOURCES": "魔都",
+      "PAGE_START": "1",
+      "PAGE_CHUNK": "350",
+      "SKIP_COVERS": "false"
+    }
+  }
+}
