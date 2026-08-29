@@ -259,13 +259,25 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       display: block;
     }
     .card:active { transform: scale(0.97); }
+    .card-info-btn {
+      position: absolute; top: 8px; right: 8px;
+      padding: 3px 8px; border-radius: 8px;
+      font-size: 11px; font-weight: 600; color: #fff;
+      background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.12);
+      cursor: pointer; opacity: 0; transition: opacity .2s; z-index: 3;
+      pointer-events: auto;
+    }
+    .card:hover .card-info-btn { opacity: 1; }
+    @media (max-width: 640px) { .card-info-btn { opacity: 1; padding: 4px 9px; } }
     .poster {
       position: relative;
       width: 100%;
       padding-top: 150%;
       background: #232a33;
       overflow: hidden;
+      pointer-events: none;
     }
+    .poster > * { pointer-events: auto; }
     .poster img {
       position: absolute;
       inset: 0;
@@ -522,16 +534,21 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     .btn-primary { background: var(--accent); color: #fff; }
     .btn-ghost { background: var(--bg); color: var(--text); }
 
-    /* ===== 沉浸式播放视图（dmhyy 风格：站内全屏播放 + 换源 + 续播） ===== */
+    /* ===== 内嵌式播放视图（dmhyy 风格：播放器嵌入页面中间 + 换源 + 续播） ===== */
     .player-view {
-      position: fixed;
-      inset: 0;
-      z-index: 400;
       display: none;
       flex-direction: column;
       background: #0b0d10;
+      border-radius: 16px;
+      overflow: hidden;
+      margin: 0 0 20px;
+      box-shadow: var(--shadow);
+      border: 1px solid var(--border);
     }
     .player-view.show { display: flex; }
+    .player-view.sticky .pv-top {
+      position: sticky; top: 0; z-index: 5;
+    }
     .pv-top {
       flex: 0 0 auto;
       display: flex;
@@ -541,17 +558,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       background: rgba(16,19,24,0.97);
       border-bottom: 1px solid var(--border);
     }
-    .pv-back {
-      flex: 0 0 auto;
-      width: 34px; height: 34px;
-      border-radius: 50%;
-      border: none;
-      background: var(--card);
-      color: var(--text);
-      font-size: 22px; line-height: 1;
-      cursor: pointer;
-    }
-    .pv-back:active { transform: scale(0.92); }
     .pv-title {
       flex: 1; min-width: 0;
       font-size: 15px; font-weight: 600;
@@ -577,8 +583,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       background: #000;
       min-width: 0;
       position: relative;
+      aspect-ratio: 16 / 9;
     }
-    .pv-video { width: 100%; max-height: 100%; background: #000; }
+    .pv-video { width: 100%; height: 100%; background: #000; }
     .pv-resume {
       position: absolute;
       left: 50%; bottom: 18px; transform: translateX(-50%);
@@ -636,7 +643,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     }
     .pv-sources { display: flex; flex-direction: column; gap: 8px; }
     .pv-src {
-      display: flex; align-items: center; gap: 9px;
+      display: flex; align-items: center; gap: 10px;
       padding: 11px 13px; border-radius: 12px;
       background: var(--card); border: 1px solid var(--border);
       color: var(--text); font-size: 14px; cursor: pointer; text-align: left;
@@ -644,19 +651,37 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     }
     .pv-src:hover { border-color: var(--accent); }
     .pv-src.active { background: var(--accent-light); border-color: var(--accent); color: var(--accent); font-weight: 600; }
-    .pv-src .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-secondary); flex: 0 0 auto; }
-    .pv-src.active .dot { background: var(--accent); }
-    .pv-src.failed .dot { background: #ff4757; }
+    .pv-src .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--text-secondary); flex: 0 0 auto;
+      box-shadow: 0 0 0 0 rgba(138,145,156,0);
+      transition: background .2s, box-shadow .2s;
+    }
+    .pv-src .dot.ok { background: #2ed573; box-shadow: 0 0 6px rgba(46,213,115,0.55); }
+    .pv-src .dot.bad { background: #ff4757; box-shadow: 0 0 6px rgba(255,71,87,0.55); }
+    .pv-src.active .dot { background: var(--accent); box-shadow: none; }
+    .pv-src.active .dot.ok { background: #2ed573; }
+    .pv-src.active .dot.bad { background: #ff4757; }
     .pv-src .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .pv-src.resolver { border-left: 3px solid #ff9f43; }
     .pv-src.resolver.active { background: rgba(255,159,67,0.14); border-color: #ff9f43; color: #ff9f43; }
     .pv-src.resolver.active .dot { background: #ff9f43; }
-    /* 预检判定失效的线路：置灰并标注，用户仍可强行点播 */
+    /* 预检判定失效的线路：红色圆点 + 置灰 */
     .pv-src.dead { opacity: .45; }
+    .pv-src.dead .dot, .pv-src.dead .dot.ok, .pv-src.dead .dot.bad { background: #ff4757 !important; box-shadow: 0 0 6px rgba(255,71,87,0.55); }
     .pv-src.dead .label::after { content: ' · 已失效'; font-size: 11px; color: var(--text-secondary); }
     @media (max-width: 860px) {
       .pv-body { flex-direction: column; }
-      .pv-side { flex: 0 0 auto; border-left: none; border-top: 1px solid var(--border); max-height: 44%; }
+      .pv-side { flex: 0 0 auto; border-left: none; border-top: 1px solid var(--border); max-height: 280px; }
+    }
+    @media (min-width: 900px) {
+      .player-view { flex-direction: row; flex-wrap: wrap; }
+      .player-view .pv-top { width: 100%; }
+      .player-view .pv-body { flex: 1; min-width: 0; }
+      .player-view .pv-side { max-height: calc((100vw - 32px) * 9 / 16); }
+    }
+    @media (min-width: 1200px) {
+      .player-view .pv-side { max-height: 506px; }
     }
     .detail-view {
       position: fixed;
@@ -781,6 +806,35 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       <div class="filter-label">频道分类</div>
       <div class="filter-tags" id="liveTags"></div>
     </div>
+    <div class="player-view" id="playerView">
+      <div class="pv-top">
+        <div class="pv-title" id="pvTitle"></div>
+        <div class="pv-actions">
+          <button class="pv-act" id="pvCopy">复制链接</button>
+          <button class="pv-act primary" id="pvExternal">浏览器打开</button>
+          <button class="pv-act" id="pvClose" title="关闭播放器">&times;</button>
+        </div>
+      </div>
+      <div class="pv-body">
+        <div class="pv-stage" id="pvStage">
+          <video class="pv-video" id="pvVideo" controls playsinline referrerpolicy="no-referrer"></video>
+          <button class="pv-resume" id="pvResume"></button>
+          <div class="pv-progress-bar" id="pvProgressBar"></div>
+          <div class="pv-hint" id="pvHint"></div>
+          <div class="pv-loading" id="pvLoading">
+            <div class="pv-spinner"></div>
+            <div class="pv-loading-text" id="pvLoadingText"></div>
+          </div>
+        </div>
+        <div class="pv-side" id="pvSide">
+          <div class="pv-meta" id="pvMeta"></div>
+          <div class="pv-desc" id="pvDesc"></div>
+          <div class="pv-section-title" id="pvSrcTitle">播放源</div>
+          <div class="pv-sources" id="pvSources"></div>
+        </div>
+      </div>
+    </div>
+
     <div class="section-title" id="sectionBar">
       <span style="display:flex;align-items:baseline;gap:8px;">
         <span id="sectionName">全部</span>
@@ -814,35 +868,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         </div>
         <div class="dv-section-title">播放线路</div>
         <div class="dv-sources" id="dvSources"></div>
-      </div>
-    </div>
-  </div>
-
-  <div class="player-view" id="playerView">
-    <div class="pv-top">
-      <button class="pv-back" id="pvBack" aria-label="返回">&lsaquo;</button>
-      <div class="pv-title" id="pvTitle"></div>
-      <div class="pv-actions">
-        <button class="pv-act" id="pvCopy">复制链接</button>
-        <button class="pv-act primary" id="pvExternal">浏览器打开</button>
-      </div>
-    </div>
-    <div class="pv-body">
-      <div class="pv-stage" id="pvStage">
-        <video class="pv-video" id="pvVideo" controls playsinline referrerpolicy="no-referrer"></video>
-        <button class="pv-resume" id="pvResume"></button>
-        <div class="pv-progress-bar" id="pvProgressBar"></div>
-        <div class="pv-hint" id="pvHint"></div>
-        <div class="pv-loading" id="pvLoading">
-          <div class="pv-spinner"></div>
-          <div class="pv-loading-text" id="pvLoadingText"></div>
-        </div>
-      </div>
-      <div class="pv-side" id="pvSide">
-        <div class="pv-meta" id="pvMeta"></div>
-        <div class="pv-desc" id="pvDesc"></div>
-        <div class="pv-section-title" id="pvSrcTitle">播放源</div>
-        <div class="pv-sources" id="pvSources"></div>
       </div>
     </div>
   </div>
@@ -1165,7 +1190,7 @@ __DATA_SCRIPTS__
         const b = document.createElement('button');
         b.className = 'dv-src';
         b.innerHTML = '<span class="label">' + htmlEscape(s.src || ('线路' + (i + 1))) + '</span>';
-        // 点哪条线路就播哪条（对齐 dmhyy：点片源即弹出播放器并加载该源）
+        // 点哪条线路就播哪条，在内嵌播放器加载
         b.onclick = function () { closeDetail(); openPlayer(item, cat, i); };
         box.appendChild(b);
       });
@@ -1249,7 +1274,8 @@ __DATA_SCRIPTS__
         currentSourceIdx = startIdx;             // 详情页点了具体线路 → 就播那一条
         currentBaseIdx = Math.min(startIdx, currentSources.length - 1);
       } else {
-        currentSourceIdx = (resolverList.length > 0 && cat !== 'live') ? currentSources.length : 0;
+        // 点卡片直接播放：默认先选最佳原始源（生成期已按可用度排序），探测后再决定；直播保持直连
+        currentSourceIdx = (cat === 'live') ? 0 : 0;
       }
       $('pvTitle').textContent = item.name || '播放';
       const meta = [item.region, item.year, item.quality, item.media_type]
@@ -1264,6 +1290,8 @@ __DATA_SCRIPTS__
         if (currentItemKey !== itemKey) return;
         descEl.textContent = getDesc(cat, item) || '';
       });
+      // 保存当前 item，详情页按钮可复用
+      currentDetail = { item: item, cat: cat };
       const video = $('pvVideo');
       video.pause(); video.removeAttribute('src'); video.load();
       if (hlsPlayer) { try { hlsPlayer.destroy(); } catch (e) {} hlsPlayer = null; }
@@ -1273,8 +1301,9 @@ __DATA_SCRIPTS__
       $('pvProgressBar').style.width = '0%';
       hideLoading();
       $('playerView').classList.add('show');
-      document.body.style.overflow = 'hidden';
       renderSources();
+      // 内嵌播放器：打开时滚动到播放器位置，而不是锁 body 滚动
+      setTimeout(() => { $('playerView').scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 30);
 
       // 点了具体线路（详情页/换源）→ 直接播，不再探测；
       // 否则先并发体检所有线路，挑第一条可用的播。
@@ -1300,7 +1329,7 @@ __DATA_SCRIPTS__
           if (res[k] === true && okIdx < 0) okIdx = idx;
           else if (res[k] === null && unknownIdx < 0) unknownIdx = idx;
         }
-        // 把探测结论记到线路上，供列表置灰展示
+        // 把探测结论记到线路上，供红绿灯展示
         for (let k = 0; k < order.length; k++) {
           if (order[k] < currentSources.length) currentSources[order[k]]._probe = res[k];
         }
@@ -1313,8 +1342,7 @@ __DATA_SCRIPTS__
           setTimeout(() => { if (myToken === playerToken) showHint(''); }, 2500);
         }
         currentSourceIdx = target;
-        if (target >= currentSources.length) currentBaseIdx = 0;
-        else currentBaseIdx = target;
+        if (target >= 0 && target < currentSources.length) currentBaseIdx = target;
         renderSources();
         loadSource(target, true);
       });
@@ -1327,13 +1355,17 @@ __DATA_SCRIPTS__
       const total = currentSources.length + resolverList.length;
       $('pvSrcTitle').textContent = total > 1 ? '播放源（' + total + '）' : '播放源';
 
-      // 原始源
+      // 原始源：圆点按后端健康度/探测结果染色（绿=可用 红=失效 灰=未知）
       currentSources.forEach((s, i) => {
+        const isDead = s._probe === false || s._failed;
+        // 探测成功 或 未被标记为失败 且 有 url 的源都先显示绿色，点播失败后再变红
+        const isOk = s._probe === true || (!isDead && s.url);
+        const dotClass = isDead ? 'bad' : (isOk ? 'ok' : '');
         const btn = document.createElement('button');
         btn.className = 'pv-src' + (i === currentSourceIdx ? ' active' : '')
           + (s._failed ? ' failed' : '')
           + (s._probe === false ? ' dead' : '');
-        btn.innerHTML = '<span class="dot"></span><span class="label">'
+        btn.innerHTML = '<span class="dot ' + dotClass + '"></span><span class="label">'
           + htmlEscape(s.src || ('线路' + (i + 1))) + '</span>';
         btn.onclick = () => {
           if (i !== currentSourceIdx) { currentSourceIdx = i; currentBaseIdx = i; renderSources(); loadSource(i, false); }
@@ -1341,13 +1373,16 @@ __DATA_SCRIPTS__
         box.appendChild(btn);
       });
 
-      // 解析线路（基于当前选中的原始源）
+      // 解析线路（基于当前选中的原始源）：绿色表示基础源可用（解析成功率高）
       resolverList.forEach((r, i) => {
         const idx = currentSources.length + i;
         const isActive = idx === currentSourceIdx;
+        const base = currentSources[currentBaseIdx] || currentSources[0] || {};
+        const baseOk = base.url && !base._failed && base._probe !== false;
+        const dotClass = baseOk ? 'ok' : '';
         const btn = document.createElement('button');
         btn.className = 'pv-src resolver' + (isActive ? ' active' : '');
-        btn.innerHTML = '<span class="dot"></span><span class="label">'
+        btn.innerHTML = '<span class="dot ' + dotClass + '"></span><span class="label">'
           + htmlEscape(r.name || ('解析' + (i + 1))) + '</span>';
         btn.onclick = () => {
           if (idx !== currentSourceIdx) { currentSourceIdx = idx; renderSources(); loadSource(idx, false); }
@@ -1385,7 +1420,7 @@ __DATA_SCRIPTS__
         s = { src: r.name, url: resolverUrl, _resolver: r };
       } else {
         s = currentSources[idx];
-        currentBaseIdx = idx;
+        if (s) currentBaseIdx = idx;
       }
       if (!s) return;
       currentUrl = s.url;
@@ -1414,7 +1449,7 @@ __DATA_SCRIPTS__
             currentUrl = realUrl;
             playUrl(realUrl, idx, resume);
           } else {
-            clearLoadTimeout(); handleSourceFail(idx, true);
+            handleSourceFail(idx, true);
           }
         })
         .catch(err => {
@@ -1424,7 +1459,7 @@ __DATA_SCRIPTS__
             currentUrl = buildResolverUrl(r, base.url);
             playUrl(currentUrl, idx, resume);
           } else {
-            clearLoadTimeout(); handleSourceFail(idx, true);
+            handleSourceFail(idx, true);
           }
         });
     }
@@ -1435,41 +1470,42 @@ __DATA_SCRIPTS__
       video.onwaiting = () => showLoading('视频缓冲中…');
       video.onplaying = () => hideLoading();
       video.oncanplay = () => hideLoading();
+      video.onpause = () => { if (!video.seeking) hideLoading(); };
       startLoadTimeout(idx);
       if (isHls(url)) {
         if (video.canPlayType('application/vnd.apple.mpegurl')) {
           video.src = url;
-          video.onerror = () => { clearLoadTimeout(); video.onerror = null; handleSourceFail(idx); };
-          video.onloadeddata = () => { clearLoadTimeout(); video.onerror = null; hideLoading(); };
+          video.onerror = () => { video.onerror = null; handleSourceFail(idx); };
+          video.onloadeddata = () => { video.onerror = null; hideLoading(); };
           video.play().catch(() => {});
         } else if (window.Hls && Hls.isSupported()) {
           hlsPlayer = new Hls({ maxBufferLength: 30, enableWorker: false });
           hlsPlayer.loadSource(url);
           hlsPlayer.attachMedia(video);
-          hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => { clearLoadTimeout(); hideLoading(); video.play().catch(() => {}); });
+          hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => { hideLoading(); video.play().catch(() => {}); });
           hlsPlayer.on(Hls.Events.ERROR, (ev, data) => {
             if (!data.fatal) return;
             if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
               const code = (data.response && data.response.code) || 0;
               // 403/401/530 多为源站反盗链/拉黑，重试无效，直接切源
               if (code === 403 || code === 401 || code === 530 || code === 0) {
-                clearLoadTimeout(); handleSourceFail(idx);
+                handleSourceFail(idx);
               } else {
                 hlsPlayer.startLoad();
               }
             } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
               hlsPlayer.recoverMediaError();
             } else {
-              clearLoadTimeout(); handleSourceFail(idx);
+              handleSourceFail(idx);
             }
           });
         } else {
-          clearLoadTimeout(); handleSourceFail(idx);
+          handleSourceFail(idx);
         }
       } else {
         video.src = url;
-        video.onerror = () => { clearLoadTimeout(); video.onerror = null; handleSourceFail(idx); };
-        video.onloadeddata = () => { clearLoadTimeout(); video.onerror = null; };
+        video.onerror = () => { video.onerror = null; handleSourceFail(idx); };
+        video.onloadeddata = () => { video.onerror = null; hideLoading(); };
         video.play().catch(() => {});
       }
       startProgressWatch();
@@ -1495,6 +1531,7 @@ __DATA_SCRIPTS__
       const isResolver = idx >= currentSources.length;
       if (!isResolver && currentSources[idx]) currentSources[idx]._failed = true;
       renderSources();
+      clearLoadTimeout();
 
       // 尝试下一个未失败的原始源：优先跳过预检已判定失效的线路，减少无谓等待
       const trySource = () => {
@@ -1530,7 +1567,8 @@ __DATA_SCRIPTS__
         if (trySource()) { showToast('线路不可用，已切换'); return; }
         if (tryResolver()) { showToast('直连源不可用，已切到中转线路'); return; }
       }
-      showToast('该影片暂无法在页面内播放，请点「浏览器打开」');
+      // 全部失败后保留遮罩提示，用户可手动切换或点浏览器打开
+      showLoading('当前线路均无法播放<br><span style="font-size:12px;color:#aab">可手动切换其他线路，或点「浏览器打开」</span>');
     }
 
     function pvSeek(t) {
@@ -1555,9 +1593,10 @@ __DATA_SCRIPTS__
       const video = $('pvVideo');
       video.pause(); video.removeAttribute('src'); video.load();
       $('playerView').classList.remove('show');
-      document.body.style.overflow = '';
       hideLoading();
       if (pvProgressTimer) { clearInterval(pvProgressTimer); pvProgressTimer = null; }
+      // 退出全屏（若用户在全屏模式下关闭播放器）
+      if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen();
     }
 
     // 播放视图内的键盘快捷键（避免在 video 原生控件聚焦时与其冲突）
@@ -1572,16 +1611,20 @@ __DATA_SCRIPTS__
         return;
       }
       if (!$('playerView').classList.contains('show')) return;
-      if (document.activeElement && document.activeElement.tagName === 'VIDEO') return;
       const v = $('pvVideo');
-      if (e.key === 'Escape') { closePlayer(); }
+      // 内嵌播放器：Esc 关闭播放器；空格/F/方向键控制播放（video 聚焦时由其原生处理）
+      if (document.activeElement && document.activeElement.tagName === 'VIDEO') {
+        if (e.key === 'Escape') { e.preventDefault(); closePlayer(); }
+        return;
+      }
+      if (e.key === 'Escape') { e.preventDefault(); closePlayer(); }
       else if (e.key === ' ') { e.preventDefault(); if (v.paused) v.play().catch(() => {}); else v.pause(); }
       else if (e.key === 'ArrowRight') { pvSeek(v.currentTime + 10); }
       else if (e.key === 'ArrowLeft') { pvSeek(v.currentTime - 10); }
       else if (e.key === 'f' || e.key === 'F') { toggleFullscreen(); }
     });
 
-    $('pvBack').onclick = closePlayer;
+    $('pvClose').onclick = closePlayer;
     $('pvExternal').onclick = openExternal;
     $('pvCopy').onclick = copyCurrent;
 
@@ -1640,9 +1683,8 @@ __DATA_SCRIPTS__
         card.target = '_blank';
         card.onclick = e => {
           e.preventDefault();
-          // dmhyy 式：点卡片先进入详情页（海报/元信息/简介/线路），
-          // 详情页再点「立即播放」进入播放器。直播频道没有详情页，保持直接播放。
-          openDetail(it, currentCat);
+          // dmhyy 式：点卡片直接弹出播放器（内嵌页面中间）播最佳线路
+          openPlayer(it, currentCat);
         };
         const meta = [it.region, it.year, it.quality].filter(Boolean).join(' · ');
         card.innerHTML = `
@@ -1660,10 +1702,19 @@ __DATA_SCRIPTS__
           </div>
         `;
         grid.appendChild(card);
+        // 详情页入口：卡片右上角显示「详情」小按钮，点击不进播放
+        const infoBtn = document.createElement('button');
+        infoBtn.className = 'card-info-btn';
+        infoBtn.textContent = '详情';
+        infoBtn.title = '查看简介与线路';
+        infoBtn.onclick = e => { e.preventDefault(); e.stopPropagation(); openDetail(it, currentCat); };
+        const posterEl = card.querySelector('.poster');
+        posterEl.appendChild(infoBtn);
+        posterEl.style.position = 'relative';
         // 续播标记：本地存过播放进度则显示「续」徽标 + 进度条
         const cp = cardProgress(currentCat + '|' + it.name + '|' + (it.year || ''));
         if (cp.t > 5) {
-          const poster = card.querySelector('.poster');
+          const poster = posterEl;
           const badge = document.createElement('div');
           badge.className = 'continue-badge';
           badge.textContent = '续';
@@ -1824,7 +1875,7 @@ __DATA_SCRIPTS__
           card.innerHTML = hcardHtml(e.it, ranked ? (i + 1) : 0);
           const img = card.querySelector('.hcard-poster img');
           if (img) img.onerror = function () { this.style.visibility = 'hidden'; };
-          card.onclick = () => openDetail(e.it, e.cat);
+          card.onclick = () => openPlayer(e.it, e.cat);
           row.appendChild(card);
         });
         sec.appendChild(row);
@@ -1859,6 +1910,7 @@ __DATA_SCRIPTS__
       $('regionFilterSec').style.display = (isLive || isHome) ? 'none' : '';
       $('mediaFiltersYear').style.display = (isLive || isHome) ? 'none' : '';
       $('liveFilterSec').style.display = isLive ? '' : 'none';
+      $('playerView').style.display = isHome ? 'none' : '';
       $('sectionBar').style.display = isHome ? 'none' : '';
       $('grid').style.display = isHome ? 'none' : '';
       $('homeView').style.display = isHome ? 'block' : 'none';
