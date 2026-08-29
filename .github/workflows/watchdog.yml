@@ -1,0 +1,26 @@
+name: 采集看门狗(自愈)
+
+# 跑在 GitHub 云端，与用户电脑开关机无关：每小时检查一次爱奇艺/魔都回填采集任务，
+# 发现失败/卡死自动重新 dispatch（带重试上限），连续失败才开 Issue 提醒。
+# 两个源都成功后自动禁用自身，避免无限空跑。
+on:
+  schedule:
+    - cron: '0 * * * *'        # 每小时（UTC）检查一次
+  workflow_dispatch: {}        # 可手动 Run workflow 立即测一次
+
+permissions:
+  contents: read    # actions/checkout 克隆仓库所需
+  actions: write    # 取消卡死 run / 重新 dispatch / 自动禁用自身
+  issues: write     # 超限时开 Issue 提醒
+
+jobs:
+  watchdog:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 检查并自愈采集任务
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 .github/watchdog_check.py
