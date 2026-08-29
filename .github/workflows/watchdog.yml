@@ -9,7 +9,7 @@ on:
   workflow_dispatch: {}        # 可手动 Run workflow 立即测一次
 
 permissions:
-  contents: read    # actions/checkout 克隆仓库所需
+  contents: write   # actions/checkout 克隆仓库 + 提交看门狗状态文件
   actions: write    # 取消卡死 run / 重新 dispatch / 自动禁用自身
   issues: write     # 超限时开 Issue 提醒
 
