@@ -534,7 +534,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     .btn-primary { background: var(--accent); color: #fff; }
     .btn-ghost { background: var(--bg); color: var(--text); }
 
-    /* ===== 内嵌式播放视图（dmhyy 风格：播放器嵌入页面中间 + 换源 + 续播） ===== */
+    /* ===== 内嵌式播放视图（dmhyy 风格：播放器嵌入页面中间 + 线路放下方 + 红绿灯） ===== */
     .player-view {
       display: none;
       flex-direction: column;
@@ -546,46 +546,49 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       border: 1px solid var(--border);
     }
     .player-view.show { display: flex; }
-    .player-view.sticky .pv-top {
-      position: sticky; top: 0; z-index: 5;
-    }
     .pv-top {
       flex: 0 0 auto;
       display: flex;
       align-items: center;
       gap: 12px;
-      padding: 10px 14px;
+      padding: 12px 16px;
       background: rgba(16,19,24,0.97);
       border-bottom: 1px solid var(--border);
     }
-    .pv-title {
+    .pv-title-wrap {
       flex: 1; min-width: 0;
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .pv-title {
       font-size: 15px; font-weight: 600;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
-    .pv-actions { flex: 0 0 auto; display: flex; gap: 8px; }
-    .pv-act {
-      padding: 6px 13px; border-radius: 14px; border: 1px solid var(--border);
-      background: var(--card); color: var(--text); font-size: 13px; cursor: pointer;
+    .pv-line {
+      font-size: 12px; color: var(--text-secondary);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
-    .pv-act.primary { background: var(--accent); color: #fff; border-color: transparent; }
-    .pv-act:active { transform: scale(0.96); }
-    .pv-body {
-      flex: 1 1 auto;
-      display: flex;
-      min-height: 0;
+    .pv-close {
+      flex: 0 0 auto;
+      width: 32px; height: 32px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 50%; border: 1px solid var(--border);
+      background: var(--card); color: var(--text);
+      font-size: 20px; line-height: 1; cursor: pointer;
     }
+    .pv-close:active { transform: scale(0.96); }
     .pv-stage {
-      flex: 1 1 auto;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: #000;
-      min-width: 0;
       position: relative;
+      width: 100%;
+      background: #000;
       aspect-ratio: 16 / 9;
+      max-height: min(70vh, 720px);
+      overflow: hidden;
     }
-    .pv-video { width: 100%; height: 100%; background: #000; }
+    .pv-video {
+      width: 100%; height: 100%;
+      display: block; background: #000;
+      object-fit: contain;
+    }
     .pv-resume {
       position: absolute;
       left: 50%; bottom: 18px; transform: translateX(-50%);
@@ -624,29 +627,28 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       max-width: 86%; padding: 0 12px;
     }
     @keyframes pv-spin { to { transform: rotate(360deg); } }
-    .pv-side {
-      flex: 0 0 340px;
-      background: var(--bg);
-      border-left: 1px solid var(--border);
-      overflow-y: auto;
+    .pv-info {
+      flex: 0 0 auto;
       padding: 16px;
+      background: var(--bg);
+      border-top: 1px solid var(--border);
     }
-    .pv-meta { font-size: 13px; color: var(--text-secondary); margin: 0 0 18px; line-height: 1.7; }
+    .pv-meta { font-size: 13px; color: var(--text-secondary); margin: 0 0 12px; line-height: 1.7; }
     .pv-desc {
       font-size: 12.5px; line-height: 1.8; color: var(--text-secondary);
-      margin: 0 0 18px; max-height: 6.2em; overflow: hidden;
+      margin: 0 0 16px; max-height: 6.2em; overflow: hidden;
     }
     .pv-desc:empty { display: none; }
     .pv-section-title {
       font-size: 12px; font-weight: 700; color: var(--text-secondary);
       text-transform: uppercase; letter-spacing: .6px; margin: 0 0 10px;
     }
-    .pv-sources { display: flex; flex-direction: column; gap: 8px; }
+    .pv-sources { display: flex; flex-wrap: wrap; gap: 10px; }
     .pv-src {
-      display: flex; align-items: center; gap: 10px;
-      padding: 11px 13px; border-radius: 12px;
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 14px; border-radius: 12px;
       background: var(--card); border: 1px solid var(--border);
-      color: var(--text); font-size: 14px; cursor: pointer; text-align: left;
+      color: var(--text); font-size: 13px; cursor: pointer; text-align: left;
       transition: border-color .15s, background .15s;
     }
     .pv-src:hover { border-color: var(--accent); }
@@ -670,18 +672,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     .pv-src.dead { opacity: .45; }
     .pv-src.dead .dot, .pv-src.dead .dot.ok, .pv-src.dead .dot.bad { background: #ff4757 !important; box-shadow: 0 0 6px rgba(255,71,87,0.55); }
     .pv-src.dead .label::after { content: ' · 已失效'; font-size: 11px; color: var(--text-secondary); }
-    @media (max-width: 860px) {
-      .pv-body { flex-direction: column; }
-      .pv-side { flex: 0 0 auto; border-left: none; border-top: 1px solid var(--border); max-height: 280px; }
-    }
-    @media (min-width: 900px) {
-      .player-view { flex-direction: row; flex-wrap: wrap; }
-      .player-view .pv-top { width: 100%; }
-      .player-view .pv-body { flex: 1; min-width: 0; }
-      .player-view .pv-side { max-height: calc((100vw - 32px) * 9 / 16); }
-    }
-    @media (min-width: 1200px) {
-      .player-view .pv-side { max-height: 506px; }
+    @media (max-width: 640px) {
+      .pv-src { padding: 9px 12px; font-size: 12.5px; }
+      .pv-stage { max-height: 56vw; }
     }
     .detail-view {
       position: fixed;
@@ -808,30 +801,27 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     </div>
     <div class="player-view" id="playerView">
       <div class="pv-top">
-        <div class="pv-title" id="pvTitle"></div>
-        <div class="pv-actions">
-          <button class="pv-act" id="pvCopy">复制链接</button>
-          <button class="pv-act primary" id="pvExternal">浏览器打开</button>
-          <button class="pv-act" id="pvClose" title="关闭播放器">&times;</button>
+        <div class="pv-title-wrap">
+          <div class="pv-title" id="pvTitle"></div>
+          <div class="pv-line" id="pvLine">请选择播放源</div>
+        </div>
+        <button class="pv-close" id="pvClose" title="关闭播放器">&times;</button>
+      </div>
+      <div class="pv-stage" id="pvStage">
+        <video class="pv-video" id="pvVideo" controls playsinline referrerpolicy="no-referrer"></video>
+        <button class="pv-resume" id="pvResume"></button>
+        <div class="pv-progress-bar" id="pvProgressBar"></div>
+        <div class="pv-hint" id="pvHint"></div>
+        <div class="pv-loading" id="pvLoading">
+          <div class="pv-spinner"></div>
+          <div class="pv-loading-text" id="pvLoadingText"></div>
         </div>
       </div>
-      <div class="pv-body">
-        <div class="pv-stage" id="pvStage">
-          <video class="pv-video" id="pvVideo" controls playsinline referrerpolicy="no-referrer"></video>
-          <button class="pv-resume" id="pvResume"></button>
-          <div class="pv-progress-bar" id="pvProgressBar"></div>
-          <div class="pv-hint" id="pvHint"></div>
-          <div class="pv-loading" id="pvLoading">
-            <div class="pv-spinner"></div>
-            <div class="pv-loading-text" id="pvLoadingText"></div>
-          </div>
-        </div>
-        <div class="pv-side" id="pvSide">
-          <div class="pv-meta" id="pvMeta"></div>
-          <div class="pv-desc" id="pvDesc"></div>
-          <div class="pv-section-title" id="pvSrcTitle">播放源</div>
-          <div class="pv-sources" id="pvSources"></div>
-        </div>
+      <div class="pv-info" id="pvInfo">
+        <div class="pv-meta" id="pvMeta"></div>
+        <div class="pv-desc" id="pvDesc"></div>
+        <div class="pv-section-title" id="pvSrcTitle">播放源</div>
+        <div class="pv-sources" id="pvSources"></div>
       </div>
     </div>
 
@@ -1278,6 +1268,7 @@ __DATA_SCRIPTS__
         currentSourceIdx = (cat === 'live') ? 0 : 0;
       }
       $('pvTitle').textContent = item.name || '播放';
+      $('pvLine').textContent = '正在初始化播放源…';
       const meta = [item.region, item.year, item.quality, item.media_type]
         .filter(Boolean).join(' · ');
       $('pvMeta').textContent = meta || (cat === 'live' ? '直播频道' : '');
@@ -1389,6 +1380,21 @@ __DATA_SCRIPTS__
         };
         box.appendChild(btn);
       });
+      updatePvLine();
+    }
+
+    function updatePvLine() {
+      const resolverList = (window.RESOLVER_LINES || []).filter(r => r && r.url);
+      let text = '';
+      if (currentSourceIdx >= currentSources.length) {
+        const r = resolverList[currentSourceIdx - currentSources.length];
+        text = r ? (r.name || '解析线路') : '解析线路';
+      } else {
+        const s = currentSources[currentSourceIdx];
+        const q = (currentDetail && currentDetail.item && currentDetail.item.quality) ? currentDetail.item.quality : '';
+        text = (s ? (s.src || ('线路' + (currentSourceIdx + 1))) : '正在加载…') + (q ? ' · ' + q : '');
+      }
+      $('pvLine').textContent = text;
     }
 
     function buildResolverUrl(r, originalUrl) {
@@ -1567,8 +1573,8 @@ __DATA_SCRIPTS__
         if (trySource()) { showToast('线路不可用，已切换'); return; }
         if (tryResolver()) { showToast('直连源不可用，已切到中转线路'); return; }
       }
-      // 全部失败后保留遮罩提示，用户可手动切换或点浏览器打开
-      showLoading('当前线路均无法播放<br><span style="font-size:12px;color:#aab">可手动切换其他线路，或点「浏览器打开」</span>');
+      // 全部失败后保留遮罩提示，提示用户手动切换其他线路
+      showLoading('当前线路均无法播放<br><span style="font-size:12px;color:#aab">请手动切换下方其他线路</span>');
     }
 
     function pvSeek(t) {
@@ -1581,10 +1587,6 @@ __DATA_SCRIPTS__
       if (!document.fullscreenElement) { if (v.requestFullscreen) v.requestFullscreen(); }
       else { if (document.exitFullscreen) document.exitFullscreen(); }
     }
-
-    function openExternal() { if (currentUrl) window.open(currentUrl, '_blank'); }
-
-    function copyCurrent() { if (currentUrl) copyToClipboard(currentUrl); }
 
     function closePlayer() {
       saveProgress();
@@ -1625,8 +1627,6 @@ __DATA_SCRIPTS__
     });
 
     $('pvClose').onclick = closePlayer;
-    $('pvExternal').onclick = openExternal;
-    $('pvCopy').onclick = copyCurrent;
 
     $('dvBack').onclick = closeDetail;
     $('dvPlay').onclick = function () {
