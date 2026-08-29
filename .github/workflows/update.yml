@@ -208,6 +208,25 @@ jobs:
             Cache-Control: max-age=0, must-revalidate
           EOF
 
+      - name: 提交数据库变更（供下次增量采集去重）
+        # ⚠️ 关键顺序修复：此前此步骤在「部署」之后，一旦部署失败(如 25MiB 超限)提交就不执行，
+        # 采集到的数据全部丢失(白采)。现改为「采集+生成后立即提交，最后才部署」——
+        # 即便部署出问题，数据已安全落库 main，下次重跑只需续采。
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/media.db data/live_logos/ data/host_health.json
+          if git diff --cached --quiet; then
+            echo "数据库无变化，跳过提交"
+          else
+            git commit -m "chore: 采集更新 $(date +%F)"
+            # 串行化(concurrency)保证 checkout 即最新；拉取后快进合并再推送，杜绝 non-fast-forward 失败。
+            # 极端情况下（与手动 dispatch 短暂重叠导致分叉）回退到 force-with-lease，仅覆盖生成的 media.db。
+            git fetch origin main
+            git merge origin/main --ff-only 2>/dev/null || true
+            git push origin HEAD:main 2>/dev/null || git push --force-with-lease origin HEAD:main
+          fi
+
       - name: 部署到 Cloudflare Pages（裸域名 qinjin.pages.dev = 途播入口，由 main 分支提供）
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -225,19 +244,3 @@ jobs:
         run: |
           python share/build.py
           npx --yes wrangler@4 pages deploy share/dist --project-name=qs-agcl2 --branch=main
-
-      - name: 提交数据库变更（供下次增量采集去重）
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/media.db data/live_logos/ data/host_health.json
-          if git diff --cached --quiet; then
-            echo "数据库无变化，跳过提交"
-          else
-            git commit -m "chore: 每日采集更新 $(date +%F)"
-            # 串行化(concurrency)保证 checkout 即最新；拉取后快进合并再推送，杜绝 non-fast-forward 失败。
-            # 极端情况下（与手动 dispatch 短暂重叠导致分叉）回退到 force-with-lease，仅覆盖生成的 media.db。
-            git fetch origin main
-            git merge origin/main --ff-only 2>/dev/null || true
-            git push origin HEAD:main 2>/dev/null || git push --force-with-lease origin HEAD:main
-          fi
