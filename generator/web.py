@@ -1474,21 +1474,21 @@ __DATA_SCRIPTS__
       const video = $('pvVideo');
       // 缓冲/可播事件：缓冲时显示遮罩，开始播放即隐藏（断流/拖动 seek 也会触发）
       video.onwaiting = () => showLoading('视频缓冲中…');
-      video.onplaying = () => hideLoading();
-      video.oncanplay = () => hideLoading();
+      video.onplaying = () => { hideLoading(); clearLoadTimeout(); };
+      video.oncanplay = () => { hideLoading(); clearLoadTimeout(); };
       video.onpause = () => { if (!video.seeking) hideLoading(); };
       startLoadTimeout(idx);
       if (isHls(url)) {
         if (video.canPlayType('application/vnd.apple.mpegurl')) {
           video.src = url;
           video.onerror = () => { video.onerror = null; handleSourceFail(idx); };
-          video.onloadeddata = () => { video.onerror = null; hideLoading(); };
+          video.onloadeddata = () => { video.onerror = null; hideLoading(); clearLoadTimeout(); };
           video.play().catch(() => {});
         } else if (window.Hls && Hls.isSupported()) {
           hlsPlayer = new Hls({ maxBufferLength: 30, enableWorker: false });
           hlsPlayer.loadSource(url);
           hlsPlayer.attachMedia(video);
-          hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => { hideLoading(); video.play().catch(() => {}); });
+          hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => { hideLoading(); clearLoadTimeout(); video.play().catch(() => {}); });
           hlsPlayer.on(Hls.Events.ERROR, (ev, data) => {
             if (!data.fatal) return;
             if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
@@ -1511,7 +1511,7 @@ __DATA_SCRIPTS__
       } else {
         video.src = url;
         video.onerror = () => { video.onerror = null; handleSourceFail(idx); };
-        video.onloadeddata = () => { video.onerror = null; hideLoading(); };
+        video.onloadeddata = () => { video.onerror = null; hideLoading(); clearLoadTimeout(); };
         video.play().catch(() => {});
       }
       startProgressWatch();
@@ -1654,9 +1654,9 @@ __DATA_SCRIPTS__
       }
     }
 
-    function showToast() {
+    function showToast(msg) {
       const t = $('toast');
-      t.textContent = '播放链接已复制';
+      t.textContent = msg || '播放链接已复制';
       t.classList.add('show');
       setTimeout(() => t.classList.remove('show'), 2000);
     }
