@@ -3,9 +3,9 @@
 """Self-healing watchdog for m3u-library backfill collection runs.
 
 Runs on GitHub's servers (watchdog.yml, hourly). Tracks each backfill source
-(爱奇艺 / 魔都) via a GitHub repo variable (WATCHDOG_STATE) holding the run id,
-status and failure count -- this avoids depending on the (often null) workflow
-`inputs` field. Behaviour per source:
+(爱奇艺 / 魔都) via a committed state file (data/watchdog_state.json) holding the
+run id, status and failure count -- this avoids depending on the (often null)
+workflow `inputs` field. Behaviour per source:
   - success            -> done
   - in_progress/queued -> wait (unless stuck > STUCK_HOURS, then cancel+redispatch)
   - failed/cancelled   -> redispatch (preserving last inputs), up to MAX_FAILS
@@ -15,6 +15,7 @@ When both sources succeed, the watchdog disables itself.
 import os
 import json
 import time
+import subprocess
 import urllib.request
 import urllib.error
 from datetime import datetime, timezone
@@ -25,7 +26,7 @@ TOKEN = os.environ["GITHUB_TOKEN"]
 API = "https://api.github.com"
 SOURCES = ["爱奇艺", "魔都"]
 SEED = {"爱奇艺": "33235916715", "魔都": "33235968987"}
-STATE_VAR = "WATCHDOG_STATE"
+STATE_FILE = "data/watchdog_state.json"
 MAX_FAILS = 3
 STUCK_HOURS = 8
 # default redispatch params (chunked full to stay under the 6h job limit)
@@ -56,23 +57,11 @@ def api(path, method="GET", data=None):
         raise
 
 
-def get_var(name):
-    d = api("/repos/%s/actions/variables/%s" % (REPO, name))
-    return d["value"] if d else None
-
-
-def set_var(name, value):
-    body = {"name": name, "value": value}
-    if api("/repos/%s/actions/variables/%s" % (REPO, name), method="PATCH", data=body) is None:
-        # 404 -> create
-        api("/repos/%s/actions/variables" % REPO, method="POST", data=body)
-
-
 def load_state():
-    raw = get_var(STATE_VAR)
-    if raw:
+    if os.path.exists(STATE_FILE):
         try:
-            return json.loads(raw)
+            with open(STATE_FILE, encoding="utf-8") as f:
+                return json.load(f)
         except Exception:
             pass
     # seed from known run ids, reading their current status
@@ -90,7 +79,23 @@ def load_state():
 
 
 def save_state(state):
-    set_var(STATE_VAR, json.dumps(state, ensure_ascii=False))
+    with open(STATE_FILE, "w", encoding="utf-8") as f:
+        json.dump(state, f, ensure_ascii=False, indent=2)
+    subprocess.run(["git", "config", "user.name", "github-actions[bot]"], check=True)
+    subprocess.run(["git", "config", "user.email",
+                    "41898282+github-actions[bot]@users.noreply.github.com"], check=True)
+    subprocess.run(["git", "add", STATE_FILE], check=True)
+    if subprocess.run(["git", "diff", "--cached", "--quiet"]).returncode != 0:
+        subprocess.run(["git", "commit", "-m", "chore(watchdog): update state"], check=True)
+        for _ in range(3):
+            try:
+                subprocess.run(["git", "pull", "--rebase", "origin", "main"], check=True)
+                subprocess.run(["git", "push", "origin", "HEAD:main"], check=True)
+                print("state committed + pushed")
+                return
+            except subprocess.CalledProcessError:
+                time.sleep(5)
+        print("WARN: failed to push state (will retry next run)")
 
 
 def run_status(run_id):
@@ -148,16 +153,8 @@ def open_issue(title, body):
 
 def disable_self():
     try:
-        wfs = api("/repos/%s/actions/workflows" % REPO)["workflows"]
-        wid = next(
-            (w["id"] for w in wfs if w.get("path") == ".github/workflows/watchdog.yml"),
-            None,
-        )
-        if wid:
-            api("/repos/%s/actions/workflows/%s/disable" % (REPO, wid), method="POST")
-            print("watchdog disabled (both sources succeeded)")
-        else:
-            print("watchdog id not found, skip disable")
+        api("/repos/%s/actions/workflows/watchdog.yml/disable" % REPO, method="POST")
+        print("watchdog disabled (both sources succeeded)")
     except Exception as e:
         print("disable_self failed:", e)
 
@@ -186,18 +183,19 @@ def main():
             print("  -> OK")
             continue
         if status in ("queued", "in_progress", "pending", "requested", "waiting"):
-            if status == "in_progress" and age_hours(
-                api("/repos/%s/actions/runs/%s" % (REPO, rid))["updated_at"]
-            ) > STUCK_HOURS:
-                print("  -> STUCK (>%sh), cancel + redispatch" % STUCK_HOURS)
-                cancel(rid)
-                new_id = redispatch(st.get("last_inputs") or dict(DEFAULT_INPUTS, SOURCES=src))
-                if new_id:
-                    st["run_id"] = new_id
-                st["status"] = "running"
-            else:
-                print("  -> still running, wait")
-                all_success = False
+            if status == "in_progress":
+                upd = api("/repos/%s/actions/runs/%s" % (REPO, rid))
+                if upd and age_hours(upd.get("updated_at", "")) > STUCK_HOURS:
+                    print("  -> STUCK (>%sh), cancel + redispatch" % STUCK_HOURS)
+                    cancel(rid)
+                    new_id = redispatch(st.get("last_inputs") or dict(DEFAULT_INPUTS, SOURCES=src))
+                    if new_id:
+                        st["run_id"] = new_id
+                    st["status"] = "running"
+                    all_success = False
+                    continue
+            print("  -> still running, wait")
+            all_success = False
             continue
         # terminal non-success
         st["fails"] = st.get("fails", 0) + 1
