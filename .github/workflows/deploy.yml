@@ -57,6 +57,12 @@ jobs:
           python -m pip install -q pillow
           python scripts/generate_covers.py
 
+      - name: 生成直连分流规则（来自 media.db，自动覆盖新 CDN 子域）
+        # 手机开 VPN 访问 qinjin.pages.dev 后端时，让国内视频 CDN 走直连。
+        # 规则从 media.db 现抽现生成，源站换子域也能自动命中，不再手写维护。
+        run: |
+          python scripts/gen_direct_rules.py
+
       - name: 递增 DATA_VERSION（避免客户端/途播缓存旧数据）
         run: |
           VER="$(date +%Y%m%d%H)"

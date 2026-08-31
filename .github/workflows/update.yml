@@ -143,6 +143,12 @@ jobs:
           python -m pip install -q pillow
           python scripts/generate_covers.py
 
+      - name: 生成直连分流规则（来自 media.db，订阅自动更新）
+        # 手机开 VPN 访问后端时让国内视频 CDN 直连；规则随采集数据每日刷新并提交，
+        # Shadowrocket/Clash 订阅此文件即可自动获得最新源站域名。
+        run: |
+          python scripts/gen_direct_rules.py
+
       - name: 递增 DATA_VERSION（避免客户端/途播缓存旧数据）
         # worker 用 DATA_VERSION 做缓存键与查询参数；每次部署换新版，强制客户端拉取最新片源。
         run: |
@@ -219,7 +225,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/media.db data/live_logos/ data/host_health.json
+          git add data/media.db data/live_logos/ data/host_health.json scripts/shadowrocket_direct_rules.list scripts/direct_rules_clash.yaml
           if git diff --cached --quiet; then
             echo "数据库无变化，跳过提交"
           else
