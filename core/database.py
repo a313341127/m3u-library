@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS resources (
     source        TEXT DEFAULT 'manual',      -- 来源: manual=手动, 其他=采集器注册名
     line_name     TEXT DEFAULT '',            -- 播放线路名（文采/暴风/最大/量子...）
     raw_type_name TEXT DEFAULT '',            -- 采集站原始分类名（用于排查分类错误）
+    episodes      TEXT DEFAULT '',            -- 多集选集 JSON [{label, url}]
     updated_at    TEXT NOT NULL,              -- 更新时间
     created_at    TEXT NOT NULL               -- 创建时间
 );
@@ -43,7 +44,7 @@ CREATE INDEX IF NOT EXISTS idx_resources_year       ON resources(year);
 # update_resource 允许更新的字段白名单
 UPDATEABLE_FIELDS = {"name", "category", "media_type", "region", "year",
                      "cover", "description", "url", "quality", "source",
-                     "line_name", "raw_type_name", "hits", "score"}
+                     "line_name", "raw_type_name", "hits", "score", "episodes"}
 
 
 class Database:
@@ -79,6 +80,8 @@ class Database:
             conn.execute("ALTER TABLE resources ADD COLUMN score REAL DEFAULT 0")
         if "line_name" not in cols:
             conn.execute("ALTER TABLE resources ADD COLUMN line_name TEXT DEFAULT ''")
+        if "episodes" not in cols:
+            conn.execute("ALTER TABLE resources ADD COLUMN episodes TEXT DEFAULT ''")
 
     @staticmethod
     def _now() -> str:
@@ -91,7 +94,7 @@ class Database:
                      cover: str = "", description: str = "", url: str = "",
                      quality: str = "", source: str = "manual",
                      line_name: str = "", raw_type_name: str = "", hits: int = 0,
-                     score: float = 0.0) -> Optional[int]:
+                     score: float = 0.0, episodes: Optional[str] = None) -> Optional[int]:
         """新增资源，返回新 id；重复（同分类+同名+同地址）返回 None。"""
         now = self._now()
         with self._connect() as conn:
@@ -105,10 +108,11 @@ class Database:
                 """INSERT INTO resources
                    (name, category, media_type, region, year, cover,
                     description, url, quality, source, line_name, raw_type_name,
-                    hits, score, updated_at, created_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    episodes, hits, score, updated_at, created_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (name, category, media_type, region, year, cover, description,
-                 url, quality, source, line_name, raw_type_name, hits, score, now, now),
+                 url, quality, source, line_name, raw_type_name,
+                 episodes or '', hits, score, now, now),
             )
             return cur.lastrowid
 

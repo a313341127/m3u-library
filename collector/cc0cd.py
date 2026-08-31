@@ -105,14 +105,14 @@ def extract_quality(text: str) -> str:
     return ""
 
 
-def extract_play_urls(play_url: str, play_from: str) -> List[Tuple[str, str]]:
-    """解析 AppleCMS 多线路播放地址。
+def extract_play_urls(play_url: str, play_from: str) -> List[Tuple[str, List[Dict[str, str]]]]:
+    """解析 AppleCMS 多线路播放地址，保留全部选集。
 
     格式:
       vod_play_from = "文采$$$暴风$$$最大"
       vod_play_url  = "第01集$url1#第02集$url2$$$urlA#urlB$$$..."
 
-    返回 [(line_name, first_url), ...]；每个线路只取第一条 URL。
+    返回 [(line_name, [ {label, url}, ... ]), ...]；每个线路保留全部集。
     若缺少 vod_play_from，则用 线路1/线路2... 兜底命名。
     """
     if not play_url:
@@ -125,20 +125,27 @@ def extract_play_urls(play_url: str, play_from: str) -> List[Tuple[str, str]]:
         if not group:
             continue
         line = line_names[idx].strip() if idx < len(line_names) else f"线路{idx + 1}"
+        episodes: List[Dict[str, str]] = []
         for seg in group.split("#"):
-            if not seg.strip():
+            seg = seg.strip()
+            if not seg:
                 continue
             if "$" in seg:
-                url = seg.split("$", 1)[1].strip()
+                label, url = seg.split("$", 1)
+                label = label.strip()
+                url = url.strip()
             else:
                 url = seg.strip()
+                label = f"第{len(episodes) + 1}集"
             if url.startswith(("http://", "https://")):
-                results.append((line, url))
-                break
+                episodes.append({"label": label or f"第{len(episodes) + 1}集", "url": url})
+        if episodes:
+            results.append((line, episodes))
     # 兜底：实在解析不出时，用正则提取所有 URL 并顺序命名
     if not results:
-        for idx, url in enumerate(_URL_RE.findall(play_url)):
-            results.append((f"线路{idx + 1}", url))
+        episodes = [{"label": f"第{i + 1}集", "url": u} for i, u in enumerate(_URL_RE.findall(play_url))]
+        if episodes:
+            results.append(("线路1", episodes))
     return results
 
 
@@ -472,10 +479,10 @@ class CC0CDCollector(BaseCollector):
             media_type = "纪录片"
 
         name = (v.get("vod_name") or "").strip()
-        line_urls = extract_play_urls(
+        line_eps = extract_play_urls(
             v.get("vod_play_url") or "", v.get("vod_play_from") or ""
         )
-        if not name or not line_urls:
+        if not name or not line_eps:
             return []
         if keyword and keyword not in name and keyword not in desc:
             return []
@@ -504,9 +511,10 @@ class CC0CDCollector(BaseCollector):
         region = norm_region(v.get("vod_area") or "")
         cover = (v.get("vod_pic") or "").strip()
         items = []
-        for line_name, url in line_urls:
-            if not url:
+        for line_name, episodes in line_eps:
+            if not episodes:
                 continue
+            first = episodes[0]
             items.append(ResourceItem(
                 name=name,
                 category=category,
@@ -515,11 +523,12 @@ class CC0CDCollector(BaseCollector):
                 year=year,
                 cover=cover,
                 description=desc,
-                url=url,
+                url=first["url"],
                 quality=quality,
                 raw_type_name=raw_type_name,
                 line_name=line_name,
                 hits=hits,
                 score=score,
+                episodes=episodes,
             ))
         return items

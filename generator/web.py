@@ -647,6 +647,16 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       text-transform: uppercase; letter-spacing: .6px; margin: 0 0 10px;
     }
     .pv-sources { display: flex; flex-wrap: wrap; gap: 10px; }
+    .pv-episodes { display: none; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
+    .pv-episodes.show { display: flex; }
+    .pv-ep {
+      padding: 7px 12px; border-radius: 10px; font-size: 12px;
+      background: var(--card); border: 1px solid var(--border); color: var(--text);
+      cursor: pointer; transition: all .15s; max-width: 120px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .pv-ep:hover { border-color: var(--accent); }
+    .pv-ep.active { background: var(--accent-light); border-color: var(--accent); color: var(--accent); font-weight: 600; }
     .pv-src {
       display: flex; align-items: center; gap: 8px;
       padding: 10px 14px; border-radius: 12px;
@@ -823,6 +833,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       <div class="pv-info" id="pvInfo">
         <div class="pv-meta" id="pvMeta"></div>
         <div class="pv-desc" id="pvDesc"></div>
+        <div class="pv-section-title" id="pvEpTitle" style="display:none">选集</div>
+        <div class="pv-episodes" id="pvEpisodes"></div>
         <div class="pv-section-title" id="pvSrcTitle">播放源</div>
         <div class="pv-sources" id="pvSources"></div>
       </div>
@@ -1056,6 +1068,11 @@ __DATA_SCRIPTS__
     let loadTimer = null;      // 加载网速 timer
     let loadStartTime = 0;     // 开始加载时刻（performance.now）
     let loadBytes = 0;         // 已下载字节（hls.js FRAG_LOADED / performance entries 累加）
+    let currentIsNative = false;   // 当前是否为原生 <video> 直链（非 hls）
+    let nativeTotal = 0;           // 同源探测到的文件总字节（用于估算原生下载网速）
+    let _lastNativeBytes = 0;      // 上一拍估算已下载字节
+    let _lastNativeT = 0;          // 上一拍时间戳
+    let currentEpIdx = 0;          // 当前选中的选集下标
 
     // 是否为 HLS：带 .m3u8/.m3u 或未知短链交给 hls.js；明确的视频文件走原生播放
     function isHls(url) {
@@ -1240,19 +1257,75 @@ __DATA_SCRIPTS__
       stopLoadTimer();
       loadStartTime = performance.now();
       loadBytes = 0;
+      nativeTotal = 0;
+      _lastNativeBytes = 0;
+      _lastNativeT = 0;
+      currentIsNative = false;
+      _loadSeen.clear();
       updateLoadSpeed();
       loadTimer = setInterval(updateLoadSpeed, 300);
     }
+    const _loadSeen = new Set();
+    // 同源探测原生直链文件总大小（绕过跨域 CORS 屏蔽 transferSize 的限制），
+    // 用于「总大小 × 已缓冲比例」估算实时下载网速。
+    function probeNativeSize(url) {
+      try {
+        const u = location.origin + '/proxy?u=' + encodeURIComponent(url);
+        fetch(u, { method: 'GET', headers: { 'Range': 'bytes=0-0' }, referrerPolicy: 'no-referrer' })
+          .then(r => {
+            if (!r.ok && r.status !== 206) return;
+            const cr = r.headers.get('content-range') || '';
+            const m = /[0-9]+\/([0-9]+)/.exec(cr);
+            if (m && parseInt(m[1], 10) > 0) nativeTotal = parseInt(m[1], 10);
+            else {
+              const cl = parseInt(r.headers.get('content-length') || '0', 10);
+              if (cl > 0) nativeTotal = cl;
+            }
+          })
+          .catch(() => {});
+      } catch (e) {}
+    }
     function updateLoadSpeed() {
       const elapsed = Math.max(0.1, (performance.now() - loadStartTime) / 1000);
-      let text = '';
+      // 1) hls.js / 同源 performance entries：直接取真实字节
+      try {
+        performance.getEntriesByType('resource').forEach(e => {
+          const name = e.name || '';
+          if (/\.(m3u8|m3u|ts|mp4|flv|aac|mp3|webm)(\?|$)/i.test(name) && e.transferSize > 0) {
+            const key = name + '|' + e.startTime;
+            if (!_loadSeen.has(key)) { _loadSeen.add(key); loadBytes += e.transferSize; }
+          }
+        });
+      } catch (e) {}
       if (loadBytes > 0) {
         const bps = (loadBytes * 8) / elapsed;
-        text = ' ' + formatBitrate(bps);
-      } else {
-        text = ' ' + elapsed.toFixed(1) + 's';
+        showLoading('加载中… ' + formatBitrate(bps));
+        return;
       }
-      showLoading('加载中…' + text);
+      // 2) 原生跨域 mp4：transferSize 被 CORS 屏蔽，用「总大小(同源探测) × 已缓冲比例」估算实时网速
+      const v = $('pvVideo');
+      if (currentIsNative && nativeTotal > 0 && v && v.duration > 0 && v.buffered && v.buffered.length) {
+        const be = v.buffered.end(v.buffered.length - 1);
+        const frac = Math.max(0, Math.min(1, be / v.duration));
+        const downloaded = frac * nativeTotal;
+        const now = performance.now();
+        const dt = (now - _lastNativeT) / 1000;
+        if (_lastNativeT > 0 && dt > 0.3) {
+          const inst = ((downloaded - _lastNativeBytes) * 8) / dt;
+          _lastNativeBytes = downloaded; _lastNativeT = now;
+          if (inst > 1000 && inst < 2e12) {
+            showLoading('加载中… ' + formatBitrate(inst));
+            return;
+          }
+        } else if (_lastNativeT === 0) {
+          _lastNativeBytes = downloaded; _lastNativeT = now;
+        }
+        // 还没算出瞬时速度，先给个缓冲进度感（不带秒数，避免误导）
+        showLoading('缓冲中… ' + Math.round(frac * 100) + '%');
+        return;
+      }
+      // 3) 兜底：未知大小
+      showLoading('连接中…');
     }
     function formatBitrate(bps) {
       if (bps >= 1e9) return (bps / 1e9).toFixed(2) + ' Gb/s';
@@ -1327,7 +1400,9 @@ __DATA_SCRIPTS__
       $('pvProgressBar').style.width = '0%';
       hideLoading();
       $('playerView').classList.add('show');
+      currentEpIdx = 0;
       renderSources();
+      renderEpisodes();
       // 内嵌播放器：打开时滚动到播放器位置，而不是锁 body 滚动
       setTimeout(() => { $('playerView').scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 30);
 
@@ -1395,7 +1470,7 @@ __DATA_SCRIPTS__
         btn.innerHTML = '<span class="dot ' + dotClass + '"></span><span class="label">'
           + htmlEscape(s.src || ('线路' + (i + 1))) + '</span>';
         btn.onclick = () => {
-          if (i !== currentSourceIdx) { currentSourceIdx = i; currentBaseIdx = i; renderSources(); loadSource(i, false); }
+          if (i !== currentSourceIdx) { currentSourceIdx = i; currentBaseIdx = i; currentEpIdx = 0; renderSources(); loadSource(i, false); }
         };
         box.appendChild(btn);
       });
@@ -1412,11 +1487,55 @@ __DATA_SCRIPTS__
         btn.innerHTML = '<span class="dot ' + dotClass + '"></span><span class="label">'
           + htmlEscape(r.name || ('解析' + (i + 1))) + '</span>';
         btn.onclick = () => {
-          if (idx !== currentSourceIdx) { currentSourceIdx = idx; renderSources(); loadSource(idx, false); }
+          if (idx !== currentSourceIdx) { currentSourceIdx = idx; currentEpIdx = 0; renderSources(); loadSource(idx, false); }
         };
         box.appendChild(btn);
       });
       updatePvLine();
+      renderEpisodes();
+    }
+
+    // 渲染选集（仅当当前线路含多集时显示）。不同线路的选集相互独立。
+    function renderEpisodes() {
+      const box = $('pvEpisodes');
+      const title = $('pvEpTitle');
+      const s = currentSources[currentSourceIdx];
+      const eps = (s && s.episodes) || [];
+      if (!eps || eps.length <= 1) {
+        box.innerHTML = '';
+        box.classList.remove('show');
+        title.style.display = 'none';
+        return;
+      }
+      title.style.display = '';
+      box.classList.add('show');
+      box.innerHTML = '';
+      eps.forEach((ep, i) => {
+        const label = ep.label || ('第' + (i + 1) + '集');
+        const btn = document.createElement('button');
+        btn.className = 'pv-ep' + (i === currentEpIdx ? ' active' : '');
+        btn.textContent = label;
+        btn.title = label;
+        btn.onclick = () => {
+          if (i === currentEpIdx) return;
+          currentEpIdx = i;
+          renderEpisodes();
+          playEpisode(ep.url);
+        };
+        box.appendChild(btn);
+      });
+    }
+
+    // 播放某一集（同线路内切换集数，不重置线路）
+    function playEpisode(epUrl) {
+      const video = $('pvVideo');
+      video.pause(); video.removeAttribute('src'); video.load();
+      if (hlsPlayer) { try { hlsPlayer.destroy(); } catch (e) {} hlsPlayer = null; }
+      $('pvResume').classList.remove('show');
+      $('pvResume').onclick = null;
+      $('pvProgressBar').style.width = '0%';
+      startLoadTimer();
+      playUrl(epUrl, currentSourceIdx, false);
     }
 
     function updatePvLine() {
@@ -1514,10 +1633,13 @@ __DATA_SCRIPTS__
       // 原生播放时通过 performance entries 估算下载速度
       video.onprogress = () => {
         try {
-          const entries = performance.getEntriesByName(video.currentSrc || video.src);
-          let total = 0;
-          entries.forEach(e => { if (e.transferSize > 0) total += e.transferSize; });
-          if (total > loadBytes) loadBytes = total;
+          performance.getEntriesByType('resource').forEach(e => {
+            const name = e.name || '';
+            if (name === (video.currentSrc || video.src) && e.transferSize > 0) {
+              const key = name + '|' + e.startTime;
+              if (!_loadSeen.has(key)) { _loadSeen.add(key); loadBytes += e.transferSize; }
+            }
+          });
         } catch (e) {}
       };
       startLoadTimeout(idx);
@@ -1534,7 +1656,7 @@ __DATA_SCRIPTS__
           hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => { stopLoadTimer(); hideLoading(); clearLoadTimeout(); video.play().catch(() => {}); });
           hlsPlayer.on(Hls.Events.FRAG_LOADED, (ev, data) => {
             if (data && data.stats) {
-              const bytes = data.stats.total || data.stats.loaded || 0;
+              const bytes = data.stats.loaded || data.stats.total || 0;
               if (bytes > 0) loadBytes += bytes;
             }
           });
@@ -1559,6 +1681,8 @@ __DATA_SCRIPTS__
         }
       } else {
         video.src = url;
+        currentIsNative = true;
+        probeNativeSize(url);
         video.onerror = () => { video.onerror = null; handleSourceFail(idx); };
         video.onloadeddata = () => { video.onerror = null; stopLoadTimer(); hideLoading(); clearLoadTimeout(); };
         video.play().catch(() => {});
@@ -1606,7 +1730,7 @@ __DATA_SCRIPTS__
             const s = currentSources[i];
             if (i === idx || s._failed) continue;
             if (pass === 0 && s._probe === false) continue;
-            currentSourceIdx = i; currentBaseIdx = i; renderSources(); loadSource(i, false);
+            currentSourceIdx = i; currentBaseIdx = i; currentEpIdx = 0; renderSources(); loadSource(i, false);
             return true;
           }
         }
@@ -1617,7 +1741,7 @@ __DATA_SCRIPTS__
         for (let j = 0; j < resolverList.length; j++) {
           const ridx = currentSources.length + j;
           if (ridx !== idx) {
-            currentSourceIdx = ridx; currentBaseIdx = 0; renderSources(); loadSource(ridx, false);
+            currentSourceIdx = ridx; currentBaseIdx = 0; currentEpIdx = 0; renderSources(); loadSource(ridx, false);
             return true;
           }
         }
@@ -2029,13 +2153,23 @@ __DATA_SCRIPTS__
 def _item_to_json(it: dict, sources: list = None) -> dict:
     """把数据库条目转成页面需要的轻量字段
 
-    sources: 该片所有播放线路（换源用），形如 [{"src": 源名, "url": 播放地址}, ...]；
+    sources: 该片所有播放线路（换源用），形如 [{"src": 源名, "url": 播放地址, "episodes": [...]}, ...]；
     单线路影片传入空列表即可（播放器自动隐藏换源面板）。
     """
     try:
         score = round(float(it.get("_best_score") or 0), 1)
     except (TypeError, ValueError):
         score = 0.0
+    # 解析多集选集（入库时序列化为 JSON）
+    episodes = []
+    raw_eps = it.get("episodes") or ""
+    if raw_eps:
+        try:
+            eps = json.loads(raw_eps)
+            if isinstance(eps, list) and len(eps) > 1:
+                episodes = eps
+        except Exception:
+            pass
     return {
         "name": it.get("_clean_name") or clean_title(it["name"]),
         "media_type": it.get("media_type") or "",
@@ -2051,6 +2185,7 @@ def _item_to_json(it: dict, sources: list = None) -> dict:
         # 只取日期部分（YYYY-MM-DD）用于「最近更新」排序，比完整时间戳省一半体积
         "updated": (it.get("updated_at") or "")[:10],
         "sources": sources or [],
+        "episodes": episodes,
     }
 
 
@@ -2122,9 +2257,20 @@ def generate_index(output_dir: Path = None) -> Path:
                 play = _health.play_url(url)
                 if play is None:
                     continue
+                # 解析多集选集
+                eps = []
+                raw_eps = it.get("episodes") or ""
+                if raw_eps:
+                    try:
+                        ep_list = json.loads(raw_eps)
+                        if isinstance(ep_list, list) and len(ep_list) > 1:
+                            eps = [{"label": e.get("label", ""), "url": _health.play_url(e.get("url", "")) or e.get("url", "")}
+                                   for e in ep_list if e.get("url")]
+                    except Exception:
+                        pass
                 # _rank 仅用于排序（直连优先、需中转的靠后），落盘前移除
                 lst.append({"src": it.get("line_name") or it.get("source") or ("线路%d" % (len(lst) + 1)),
-                            "url": play, "_rank": _health.rank(url)})
+                            "url": play, "episodes": eps, "_rank": _health.rank(url)})
         for lst in src_map.values():
             lst.sort(key=lambda s: s.get("_rank", 1))
             for s in lst:
