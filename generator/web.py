@@ -1053,8 +1053,9 @@ __DATA_SCRIPTS__
     let loadTimeout = null;
     let loadStartIdx = -1;
     let playerToken = 0;       // 每次开播自增，用于丢弃过期的异步线路检测结果
-    let loadTimer = null;      // 加载秒表 timer（显示“加载中… X.Xs”）
-    let loadTimerSec = 0;
+    let loadTimer = null;      // 加载网速 timer
+    let loadStartTime = 0;     // 开始加载时刻（performance.now）
+    let loadBytes = 0;         // 已下载字节（hls.js FRAG_LOADED / performance entries 累加）
 
     // 是否为 HLS：带 .m3u8/.m3u 或未知短链交给 hls.js；明确的视频文件走原生播放
     function isHls(url) {
@@ -1234,16 +1235,30 @@ __DATA_SCRIPTS__
       $('pvLoading').classList.remove('show');
     }
 
-    // 加载秒表：只显示“加载中… X.Xs”，避免用户对着一堆线路检测信息发懵
+    // 加载网速：实时显示下载速度（Mb/s），比单纯秒表更直观
     function startLoadTimer() {
       stopLoadTimer();
-      loadTimerSec = 0;
-      updateLoadTimer();
-      loadTimer = setInterval(updateLoadTimer, 100);
+      loadStartTime = performance.now();
+      loadBytes = 0;
+      updateLoadSpeed();
+      loadTimer = setInterval(updateLoadSpeed, 300);
     }
-    function updateLoadTimer() {
-      loadTimerSec += 0.1;
-      showLoading('加载中… ' + loadTimerSec.toFixed(1) + 's');
+    function updateLoadSpeed() {
+      const elapsed = Math.max(0.1, (performance.now() - loadStartTime) / 1000);
+      let text = '';
+      if (loadBytes > 0) {
+        const bps = (loadBytes * 8) / elapsed;
+        text = ' ' + formatBitrate(bps);
+      } else {
+        text = ' ' + elapsed.toFixed(1) + 's';
+      }
+      showLoading('加载中…' + text);
+    }
+    function formatBitrate(bps) {
+      if (bps >= 1e9) return (bps / 1e9).toFixed(2) + ' Gb/s';
+      if (bps >= 1e6) return (bps / 1e6).toFixed(1) + ' Mb/s';
+      if (bps >= 1e3) return (bps / 1e3).toFixed(1) + ' Kb/s';
+      return bps.toFixed(0) + ' b/s';
     }
     function stopLoadTimer() {
       if (loadTimer) { clearInterval(loadTimer); loadTimer = null; }
@@ -1496,6 +1511,15 @@ __DATA_SCRIPTS__
       video.onplaying = () => { stopLoadTimer(); hideLoading(); clearLoadTimeout(); };
       video.oncanplay = () => { stopLoadTimer(); hideLoading(); clearLoadTimeout(); };
       video.onpause = () => { if (!video.seeking) hideLoading(); };
+      // 原生播放时通过 performance entries 估算下载速度
+      video.onprogress = () => {
+        try {
+          const entries = performance.getEntriesByName(video.currentSrc || video.src);
+          let total = 0;
+          entries.forEach(e => { if (e.transferSize > 0) total += e.transferSize; });
+          if (total > loadBytes) loadBytes = total;
+        } catch (e) {}
+      };
       startLoadTimeout(idx);
       if (isHls(url)) {
         if (video.canPlayType('application/vnd.apple.mpegurl')) {
@@ -1508,6 +1532,12 @@ __DATA_SCRIPTS__
           hlsPlayer.loadSource(url);
           hlsPlayer.attachMedia(video);
           hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => { stopLoadTimer(); hideLoading(); clearLoadTimeout(); video.play().catch(() => {}); });
+          hlsPlayer.on(Hls.Events.FRAG_LOADED, (ev, data) => {
+            if (data && data.stats) {
+              const bytes = data.stats.total || data.stats.loaded || 0;
+              if (bytes > 0) loadBytes += bytes;
+            }
+          });
           hlsPlayer.on(Hls.Events.ERROR, (ev, data) => {
             if (!data.fatal) return;
             if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
@@ -1537,14 +1567,24 @@ __DATA_SCRIPTS__
       if (resume) {
         const t = readProgress(currentItemKey);
         if (t > 5) {
-          const btn = $('pvResume');
-          btn.textContent = '继续观看 · ' + fmtTime(t);
-          btn.onclick = () => {
-            if (isFinite(t) && t > 0) $('pvVideo').currentTime = t;
+          let resumed = false;
+          const doResume = () => {
+            if (resumed) return;
+            const v = $('pvVideo');
+            if (!v || !isFinite(v.duration) || v.duration <= 0) return;
+            resumed = true;
+            const btn = $('pvResume');
             btn.classList.remove('show');
-            $('pvVideo').play().catch(() => {});
+            if (v.currentTime < t - 2) v.currentTime = t;
+            v.play().catch(() => {
+              // 移动端浏览器常阻止自动播放， fallback 显示按钮
+              btn.textContent = '继续观看 · ' + fmtTime(t);
+              btn.onclick = () => { v.currentTime = t; btn.classList.remove('show'); v.play().catch(() => {}); };
+              btn.classList.add('show');
+            });
           };
-          btn.classList.add('show');
+          video.addEventListener('loadedmetadata', doResume, { once: true });
+          video.addEventListener('canplay', doResume, { once: true });
         }
       }
     }
@@ -1834,6 +1874,7 @@ __DATA_SCRIPTS__
     }
 
     function renderGridOnly() {
+      initSortGroup(); // 刷新排序按钮高亮状态
       if (currentCat === 'live') {
         renderLiveGrid(sortLive(filterLive()));
       } else {
@@ -1923,6 +1964,25 @@ __DATA_SCRIPTS__
             || (b.hits || 0) - (a.hits || 0)).slice(0, 12).map(it => ({ it: it, cat: c })), c, false);
       });
     }
+
+    // 页面生命周期：切后台/离开页面前保存进度；返回前台/bfcache 恢复时继续播放
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        saveProgress();
+      } else {
+        const v = $('pvVideo');
+        if (v && v.paused && !v.ended && v.currentTime > 0 && $('playerView').classList.contains('show')) {
+          v.play().catch(() => {});
+        }
+      }
+    });
+    window.addEventListener('pagehide', saveProgress);
+    window.addEventListener('beforeunload', saveProgress);
+    window.addEventListener('pageshow', e => {
+      if (!e.persisted) return;
+      const v = $('pvVideo');
+      if (v && $('playerView').classList.contains('show')) v.play().catch(() => {});
+    });
 
     function render() {
       const isLive = currentCat === 'live';
