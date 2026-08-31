@@ -1404,6 +1404,7 @@ __DATA_SCRIPTS__
       $('pvProgressBar').style.width = '0%';
       hideLoading();
       $('playerView').classList.add('show');
+      $('playerView').style.display = '';   // 清掉 render() 在首页设的 inline none，否则 .show 类被覆盖
       // 沉浸播放：只保留顶部导航 + 搜索 + 播放器，隐藏筛选/网格/首页板块
       $('mediaFilters').style.display = 'none';
       $('regionFilterSec').style.display = 'none';
@@ -2105,7 +2106,7 @@ __DATA_SCRIPTS__
           card.innerHTML = hcardHtml(e.it, ranked ? (i + 1) : 0);
           const img = card.querySelector('.hcard-poster img');
           if (img) img.onerror = function () { this.style.visibility = 'hidden'; };
-          card.onclick = () => openPlayer(e.it, e.cat);
+          card.onclick = () => { try { openPlayer(e.it, e.cat); } catch (err) { openDetail(e.it, e.cat); } };
           row.appendChild(card);
         });
         sec.appendChild(row);
