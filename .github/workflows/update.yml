@@ -149,6 +149,11 @@ jobs:
         run: |
           python scripts/gen_direct_rules.py
 
+      - name: 复制直连规则到站点（供 Shadowrocket/Clash 订阅，经 VPN 可达）
+        run: |
+          cp scripts/shadowrocket_direct_rules.list output/
+          cp scripts/direct_rules_clash.yaml output/
+
       - name: 递增 DATA_VERSION（避免客户端/途播缓存旧数据）
         # worker 用 DATA_VERSION 做缓存键与查询参数；每次部署换新版，强制客户端拉取最新片源。
         run: |
@@ -212,6 +217,12 @@ jobs:
             Content-Type: application/vnd.apple.mpegurl
             Cache-Control: max-age=0, must-revalidate
           /live.txt
+            Content-Type: text/plain; charset=utf-8
+            Cache-Control: max-age=0, must-revalidate
+          /shadowrocket_direct_rules.list
+            Content-Type: text/plain; charset=utf-8
+            Cache-Control: max-age=0, must-revalidate
+          /direct_rules_clash.yaml
             Content-Type: text/plain; charset=utf-8
             Cache-Control: max-age=0, must-revalidate
           /index.html
