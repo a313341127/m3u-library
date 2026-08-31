@@ -1073,6 +1073,8 @@ __DATA_SCRIPTS__
     let _lastNativeBytes = 0;      // 上一拍估算已下载字节
     let _lastNativeT = 0;          // 上一拍时间戳
     let currentEpIdx = 0;          // 当前选中的选集下标
+    let hlsStarted = false;        // 本次播放是否已成功起播（用于区分「加载阶段失效」与「播放中瞬时抖动」）
+    let hlsFatalStreak = 0;       // 连续致命错误计数：视频有进度即清零，连续多次才放弃切源
 
     // 是否为 HLS：带 .m3u8/.m3u 或未知短链交给 hls.js；明确的视频文件走原生播放
     function isHls(url) {
@@ -1589,6 +1591,8 @@ __DATA_SCRIPTS__
       $('pvProgressBar').style.width = '0%';
       video.pause(); video.removeAttribute('src'); video.load();
       if (hlsPlayer) { try { hlsPlayer.destroy(); } catch (e) {} hlsPlayer = null; }
+      hlsStarted = false;
+      hlsFatalStreak = 0;
       startLoadTimeout(idx);
 
       if (isResolver && s._resolver && s._resolver.mode === 'json') {
@@ -1627,8 +1631,10 @@ __DATA_SCRIPTS__
       const video = $('pvVideo');
       // 缓冲/可播事件：缓冲时显示遮罩，开始播放即隐藏（断流/拖动 seek 也会触发）
       video.onwaiting = () => { if (!loadTimer) showLoading('视频缓冲中…'); };
-      video.onplaying = () => { stopLoadTimer(); hideLoading(); clearLoadTimeout(); };
-      video.oncanplay = () => { stopLoadTimer(); hideLoading(); clearLoadTimeout(); };
+      video.onplaying = () => { hlsStarted = true; hlsFatalStreak = 0; stopLoadTimer(); hideLoading(); clearLoadTimeout(); };
+      video.oncanplay = () => { hlsStarted = true; stopLoadTimer(); hideLoading(); clearLoadTimeout(); };
+      // 视频一旦有进度，说明链路通畅，清零致命错误连击计数（避免把瞬时抖动累计成失败）
+      video.ontimeupdate = () => { if (video.currentTime > 1) { hlsStarted = true; hlsFatalStreak = 0; } };
       video.onpause = () => { if (!video.seeking) hideLoading(); };
       // 原生播放时通过 performance entries 估算下载速度
       video.onprogress = () => {
@@ -1662,18 +1668,30 @@ __DATA_SCRIPTS__
           });
           hlsPlayer.on(Hls.Events.ERROR, (ev, data) => {
             if (!data.fatal) return;
+            const alreadyPlaying = hlsStarted || (video.currentTime > 1 && !video.paused);
+            const giveup = () => handleSourceFail(idx);
             if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
               const code = (data.response && data.response.code) || 0;
-              // 403/401/530 多为源站反盗链/拉黑，重试无效，直接切源
-              if (code === 403 || code === 401 || code === 530 || code === 0) {
-                handleSourceFail(idx);
-              } else {
-                hlsPlayer.startLoad();
+              // 加载阶段：403/401/530（源码站反盗链/拉黑）或未知(code 0)基本不可恢复，直接切源
+              if (!alreadyPlaying && (code === 403 || code === 401 || code === 530 || code === 0)) {
+                giveup();
+                return;
               }
+              // 已起播：单分片瞬时抖动（CDN 节点轮换/签名过期/超时）hls.js 可自愈，
+              // 连续多次才放弃切源；每次视频有进度都会把 streak 清零。
+              hlsFatalStreak++;
+              if (hlsFatalStreak >= 3) { giveup(); return; }
+              showLoading('网络抖动，自动重试…');
+              try { hlsPlayer.startLoad(); } catch (e) { giveup(); }
             } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-              hlsPlayer.recoverMediaError();
+              hlsFatalStreak++;
+              if (hlsFatalStreak >= 3) { giveup(); return; }
+              try { hlsPlayer.recoverMediaError(); } catch (e) { giveup(); }
             } else {
-              handleSourceFail(idx);
+              // 未知致命错误：先尝试重载，连续多次才切源
+              hlsFatalStreak++;
+              if (hlsFatalStreak >= 3) { giveup(); return; }
+              try { hlsPlayer.startLoad(); } catch (e) { giveup(); }
             }
           });
         } else {
