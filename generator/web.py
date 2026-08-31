@@ -1404,6 +1404,13 @@ __DATA_SCRIPTS__
       $('pvProgressBar').style.width = '0%';
       hideLoading();
       $('playerView').classList.add('show');
+      // 沉浸播放：只保留顶部导航 + 搜索 + 播放器，隐藏筛选/网格/首页板块
+      $('mediaFilters').style.display = 'none';
+      $('regionFilterSec').style.display = 'none';
+      $('mediaFiltersYear').style.display = 'none';
+      $('sectionBar').style.display = 'none';
+      $('grid').style.display = 'none';
+      $('homeView').style.display = 'none';
       currentEpIdx = 0;
       renderSources();
       renderEpisodes();
@@ -1819,6 +1826,8 @@ __DATA_SCRIPTS__
       if (pvProgressTimer) { clearInterval(pvProgressTimer); pvProgressTimer = null; }
       // 退出全屏（若用户在全屏模式下关闭播放器）
       if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen();
+      // 恢复页面主体内容（按当前分类重新渲染筛选/网格）
+      render();
     }
 
     // 播放视图内的键盘快捷键（避免在 video 原生控件聚焦时与其冲突）
@@ -2038,6 +2047,7 @@ __DATA_SCRIPTS__
     }
 
     function switchCat(cat) {
+      closePlayer();  // 播放时切换分类自动关闭播放器并跳转
       currentCat = cat;
       activeFilters = { media_type: '', region: '', year: '' };
       liveFilter = '';
