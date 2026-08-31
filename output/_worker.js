@@ -715,6 +715,16 @@ async function probeRoute(url) {
     || ct.includes("mp4") || ct.includes("video/") || ct.includes("octet-stream");
   const looksStream = /\.(m3u8|m3u|mp4|ts|flv)(\?|$)/i.test(target.pathname);
 
+  // 国内直链 CDN：worker 海外出口常被源站限制，浏览器大陆直连通常可播，
+  // 探测失败时不应直接判死，返回 null（未知）让前端保留为“灰色可试”。
+  const host = target.hostname.toLowerCase();
+  const domesticCdn = looksStream && (
+    host.includes("lzcdn") || host.includes("liangzi") || host.includes("uvjtih")
+    || host.includes("baofeng") || host.includes("fengbao") || host.includes("bfvvs")
+    || host.includes("maotai") || host.includes("mtzy") || host.includes("vodcnd")
+    || host.includes("wgslsw") || host.includes("qncdn") || host.includes("cdnd")
+  );
+
   let last = 0, lastCt = "";
   const seen = new Set();
   for (const ref of strategies) {
@@ -742,6 +752,13 @@ async function probeRoute(url) {
       last = 0; lastCt = "fetch-error";
     }
   }
+
+  // 国内直链 CDN 探测受限：返回 null（未知），避免前端把实际可播源标为“已失效”。
+  if (domesticCdn) {
+    return json({ ok: null, status: last, ct: lastCt, cdn: target.host, hint: "domestic-cdn" }, 200,
+      { "Access-Control-Allow-Origin": "*", "Cache-Control": "private, max-age=120" });
+  }
+
   return json({ ok: false, status: last, ct: lastCt, cdn: target.host }, 200,
     { "Access-Control-Allow-Origin": "*", "Cache-Control": "private, max-age=120" });
 }

@@ -682,9 +682,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     .pv-src.resolver.active { background: rgba(255,159,67,0.14); border-color: #ff9f43; color: #ff9f43; }
     .pv-src.resolver.active .dot { background: #ff9f43; }
     /* 预检判定失效的线路：红色圆点 + 置灰 */
-    .pv-src.dead { opacity: .45; }
-    .pv-src.dead .dot, .pv-src.dead .dot.ok, .pv-src.dead .dot.bad { background: #ff4757 !important; box-shadow: 0 0 6px rgba(255,71,87,0.55); }
-    .pv-src.dead .label::after { content: ' · 已失效'; font-size: 11px; color: var(--text-secondary); }
+    /* 预检失败/未知线路：灰色淡化，但保留可点击；只有真实点播失败才显示“已失效” */
+    .pv-src.dead { opacity: .55; }
+    .pv-src.dead .dot, .pv-src.dead .dot.ok, .pv-src.dead .dot.bad { background: #6c757d !important; box-shadow: none; }
+    .pv-src.failed .dot, .pv-src.failed .dot.ok, .pv-src.failed .dot.bad { background: #ff4757 !important; box-shadow: 0 0 6px rgba(255,71,87,0.55); }
+    .pv-src.failed .label::after { content: ' · 已失效'; font-size: 11px; color: var(--text-secondary); }
     @media (max-width: 640px) {
       .pv-src { padding: 9px 12px; font-size: 12.5px; }
       .pv-stage { max-height: 56vw; }
@@ -1453,9 +1455,13 @@ __DATA_SCRIPTS__
         if (target >= 0 && target < currentSources.length) currentBaseIdx = target;
         renderSources();
         if (okCount === 0 && unknownCount === 0) {
-          // 全部明确不可达：直接报失效，不再让用户空等超时
+          // 全部明确不可达：大概率是 worker 海外出口被国内 CDN 限制，浏览器直连仍可能可播，
+          // 因此不直接判死刑，而是尝试播放默认源；若真播失败再按 handleSourceFail 标红。
           stopLoadTimer();
-          showLoading('当前资源暂不可用<br><span style="font-size:12px;color:#aab">所有线路均无法连接</span>');
+          currentSourceIdx = picked;
+          currentBaseIdx = Math.min(picked, currentSources.length - 1);
+          renderSources();
+          loadSource(picked, true);
           return;
         }
         loadSource(target, true);
@@ -1469,16 +1475,17 @@ __DATA_SCRIPTS__
       const total = currentSources.length + resolverList.length;
       $('pvSrcTitle').textContent = total > 1 ? '播放源（' + total + '）' : '播放源';
 
-      // 原始源：圆点按后端健康度/探测结果染色（绿=可用 红=失效 灰=未知）
+      // 原始源：圆点按后端健康度/探测结果染色（绿=可用 红=真实播放失败 灰=探测未知）
+      // 预检失败不再直接显示“已失效”，因为 worker 海外出口对国内 CDN 的探测经常误判。
       currentSources.forEach((s, i) => {
-        const isDead = s._probe === false || s._failed;
-        // 探测成功 或 未被标记为失败 且 有 url 的源都先显示绿色，点播失败后再变红
-        const isOk = s._probe === true || (!isDead && s.url);
-        const dotClass = isDead ? 'bad' : (isOk ? 'ok' : '');
+        const isFailed = !!s._failed;
+        const isDead = s._probe === false && !isFailed;
+        const isOk = s._probe === true || (!isFailed && !isDead && s.url);
+        const dotClass = isFailed ? 'bad' : (isOk ? 'ok' : '');
         const btn = document.createElement('button');
         btn.className = 'pv-src' + (i === currentSourceIdx ? ' active' : '')
-          + (s._failed ? ' failed' : '')
-          + (s._probe === false ? ' dead' : '');
+          + (isFailed ? ' failed' : '')
+          + (isDead ? ' dead' : '');
         btn.innerHTML = '<span class="dot ' + dotClass + '"></span><span class="label">'
           + htmlEscape(s.src || ('线路' + (i + 1))) + '</span>';
         btn.onclick = () => {
