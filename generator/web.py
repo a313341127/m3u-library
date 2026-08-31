@@ -1075,6 +1075,7 @@ __DATA_SCRIPTS__
     let currentEpIdx = 0;          // 当前选中的选集下标
     let hlsStarted = false;        // 本次播放是否已成功起播（用于区分「加载阶段失效」与「播放中瞬时抖动」）
     let hlsFatalStreak = 0;       // 连续致命错误计数：视频有进度即清零，连续多次才放弃切源
+    let currentIsLive = false;     // 当前是否为直播（直播不代理 HLS 分片）
 
     // 是否为 HLS：带 .m3u8/.m3u 或未知短链交给 hls.js；明确的视频文件走原生播放
     function isHls(url) {
@@ -1362,6 +1363,7 @@ __DATA_SCRIPTS__
     }
 
     function openPlayer(item, cat, startIdx) {
+      currentIsLive = (cat === 'live');
       const myToken = ++playerToken;
       currentItemKey = cat + '|' + (item.name || '') + '|' + (item.year || '');
       currentSources = (item.sources && item.sources.length)
@@ -1656,7 +1658,18 @@ __DATA_SCRIPTS__
           video.onloadeddata = () => { video.onerror = null; stopLoadTimer(); hideLoading(); clearLoadTimeout(); };
           video.play().catch(() => {});
         } else if (window.Hls && Hls.isSupported()) {
-          hlsPlayer = new Hls({ maxBufferLength: 30, enableWorker: false });
+          hlsPlayer = new Hls({
+            maxBufferLength: 30,
+            enableWorker: false,
+            // 跨域 ts/key/片段走同源 proxy：解决 AES-128 密钥、分片 CDN 的 CORS 阻断
+            xhrSetup: function(xhr, reqUrl) {
+              if (currentIsLive) return; // 直播不代理，避免 worker 实时流延迟
+              if (/^https?:\/\//i.test(reqUrl) && !reqUrl.startsWith(location.origin) &&
+                  /\.(ts|key|aac|mp3|mp4|webm|flv)(\?|$)/i.test(reqUrl)) {
+                xhr.open('GET', '/proxy?u=' + encodeURIComponent(reqUrl), true);
+              }
+            }
+          });
           hlsPlayer.loadSource(url);
           hlsPlayer.attachMedia(video);
           hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => { stopLoadTimer(); hideLoading(); clearLoadTimeout(); video.play().catch(() => {}); });
@@ -1802,6 +1815,7 @@ __DATA_SCRIPTS__
       video.pause(); video.removeAttribute('src'); video.load();
       $('playerView').classList.remove('show');
       hideLoading();
+      currentIsLive = false;
       if (pvProgressTimer) { clearInterval(pvProgressTimer); pvProgressTimer = null; }
       // 退出全屏（若用户在全屏模式下关闭播放器）
       if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen();
@@ -1886,11 +1900,10 @@ __DATA_SCRIPTS__
         const card = document.createElement('a');
         card.className = 'card';
         card.href = it.url;
-        card.target = '_blank';
         card.onclick = e => {
           e.preventDefault();
           // dmhyy 式：点卡片直接弹出播放器（内嵌页面中间）播最佳线路
-          openPlayer(it, currentCat);
+          try { openPlayer(it, currentCat); } catch (err) { openDetail(it, currentCat); }
         };
         const meta = [it.region, it.year, it.quality].filter(Boolean).join(' · ');
         card.innerHTML = `
