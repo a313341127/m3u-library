@@ -1,0 +1,66 @@
+name: qinjin DNS 污染云端巡检+自愈
+
+# 跑在 GitHub 云端（与用户电脑开关机无关）：每天北京时间 09:00 自动检测
+# qinjin 各自定义域是否被 DNS 污染 / Cloudflare 绑定是否掉线，
+# 发现异常自动处置（重新添加自定义域、自愈 DNS 记录代理），并开 Issue 告警。
+# 也支持在 Actions 页面手动 Run workflow 立即测一次。
+on:
+  schedule:
+    - cron: '0 1 * * *'        # 北京时间 09:00 = UTC 01:00
+  workflow_dispatch: {}        # 手动触发，便于即时验证
+
+permissions:
+  contents: read
+  issues: write               # 异常时创建/更新告警 Issue（云端通知，不依赖本机）
+
+jobs:
+  dns-pollution-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: 运行检测 + 自动修复
+        id: check
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          python scripts/check_dns_pollution.py > report.txt 2>&1
+          rc=$?
+          cat report.txt
+          echo "exit=$rc" >> "$GITHUB_OUTPUT"
+
+      - name: 汇总到运行摘要
+        if: always()
+        run: cat report.txt >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 异常时创建 / 更新告警 Issue
+        if: ${{ failure() || steps.check.outputs.exit != '0' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('report.txt', 'utf8');
+            const date = new Date().toISOString().slice(0, 10);
+            const title = 'qinjin DNS 告警 ' + date;
+            const { owner, repo } = context.repo;
+            const existing = await github.rest.issues.listForRepo({
+              owner, repo, state: 'open', labels: ['dns-pollution']
+            });
+            const found = (existing.data || []).find(i => i.title === title);
+            if (found) {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: found.number,
+                body: '## 复检\n' + report
+              });
+            } else {
+              await github.rest.issues.create({
+                owner, repo, title, body: report, labels: ['dns-pollution']
+              });
+            }
