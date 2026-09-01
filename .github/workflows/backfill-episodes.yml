@@ -14,6 +14,8 @@ concurrency:
 on:
   schedule:
     - cron: '0 4 * * *'   # UTC 04:00 = 北京时间 12:00（与每日增量的 03:30 错峰）
+  repository_dispatch:
+    types: [backfill-episodes]   # 可由 API(PAT 仅需 repo 权限) 立即触发，无需点、不占本机
   workflow_dispatch:
     inputs:
       SKIP_COVERS:
