@@ -398,6 +398,72 @@ function absolutizeM3u8(text, base) {
   }).join("\n");
 }
 
+// 客户端直连版 m3u8 改写：把分片(ts/mp4/aac)与嵌套播放列表改写为“原始 CDN 绝对地址”，
+// 交给途播客户端大陆网络直连源站拉流（与直播同机制，规避 worker 海外出口带宽瓶颈 → 流畅）；
+// 仅 EXT-X-KEY 解密密钥仍走 worker /proxy（带 Referer，体积小且保证解密成功）。
+function clientDirectM3u8(text, base, origin) {
+  let baseUrl;
+  try { baseUrl = new URL(base); } catch (_) { baseUrl = null; }
+  const rf = baseUrl ? encodeURIComponent(baseUrl.origin + "/") : "";
+  return text.split("\n").map((line) => {
+    if (line.startsWith("#")) {
+      // EXT-X-KEY：经 worker /proxy 带 Referer 取密钥（体积小，保证解密）
+      return line.replace(/URI="([^"]+)"/g, (mt, u) => {
+        try {
+          const abs = baseUrl ? new URL(u, baseUrl).href : u;
+          if (typeof abs === "string" && abs.startsWith("http"))
+            return `URI="${origin}/proxy?u=${encodeURIComponent(abs)}&rf=${rf}"`;
+          return mt;
+        } catch (_) { return mt; }
+      });
+    }
+    const t = line.trim();
+    if (!t) return line;
+    try {
+      const abs = baseUrl ? new URL(t, baseUrl).href : t;
+      if (typeof abs === "string" && abs.startsWith("http")) return abs; // 原始 CDN 直连
+      return line;
+    } catch (_) { return line; }
+  }).join("\n");
+}
+
+// 取一次 m3u8 清单文本（小文件，worker 海外出口取一次即可；分片由客户端直连）。
+// 兼容分享/播放页：遇到 html 自动解析出内部 m3u8 再递归。
+async function fetchM3u8Text(target, request) {
+  const ownRef = extractBaseReferer(target);
+  const strategies = [
+    { referer: ownRef },
+    { referer: "" },
+    { referer: "https://www.cc0cd.cc.cd/" },
+    { referer: "https://tv.cc0cd.cc.cd/" },
+  ];
+  for (const s of strategies) {
+    try {
+      const init = {
+        redirect: "follow",
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          "Referer": s.referer,
+          "Accept": "*/*",
+        },
+      };
+      const r = await fetch(target, init);
+      if (!r.ok) continue;
+      const ct = (r.headers.get("content-type") || "").toLowerCase();
+      if (ct.includes("text/html") || ct.includes("html")) {
+        const html = await r.text();
+        const real = extractVideoUrl(html, target);
+        if (real) return await fetchM3u8Text(real, request);
+        continue;
+      }
+      const text = await r.text();
+      if (text.includes("#EXTM3U")) return text;
+      if (/\.(mp4|ts|flv)(\?|$)/i.test(target.split("?")[0])) return text;
+    } catch (_) { continue; }
+  }
+  return null;
+}
+
 function m3u8Response(text) {
   return new Response(text, {
     status: 200,
@@ -655,23 +721,29 @@ async function streamProxy(data, id, url, request, ctx) {
   for (let i = tryIdx; i < sources.length; i++) order.push(i);
   for (let i = 0; i < tryIdx; i++) order.push(i);
 
-  // 全代理模式（20260826p 起）：worker 在海外侧把 m3u8 / key / 分片全部拉取并转发，
-  // 途播只与 pages.dev 通信，彻底不打国内 CDN——根治途播播放内核不走 Shadowrocket 分流的问题。
-  // 实测 Cloudflare 出口可稳定取回量子(lzcdn)/茅台(uvjtih)/暴风(fengbao)/bfvvs 等绝大多数国内源。
+  // 客户端直连模式（20260901 起）：worker 仅取一次 m3u8 清单（小文件）并解析相对地址，
+  // 把分片/嵌套播放列表改写为原始 CDN 绝对地址，交给途播客户端大陆网络直连各源站拉流
+  // ——与“直播”同机制，规避 worker 海外出口带宽瓶颈，从而流畅播放。
+  // 仅 EXT-X-KEY（解密密钥，体积小）仍走 worker /proxy 带 Referer 取回，保证解密成功。
+  // 效果：m3u8 经 qinjin.pages.dev（随代理可达），分片直连源站 CDN（DIRECT）→ 既快又稳。
   const origin = url.origin;
   for (const i of order) {
-    // resolvePlayUrl 解析直链/分享页；解析失败则退回原始地址，交给 proxyFetch 再试一次
-    // （proxyFetch 自带分享页解析 + 反盗链策略矩阵，与网页端 /proxy 行为一致）。
+    // resolvePlayUrl 解析直链/分享页；解析失败则退回原始地址
     const real = (await resolvePlayUrl(sources[i], request)) || sources[i];
-    // 统一走 proxyFetch：m3u8 改写（含嵌套子播放列表）、mp4/ts 透传、分享页解析、
-    // 多 Referer/UA 反盗链策略——覆盖原手写单策略 fetch 取不到的部分源站
-    // （网页端浏览器直连能放、途播走 worker 却失败的那一类）。
-    // 仅 r.ok（200/206）才返回；502 则继续尝试下一条线路，不再像原 mp4/ts 分支那样直接返回失败。
-    const r = await proxyFetch(real, origin, request);
-    if (r.ok) return r;
+    // 单文件直链（mp4/ts/flv）：直接 302 给客户端大陆网络直连，最快
+    if (/\.(mp4|ts|flv)(\?|$)/i.test(real.split("?")[0])) {
+      return redirect302(real);
+    }
+    // m3u8：worker 取一次清单，改写为“客户端直连源站”的版本后返回
+    const text = await fetchM3u8Text(real, request);
+    if (text && text.includes("#EXTM3U")) {
+      return m3u8Response(clientDirectM3u8(text, real, origin));
+    }
+    // 兜底：302 给客户端直连尝试
+    return redirect302(real);
   }
 
-  // 极少数源 worker 出口取不到（如文采反爬 530）→ 兜底 302 给客户端直连
+  // 极少数源 worker 出口取不到清单 → 兜底 302 给客户端直连
   // （途播可能仍失败，但浏览器/Safari 能放）
   return redirect302(sources[tryIdx]);
 }
