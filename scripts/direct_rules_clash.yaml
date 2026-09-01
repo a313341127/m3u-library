@@ -245,6 +245,8 @@ rules:
   - DOMAIN-SUFFIX,qingting.fm,DIRECT
   - DOMAIN-SUFFIX,qq.com,DIRECT
   - DOMAIN-SUFFIX,qqqtv.top,DIRECT
+  - DOMAIN-SUFFIX,qrssuv.com,DIRECT
+  - DOMAIN-SUFFIX,qsstvw.com,DIRECT
   - DOMAIN-SUFFIX,qthnews.org.cn,DIRECT
   - DOMAIN-SUFFIX,quklive.com,DIRECT
   - DOMAIN-SUFFIX,qzz.io,DIRECT
