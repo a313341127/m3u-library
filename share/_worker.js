@@ -35,52 +35,131 @@ function json(data, status = 200) {
   });
 }
 
-// ---------- KV 操作 ----------
-async function getUser(env, code) {
+// ---------- 码表（静态 JSON via ASSETS，零 KV）----------
+// 码表文件：仓库内 m3u-library/share/codes.json，部署后由 env.ASSETS 提供（路径 /codes.json）。
+// 管理面板增删改 → 通过 GitHub Contents API 写回仓库（需 GITHUB_TOKEN + GITHUB_REPO 环境变量/密钥），
+//   同时更新内存缓存立即生效；下次部署后 ASSETS 自动同步。
+// 访问遥测（ips24h / 访问次数等）仅存内存，worker 重启后重置（无 KV/D1 写入）。
+// 迁移期：设 MIGRATE_FROM_KV=1 且 KV 仍绑定，则 codes.json 为空时回退读 KV（迁移完成后关掉并解绑 KV）。
+
+const CODES_FILE = "/codes.json";
+let SELF_ORIGIN = SITE_URL;
+let codeCache = null;            // { codes: [...] }
+let codeCacheAt = 0;
+const CODE_TTL = 60_000;         // 内存缓存 60s，自动拾取新部署
+const accessState = new Map();   // code -> { ips24h, totalAccess, lastAccess, lastIP, recentLogs, softBlocked, softAnomaly }
+
+function b64encode(str) { return btoa(unescape(encodeURIComponent(str))); }
+function b64decode(str) { return decodeURIComponent(escape(atob(str))); }
+
+async function loadCodes(env) {
+  const now = Date.now();
+  if (codeCache && now - codeCacheAt < CODE_TTL) return codeCache;
+  let table = null;
   try {
-    const raw = await env.CODES.get(`user:${code}`);
-    return raw ? JSON.parse(raw) : null;
-  } catch { return null; }
-}
-async function putUser(env, code, user) {
-  await env.CODES.put(`user:${code}`, JSON.stringify(user));
-}
-async function getIndex(env) {
-  try {
-    const raw = await env.CODES.get("users_index");
-    return raw ? JSON.parse(raw) : [];
-  } catch { return []; }
-}
-async function putIndex(env, idx) {
-  await env.CODES.put("users_index", JSON.stringify(idx));
+    const res = await env.ASSETS.fetch(new URL(CODES_FILE, SELF_ORIGIN));
+    if (res.ok) {
+      const txt = await res.text();
+      if (txt && txt.trim()) table = JSON.parse(txt);
+    }
+  } catch {}
+  // 迁移期回退：codes.json 为空且开启 MIGRATE_FROM_KV 且 KV 仍绑定 → 读 KV
+  if ((!table || !table.codes || !table.codes.length) && env.MIGRATE_FROM_KV === "1" && env.CODES) {
+    try {
+      const raw = await env.CODES.get("users_index");
+      const idx = raw ? JSON.parse(raw) : [];
+      const codes = [];
+      for (const code of idx) {
+        const u = await env.CODES.get(`user:${code}`);
+        if (u) codes.push(JSON.parse(u));
+      }
+      table = { codes, migrated: true };
+    } catch {}
+  }
+  codeCache = table && table.codes ? table : { codes: [] };
+  codeCacheAt = now;
+  return codeCache;
 }
 
-// 记录访问 + IP 异常检测（返回更新后的用户，失败返回原值不阻塞访问）
+async function getUser(env, code) {
+  const t = await loadCodes(env);
+  return t.codes.find(c => c.code === code) || null;
+}
+async function getIndex(env) {
+  const t = await loadCodes(env);
+  return t.codes.map(c => c.code);
+}
+
+// ---- GitHub Contents API（把码表写回仓库，实现零 KV 持久化）----
+async function ghRead(env) {
+  if (!env.GITHUB_TOKEN || !env.GITHUB_REPO) return null;
+  const url = `https://api.github.com/repos/${env.GITHUB_REPO}/contents/m3u-library/share/codes.json`;
+  try {
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${env.GITHUB_TOKEN}`, Accept: "application/vnd.github+json", "User-Agent": "qs-agcl2" } });
+    if (!r.ok) return null;
+    const d = await r.json();
+    return { data: JSON.parse(b64decode(d.content)), sha: d.sha };
+  } catch { return null; }
+}
+async function ghWrite(env, content, sha, message) {
+  if (!env.GITHUB_TOKEN || !env.GITHUB_REPO) return false;
+  const url = `https://api.github.com/repos/${env.GITHUB_REPO}/contents/m3u-library/share/codes.json`;
+  const body = JSON.stringify({ message, content: b64encode(JSON.stringify(content, null, 2)), sha });
+  try {
+    const r = await fetch(url, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${env.GITHUB_TOKEN}`, Accept: "application/vnd.github+json", "content-type": "application/json", "User-Agent": "qs-agcl2" },
+      body,
+    });
+    return r.ok;
+  } catch { return false; }
+}
+
+// 把内存缓存里的某个码替换为 latest（立即生效）
+function patchCache(code, user) {
+  if (!codeCache) return;
+  const i = codeCache.codes.findIndex(c => c.code === code);
+  if (i >= 0) codeCache.codes[i] = user; else if (user) codeCache.codes.push(user);
+  codeCacheAt = Date.now();
+}
+
+function isBlocked(user, code) {
+  if (user && user.status === "blocked") return true;
+  const st = accessState.get(code);
+  return !!(st && st.softBlocked);
+}
+function isAnomaly(code) {
+  const st = accessState.get(code);
+  return !!(st && (st.softAnomaly || st.softBlocked));
+}
+
+// 记录访问 + IP 异常检测（内存态，失败不阻塞访问）
 async function logAccess(env, code, request, path) {
   let user = await getUser(env, code);
   if (!user) return null;
+  let st = accessState.get(code) || { ips24h: [], totalAccess: 0, recentLogs: [] };
   try {
     const ip = getClientIP(request);
     const ua = (request.headers.get("user-agent") || "").substring(0, 120);
     const ts = nowISO();
     const cutoff = Date.now() - 86400000;
     // 清理 24h 以外的 IP 记录
-    user.ips24h = (user.ips24h || []).filter(e => new Date(e.ts).getTime() > cutoff);
-    const hit = user.ips24h.find(e => e.ip === ip);
+    st.ips24h = (st.ips24h || []).filter(e => new Date(e.ts).getTime() > cutoff);
+    const hit = st.ips24h.find(e => e.ip === ip);
     if (hit) { hit.ts = ts; hit.count = (hit.count || 1) + 1; }
-    else user.ips24h.push({ ip, ts, count: 1 });
+    else st.ips24h.push({ ip, ts, count: 1 });
     // 异常判定（手动 blocked 不自动降级）
-    const n = user.ips24h.length;
+    const n = st.ips24h.length;
     if (user.status !== "blocked") {
-      if (n > BLOCK_IPS) user.status = "blocked";
-      else if (n > ANOMALY_IPS) user.status = "anomaly";
-      else user.status = "active";
+      if (n > BLOCK_IPS) st.softBlocked = true;
+      else if (n > ANOMALY_IPS) st.softAnomaly = true;
+      else st.softAnomaly = false;
     }
-    user.totalAccess = (user.totalAccess || 0) + 1;
-    user.lastAccess = ts;
-    user.lastIP = ip;
-    user.recentLogs = [...(user.recentLogs || []), { ts, ip, ua: ua.substring(0, 80), path }].slice(-MAX_LOGS);
-    await putUser(env, code, user);
+    st.totalAccess = (st.totalAccess || 0) + 1;
+    st.lastAccess = ts;
+    st.lastIP = ip;
+    st.recentLogs = [...(st.recentLogs || []), { ts, ip, ua: ua.substring(0, 80), path }].slice(-MAX_LOGS);
+    accessState.set(code, st);
   } catch (e) { /* 记录失败不阻塞访问 */ }
   return user;
 }
@@ -467,6 +546,7 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;
+    SELF_ORIGIN = url.origin;
 
     // ===== 管理面板路由 =====
     if (path === "/__admin") {
@@ -492,6 +572,11 @@ export default {
     if (path === "/__admin/api/logout") {
       return new Response(null, { status: 302, headers: { Location: "/__admin", "Set-Cookie": `${ADMIN_COOKIE}=; Path=/__admin; Max-Age=0` } });
     }
+    // 迁移导出：返回当前码表（codes.json 或 KV 回退），供粘贴进 codes.json
+    if (path === "/__admin/api/export" && request.method === "GET") {
+      const t = await loadCodes(env);
+      return json({ codes: t.codes || [] });
+    }
     // 管理 API（需管理员 Cookie）
     if (path.startsWith("/__admin/api/")) {
       if (getCookie(request, ADMIN_COOKIE) !== "1") return json({ error: "unauthorized" }, 401);
@@ -501,10 +586,13 @@ export default {
         const users = [];
         for (const code of idx) {
           const u = await getUser(env, code);
-          if (u) users.push({
+          if (!u) continue;
+          const st = accessState.get(code);
+          users.push({
             code, name: u.name, status: u.status,
-            totalAccess: u.totalAccess || 0,
-            ips24h: u.ips24h || [], lastAccess: u.lastAccess,
+            totalAccess: st ? (st.totalAccess || 0) : (u.totalAccess || 0),
+            ips24h: st ? (st.ips24h || []) : (u.ips24h || []),
+            lastAccess: st ? (st.lastAccess || u.lastAccess) : u.lastAccess,
             created: u.created,
           });
         }
@@ -523,16 +611,32 @@ export default {
           created: nowISO(), totalAccess: 0,
           ips24h: [], recentLogs: [],
         };
-        await putUser(env, code, user);
-        await putIndex(env, [...idx, code]);
-        return json({ code, name });
+        const gh = await ghRead(env);
+        let persisted = false;
+        if (gh) {
+          const t = gh.data && gh.data.codes ? gh.data : { codes: [] };
+          t.codes.push(user);
+          persisted = await ghWrite(env, t, gh.sha, `share: add code ${code} (${name})`);
+        }
+        // 立即生效（内存）
+        codeCache = codeCache && codeCache.codes ? codeCache : { codes: [] };
+        codeCache.codes.push(user);
+        codeCacheAt = Date.now();
+        return json({ code, name, persisted });
       }
       if (path === "/__admin/api/delete" && request.method === "POST") {
         const { code } = await request.json();
         const idx = await getIndex(env);
         if (!idx.includes(code)) return json({ error: "not found" }, 404);
-        await putIndex(env, idx.filter(c => c !== code));
-        await env.CODES.delete(`user:${code}`);
+        const gh = await ghRead(env);
+        if (gh) {
+          const t = gh.data && gh.data.codes ? gh.data : { codes: [] };
+          t.codes = t.codes.filter(c => c.code !== code);
+          await ghWrite(env, t, gh.sha, `share: delete code ${code}`);
+        }
+        if (codeCache && codeCache.codes) codeCache.codes = codeCache.codes.filter(c => c.code !== code);
+        codeCacheAt = Date.now();
+        accessState.delete(code);
         return json({ ok: true });
       }
       if (path === "/__admin/api/block" && request.method === "POST") {
@@ -540,8 +644,14 @@ export default {
         const u = await getUser(env, code);
         if (!u) return json({ error: "not found" }, 404);
         u.status = blocked ? "blocked" : "active";
-        if (!blocked) u.ips24h = []; // 解封同时清 IP 记录
-        await putUser(env, code, u);
+        if (!blocked) { u.ips24h = []; accessState.delete(code); }
+        const gh = await ghRead(env);
+        if (gh) {
+          const t = gh.data && gh.data.codes ? gh.data : { codes: [] };
+          const i = t.codes.findIndex(c => c.code === code);
+          if (i >= 0) { t.codes[i] = u; await ghWrite(env, t, gh.sha, `share: ${blocked ? "block" : "unblock"} ${code}`); }
+        }
+        patchCache(code, u);
         return json({ ok: true });
       }
       if (path === "/__admin/api/reset" && request.method === "POST") {
@@ -550,7 +660,14 @@ export default {
         if (!u) return json({ error: "not found" }, 404);
         u.ips24h = [];
         u.status = "active";
-        await putUser(env, code, u);
+        accessState.delete(code);
+        const gh = await ghRead(env);
+        if (gh) {
+          const t = gh.data && gh.data.codes ? gh.data : { codes: [] };
+          const i = t.codes.findIndex(c => c.code === code);
+          if (i >= 0) { t.codes[i] = u; await ghWrite(env, t, gh.sha, `share: reset ${code}`); }
+        }
+        patchCache(code, u);
         return json({ ok: true });
       }
       return json({ error: "not found" }, 404);
@@ -567,7 +684,7 @@ export default {
           headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
         });
       }
-      if (user.status === "blocked") {
+      if (isBlocked(user, code)) {
         return new Response(BLOCKED_HTML, { status: 403, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
       }
       await logAccess(env, code, request, "/");
@@ -587,7 +704,7 @@ export default {
           headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
         });
       }
-      if (user.status === "blocked") {
+      if (isBlocked(user, code)) {
         return new Response(BLOCKED_HTML, { status: 403, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
       }
       await logAccess(env, code, request, "/");
@@ -602,7 +719,7 @@ export default {
     if (keyParam) {
       const code = keyParam.toUpperCase();
       const user = await getUser(env, code);
-      if (!user || user.status === "blocked") return new Response("Forbidden", { status: 403 });
+      if (!user || isBlocked(user, code)) return new Response("Forbidden", { status: 403 });
       await logAccess(env, code, request, path);
       const r = await env.ASSETS.fetch(new Request(url.origin + path, request));
       return wrapAsset(r, path, cookieStr(COOKIE, code));
@@ -612,13 +729,13 @@ export default {
     const cookieCode = getCookie(request, COOKIE);
     if (cookieCode) {
       let user = await getUser(env, cookieCode);
-      if (user && user.status !== "blocked") {
+      if (user && !isBlocked(user, cookieCode)) {
         const isPage = path === "/" || path === "/index.html";
         // 网页访问也记录 IP（此前仅登录/M3U 请求记录）；用更新后的数据渲染弹窗
         if (isPage) user = (await logAccess(env, cookieCode, request, path)) || user;
         const r = await env.ASSETS.fetch(request);
         // 首次访问（无 qgnote）或异常状态 → 注入弹窗
-        const needPopup = getCookie(request, NOTE_COOKIE) !== "1" || user.status === "anomaly";
+        const needPopup = getCookie(request, NOTE_COOKIE) !== "1" || isAnomaly(cookieCode) || user.status === "anomaly";
         const isHtml = (r.headers.get("content-type") || "").includes("text/html");
         if (isPage && needPopup && isHtml) {
           let html = await r.text();

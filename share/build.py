@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "output"
 DIST = Path(__file__).resolve().parent / "dist"
 WORKER = Path(__file__).resolve().parent / "_worker.js"
+CODES = Path(__file__).resolve().parent / "codes.json"
 
 
 def build():
@@ -15,6 +16,11 @@ def build():
     shutil.copytree(OUT, DIST, ignore=shutil.ignore_patterns(
         ".wrangler", "backfill.log", "*.log", "media.db*"), dirs_exist_ok=True)
     shutil.copy2(WORKER, DIST / "_worker.js")
+    # 静态码表（零 KV）：源文件随仓库提交，部署时一并进入 dist 由 ASSETS 提供
+    if CODES.exists():
+        shutil.copy2(CODES, DIST / "codes.json")
+    else:
+        (DIST / "codes.json").write_text('{\n  "codes": []\n}', encoding="utf-8")
     files = sorted(p.name for p in DIST.iterdir())
     print(f"[share] 已组装 {DIST}，包含 {len(files)} 个文件")
     return DIST
