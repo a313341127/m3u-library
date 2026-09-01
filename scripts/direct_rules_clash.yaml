@@ -67,7 +67,6 @@ rules:
   - DOMAIN-SUFFIX,cdnlz7.com,DIRECT
   - DOMAIN-SUFFIX,cdnlz9.com,DIRECT
   - DOMAIN-SUFFIX,cftest5.cn,DIRECT
-  - DOMAIN-SUFFIX,cgtn.com,DIRECT
   - DOMAIN-SUFFIX,chinamobile.com,DIRECT
   - DOMAIN-SUFFIX,cmread.com,DIRECT
   - DOMAIN-SUFFIX,cnr.cn,DIRECT
@@ -281,7 +280,6 @@ rules:
   - DOMAIN-SUFFIX,thmz.com,DIRECT
   - DOMAIN-SUFFIX,tjbh.com,DIRECT
   - DOMAIN-SUFFIX,tv12.xyz,DIRECT
-  - DOMAIN-SUFFIX,tv1288.xyz,DIRECT
   - DOMAIN-SUFFIX,tyyszywvod.com,DIRECT
   - DOMAIN-SUFFIX,tyyszywvod1.com,DIRECT
   - DOMAIN-SUFFIX,tyyszywvod2.com,DIRECT
