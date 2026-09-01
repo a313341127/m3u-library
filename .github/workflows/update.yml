@@ -246,10 +246,10 @@ jobs:
           else
             git commit -m "chore: 采集更新 $(date +%F)"
             # 串行化(concurrency)保证 checkout 即最新；拉取后快进合并再推送，杜绝 non-fast-forward 失败。
-            # 极端情况下（与手动 dispatch 短暂重叠导致分叉）回退到 force-with-lease，仅覆盖生成的 media.db。
+            # 始终 ff-only 推送，绝不强推，避免覆盖并发提交（含采集数据）。
             git fetch origin main
             git merge origin/main --ff-only 2>/dev/null || true
-            git push origin HEAD:main 2>/dev/null || git push --force-with-lease origin HEAD:main
+            git push origin HEAD:main
           fi
 
       - name: 部署到 Cloudflare Pages（裸域名 qinjin.pages.dev = 途播入口，由 main 分支提供）

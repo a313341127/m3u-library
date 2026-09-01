@@ -159,7 +159,9 @@ jobs:
             git commit -m "chore: 分集回填进度更新 $(date +%F)"
             git fetch origin main
             git merge origin/main --ff-only 2>/dev/null || true
-            git push origin HEAD:main 2>/dev/null || git push --force-with-lease origin HEAD:main
+            git fetch origin main
+            git merge origin/main --ff-only 2>/dev/null || true
+            git push origin HEAD:main
           fi
 
       - name: 部署到 Cloudflare Pages（裸域名 qinjin.pages.dev = 途播入口）
