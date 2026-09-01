@@ -660,26 +660,15 @@ async function streamProxy(data, id, url, request, ctx) {
   // 实测 Cloudflare 出口可稳定取回量子(lzcdn)/茅台(uvjtih)/暴风(fengbao)/bfvvs 等绝大多数国内源。
   const origin = url.origin;
   for (const i of order) {
-    const real = await resolvePlayUrl(sources[i], request);
-    if (!real) continue;
-    // 直链媒体文件（mp4/ts/flv）直接经 /proxy 转发，不走 m3u8 改写
-    if (/\.(mp4|ts|flv)(\?|$)/i.test(real.split("?")[0])) {
-      return proxyFetch(real, origin, request);
-    }
-    try {
-      const upstream = await fetch(real, {
-        redirect: "follow",
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-          "Referer": extractBaseReferer(real),
-          "Accept": "*/*",
-        },
-      });
-      if (upstream.ok) {
-        const text = await upstream.text();
-        if (text.includes("#EXTM3U")) return m3u8Response(rewriteM3u8(text, real, origin));
-      }
-    } catch (_) {}
+    // resolvePlayUrl 解析直链/分享页；解析失败则退回原始地址，交给 proxyFetch 再试一次
+    // （proxyFetch 自带分享页解析 + 反盗链策略矩阵，与网页端 /proxy 行为一致）。
+    const real = (await resolvePlayUrl(sources[i], request)) || sources[i];
+    // 统一走 proxyFetch：m3u8 改写（含嵌套子播放列表）、mp4/ts 透传、分享页解析、
+    // 多 Referer/UA 反盗链策略——覆盖原手写单策略 fetch 取不到的部分源站
+    // （网页端浏览器直连能放、途播走 worker 却失败的那一类）。
+    // 仅 r.ok（200/206）才返回；502 则继续尝试下一条线路，不再像原 mp4/ts 分支那样直接返回失败。
+    const r = await proxyFetch(real, origin, request);
+    if (r.ok) return r;
   }
 
   // 极少数源 worker 出口取不到（如文采反爬 530）→ 兜底 302 给客户端直连
