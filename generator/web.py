@@ -1075,6 +1075,7 @@ __DATA_SCRIPTS__
     let _lastNativeBytes = 0;      // 上一拍估算已下载字节
     let _lastNativeT = 0;          // 上一拍时间戳
     let currentEpIdx = 0;          // 当前选中的选集下标
+    let currentItemEpisodes = [];  // 当前影片的选集（影片级，与线路无关，切换线路保持可见）
     let hlsStarted = false;        // 本次播放是否已成功起播（用于区分「加载阶段失效」与「播放中瞬时抖动」）
     let hlsFatalStreak = 0;       // 连续致命错误计数：视频有进度即清零，连续多次才放弃切源
     let currentIsLive = false;     // 当前是否为直播（直播不代理 HLS 分片）
@@ -1415,6 +1416,16 @@ __DATA_SCRIPTS__
       $('grid').style.display = 'none';
       $('homeView').style.display = 'none';
       currentEpIdx = 0;
+      // 分集：影片级属性（与线路无关）。优先影片级 episodes，并合并任一线路自带的分集，
+      // 取条数最多的一份作为权威选集，确保切换线路后选集不丢失。
+      currentItemEpisodes = [];
+      const _considerEps = (list) => {
+        if (list && list.length > 1 && list.length > currentItemEpisodes.length) {
+          currentItemEpisodes = list.slice();
+        }
+      };
+      _considerEps(item.episodes);
+      (item.sources || []).forEach(s => _considerEps(s.episodes));
       renderSources();
       renderEpisodes();
       // 内嵌播放器：打开时滚动到播放器位置，而不是锁 body 滚动
@@ -1514,12 +1525,12 @@ __DATA_SCRIPTS__
       renderEpisodes();
     }
 
-    // 渲染选集（仅当当前线路含多集时显示）。不同线路的选集相互独立。
+    // 渲染选集（仅当本片含多集时显示）。选集为影片级属性，与当前线路无关，
+    // 因此切换/自动切换线路后选集依然保留可见。
     function renderEpisodes() {
       const box = $('pvEpisodes');
       const title = $('pvEpTitle');
-      const s = currentSources[currentSourceIdx];
-      const eps = (s && s.episodes) || [];
+      const eps = currentItemEpisodes || [];
       if (!eps || eps.length <= 1) {
         box.innerHTML = '';
         box.classList.remove('show');
