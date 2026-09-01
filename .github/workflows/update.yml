@@ -152,6 +152,7 @@ jobs:
       - name: 复制直连规则到站点（供 Shadowrocket/Clash 订阅，经 VPN 可达）
         run: |
           cp scripts/shadowrocket_direct_rules.list output/
+          cp scripts/shadowrocket_direct_module.conf output/
           cp scripts/direct_rules_clash.yaml output/
 
       - name: 递增 DATA_VERSION（避免客户端/途播缓存旧数据）
@@ -219,6 +220,9 @@ jobs:
           /live.txt
             Content-Type: text/plain; charset=utf-8
             Cache-Control: max-age=0, must-revalidate
+          /shadowrocket_direct_module.conf
+            Content-Type: text/plain; charset=utf-8
+            Cache-Control: max-age=0, must-revalidate
           /shadowrocket_direct_rules.list
             Content-Type: text/plain; charset=utf-8
             Cache-Control: max-age=0, must-revalidate
@@ -236,7 +240,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/media.db data/live_logos/ data/host_health.json scripts/shadowrocket_direct_rules.list scripts/direct_rules_clash.yaml
+          git add data/media.db data/live_logos/ data/host_health.json scripts/shadowrocket_direct_rules.list scripts/shadowrocket_direct_module.conf scripts/direct_rules_clash.yaml
           if git diff --cached --quiet; then
             echo "数据库无变化，跳过提交"
           else

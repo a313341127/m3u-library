@@ -197,6 +197,28 @@ def render_clash(suffix, keyword):
     return "\n".join(lines) + "\n"
 
 
+def render_module(suffix, keyword):
+    """Shadowrocket / Surge / Stash 通用「模块」格式（#! 头 + [Rule] 段）。
+
+    与 .list 规则内容完全一致，但封装成模块后，可在 Shadowrocket「订阅」里
+    选「模块」类型直接导入（.list 规则只能走「配置->规则->远程规则」导入，
+    填进「订阅」会被当成节点订阅而报「不能获取订阅节点」）。
+    """
+    lines = []
+    lines.append("#!name=秦哥影视·国内源直连分流")
+    lines.append("#!desc=从媒体库自动生成：国内视频CDN直连，海外后端强制代理。经订阅可自动更新。")
+    lines.append("#!author=qinjin")
+    lines.append("")
+    lines.append("[Rule]")
+    for d in BACKEND_PROXY:
+        lines.append(f"DOMAIN-SUFFIX,{d},PROXY")
+    for k in keyword:
+        lines.append(f"DOMAIN-KEYWORD,{k},DIRECT")
+    for s in suffix:
+        lines.append(f"DOMAIN-SUFFIX,{s},DIRECT")
+    return "\n".join(lines) + "\n"
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--db", default=DEFAULT_DB)
@@ -214,13 +236,17 @@ def main():
     os.makedirs(args.out_dir, exist_ok=True)
     sr_path = os.path.join(args.out_dir, "shadowrocket_direct_rules.list")
     clash_path = os.path.join(args.out_dir, "direct_rules_clash.yaml")
+    module_path = os.path.join(args.out_dir, "shadowrocket_direct_module.conf")
     with open(sr_path, "w", encoding="utf-8") as f:
         f.write(render_shadowrocket(suffix, keyword))
     with open(clash_path, "w", encoding="utf-8") as f:
         f.write(render_clash(suffix, keyword))
+    with open(module_path, "w", encoding="utf-8") as f:
+        f.write(render_module(suffix, keyword))
     print(f"[ok] 生成 {len(suffix)} 条注册域规则 + {len(keyword)} 条品牌关键词规则")
-    print(f"     -> {sr_path}")
-    print(f"     -> {clash_path}")
+    print(f"     -> {sr_path}  (规则集，走「配置->规则->远程规则」导入)")
+    print(f"     -> {module_path}  (模块，走「订阅」选「模块」类型导入)")
+    print(f"     -> {clash_path}  (Clash 格式)")
 
 
 if __name__ == "__main__":
