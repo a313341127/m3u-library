@@ -9,8 +9,9 @@ name: 并发采集（云端高频）
 # 下一次定时/手动唤起从断点继续，全程零人工介入。
 #
 # 串行化：与「每日自动更新」「分集回填」共用 concurrency 组，避免并发推送 media.db 冲突。
-# 免费额度：私有库 2000 分钟/月。当前每 8 小时一轮 × 约 25 分钟 ≈ 90 分钟/天，约 2700/月，
-# 如需更频繁请确认 GitHub 套餐（Pro 后私有库分钟数更高），或调小 --time-limit。
+# 仓库已设为 public → GitHub Actions 对公开库无限分钟，可高频轮转。
+# 频率：每 30 分钟一轮；单轮 TIME_LIMIT 到点暂停续跑，concurrency 串行避免 media.db 并发冲突。
+# 部署闸门：仅当 media.db 有变化才重新生成+部署，节省 Cloudflare Pages 每月 500 次构建额度。
 
 concurrency:
   group: qinjin-collection
@@ -18,7 +19,7 @@ concurrency:
 
 on:
   schedule:
-    - cron: '0 */8 * * *'   # 每 8 小时（UTC 00/08/16 = 北京 08/16/24 点）
+    - cron: '*/30 * * * *'   # 每 30 分钟一轮（公开库无限 Actions 分钟；跑完续跑、串行不冲突）
   repository_dispatch:
     types: [fast-collect]   # 可由 API(PAT 仅需 repo 权限) 立即触发，不占本机
   workflow_dispatch:
@@ -53,6 +54,7 @@ jobs:
           python-version: '3.13'
 
       - name: 并发采集（多源并发 + TIME_LIMIT 续跑）
+        id: collect
         # fast_collect.py 直接写 media.db；进度存 data/fast_collect_progress.json，
         # 本工作流末尾提交回仓库，下一轮自动续跑。
         env:
@@ -62,30 +64,40 @@ jobs:
           python scripts/fast_collect.py \
             --time-limit ${{ github.event.inputs.TIME_LIMIT || '1500' }} \
             --workers 5 --type-workers 3
+          # 标记数据是否变化，供后续生成/部署步骤条件执行（节省 Pages 构建额度）
+          if git diff --quiet data/media.db; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: 生成途播 Jellyfin 后端数据（api/movies.json + 地区分片）
+        if: steps.collect.outputs.changed == 'true'
         env:
           WEB_STRICT_HEALTH: 1
         run: |
           python generate_movies_json.py
 
       - name: 生成电影墙分类封面
-        if: ${{ inputs.SKIP_COVERS != 'true' }}
+        if: steps.collect.outputs.changed == 'true' && inputs.SKIP_COVERS != 'true'
         run: |
           python -m pip install -q pillow
           python scripts/generate_covers.py
 
       - name: 生成直连分流规则（来自 media.db，订阅自动更新）
+        if: steps.collect.outputs.changed == 'true'
         run: |
           python scripts/gen_direct_rules.py
 
       - name: 复制直连规则到站点（供 Shadowrocket/Clash 订阅，经 VPN 可达）
+        if: steps.collect.outputs.changed == 'true'
         run: |
           cp scripts/shadowrocket_direct_rules.list output/
           cp scripts/shadowrocket_direct_module.conf output/
           cp scripts/direct_rules_clash.yaml output/
 
       - name: 递增 DATA_VERSION（避免客户端/途播缓存旧数据）
+        if: steps.collect.outputs.changed == 'true'
         run: |
           VER="$(date +%Y%m%d%H)"
           sed -i "s/const DATA_VERSION = \".*\";/const DATA_VERSION = \"$VER\";/" output/_worker.js
@@ -179,6 +191,7 @@ jobs:
           fi
 
       - name: 部署到 Cloudflare Pages（裸域名 qinjin.pages.dev = 途播入口）
+        if: steps.collect.outputs.changed == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -187,6 +200,7 @@ jobs:
           npx --yes wrangler@4 pages deploy output --project-name=qinjin --branch=production
 
       - name: 构建并部署分享站（带访问口令，独立项目 qs-agcl2）
+        if: steps.collect.outputs.changed == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
