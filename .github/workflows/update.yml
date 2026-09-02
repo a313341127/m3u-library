@@ -251,11 +251,28 @@ jobs:
             echo "数据库无变化，跳过提交"
           else
             git commit -m "chore: 采集更新 $(date +%F)"
-            # 串行化(concurrency)保证 checkout 即最新；拉取后快进合并再推送，杜绝 non-fast-forward 失败。
-            # 始终 ff-only 推送，绝不强推，避免覆盖并发提交（含采集数据）。
-            git fetch origin main
-            git merge origin/main --ff-only 2>/dev/null || true
-            git push origin HEAD:main
+            # 并发推送保护：3 套工作流共用 qinjin-collection 串行组，但 CI 偶发竞态
+            # （同一窗口内其他工作流/手动触发先推了 main），单次 push 会被 non-fast-forward 拒绝。
+            # 用「拉取->合并->推送」重试环：每次推送前都重新同步远端，消除竞态窗口。
+            # 始终 ff 推送，绝不强推，避免覆盖并发提交（含采集数据）。
+            PUSHED=0
+            for i in 1 2 3 4 5; do
+              git fetch origin main
+              if git merge origin/main --no-edit; then
+                if git push origin HEAD:main; then
+                  echo "进度已推送（第 $i 次尝试）"
+                  PUSHED=1
+                  break
+                fi
+              else
+                git merge --abort 2>/dev/null || true
+              fi
+              echo "第 $i 次推送遇竞态，2s 后重试..."
+              sleep 2
+            done
+            if [ "$PUSHED" -ne 1 ]; then
+              echo "::warning::进度文件推送失败（竞态次数过多），但 media.db 已存 Release 资产，不影响采集"
+            fi
           fi
 
       - name: 上传 media.db 到 Release 资产（绕过 git 100MB 限制）
