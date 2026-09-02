@@ -47,12 +47,17 @@ _CTX.check_hostname = False
 _CTX.verify_mode = ssl.CERT_NONE
 
 # 代理（本机走 127.0.0.1:10808；CI 无代理则为空）
+# ⚠️ 关键：CI 无代理，从数据中心 IP 探测时，国内视频 CDN 常对数据中心/海外 IP
+#    返回「反爬式 404」（与真实内容删除的 404 无法区分），导致大面积误判死链。
+#    本机带住宅代理探测则正常 200。故 404 不再判死（见 _DEAD_CODES）。
 _PROXY = os.environ.get("HTTPS_PROXY") or os.environ.get("HTTP_PROXY") or ""
 _HANDLER = urllib.request.ProxyHandler({"http": _PROXY, "https": _PROXY}) if _PROXY else urllib.request.ProxyHandler()
 
-_DEAD_CODES = {404, 410}
-# 这些码视为"不确定"，绝不删
-_SKIP_CODES = {401, 403, 429, 500, 502, 503, 504, 530}
+# 仅「内容已明确下架(410 Gone)」+ 连接级失败(见 _classify 的 URLError/SSLError) 判死。
+# 404 已移出：源站反爬对数据中心 IP 返 404，与真删除不可区分，误杀率约 50%（实测抽样）。
+_DEAD_CODES = {410}
+# 这些码视为"不确定"，绝不删（404 加入：反爬式 404 一律保留，等真实播放时再判）
+_SKIP_CODES = {401, 403, 404, 429, 500, 502, 503, 504, 530}
 
 
 def _now() -> str:
