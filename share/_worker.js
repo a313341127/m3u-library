@@ -39,7 +39,8 @@ function json(data, status = 200) {
 // 码表文件：仓库内 share/codes.json，部署后由 env.ASSETS 提供（路径 /codes.json）。
 // 管理面板增删改 → 通过 GitHub Contents API 写回仓库（需 GITHUB_TOKEN + GITHUB_REPO 环境变量/密钥），
 //   同时更新内存缓存立即生效；下次部署后 ASSETS 自动同步。
-// 访问遥测（ips24h / 访问次数等）仅存内存，worker 重启后重置（无 KV/D1 写入）。
+// 访问遥测：IP 列表(ips24h)仅存内存(实例级，best-effort)；累计访问次数 totalAccess / 最近访问 lastAccess
+//   已持久化写回 GitHub codes.json（与邀请码同链路），跨实例/重启后管理面板仍能看到真实累计数。
 // 迁移期：设 MIGRATE_FROM_KV=1 且 KV 仍绑定，则 codes.json 为空时回退读 KV（迁移完成后关掉并解绑 KV）。
 
 const CODES_FILE = "/codes.json";
@@ -47,7 +48,7 @@ let SELF_ORIGIN = SITE_URL;
 let codeCache = null;            // { codes: [...] }
 let codeCacheAt = 0;
 const CODE_TTL = 60_000;         // 内存缓存 60s，自动拾取新部署
-const accessState = new Map();   // code -> { ips24h, totalAccess, lastAccess, lastIP, recentLogs, softBlocked, softAnomaly }
+const accessState = new Map();   // code -> { ips24h, pendingAccess, lastAccess, lastIP, recentLogs, softBlocked, softAnomaly, lastFlush }
 
 function b64encode(str) { return btoa(unescape(encodeURIComponent(str))); }
 function b64decode(str) { return decodeURIComponent(escape(atob(str))); }
@@ -137,11 +138,15 @@ function isAnomaly(code) {
   return !!(st && (st.softAnomaly || st.softBlocked));
 }
 
-// 记录访问 + IP 异常检测（内存态，失败不阻塞访问）
+// 记录访问 + IP 异常检测。
+// 计数分两层：
+//  - 内存 accessState：本实例的 IP 列表 / 未落盘计数（用于即时异常判定与去重）
+//  - 持久化：累计访问次数 totalAccess / 最近访问 lastAccess 节流写回 GitHub codes.json，
+//    使管理面板跨实例/重启后仍能看到真实累计数（IP 列表因隐私与跨实例一致性不持久化）。
 async function logAccess(env, code, request, path) {
   let user = await getUser(env, code);
   if (!user) return null;
-  let st = accessState.get(code) || { ips24h: [], totalAccess: 0, recentLogs: [] };
+  let st = accessState.get(code) || { ips24h: [], pendingAccess: 0, recentLogs: [] };
   try {
     const ip = getClientIP(request);
     const ua = (request.headers.get("user-agent") || "").substring(0, 120);
@@ -159,13 +164,36 @@ async function logAccess(env, code, request, path) {
       else if (n > ANOMALY_IPS) st.softAnomaly = true;
       else st.softAnomaly = false;
     }
-    st.totalAccess = (st.totalAccess || 0) + 1;
+    st.pendingAccess = (st.pendingAccess || 0) + 1;
     st.lastAccess = ts;
     st.lastIP = ip;
     st.recentLogs = [...(st.recentLogs || []), { ts, ip, ua: ua.substring(0, 80), path }].slice(-MAX_LOGS);
     accessState.set(code, st);
+    // 节流落盘：每 10s 最多写回一次 GitHub，合并 pending 计数（失败不阻塞访问）
+    if (!st.lastFlush || Date.now() - st.lastFlush > 10000) {
+      st.lastFlush = Date.now();
+      try { await flushStats(env, code); } catch (e) { /* 落盘失败不阻塞 */ }
+    }
   } catch (e) { /* 记录失败不阻塞访问 */ }
   return user;
+}
+
+// 把本实例累计的 pendingAccess 写回 GitHub codes.json（乐观锁重试，避免跨实例并发丢失计数）
+async function flushStats(env, code) {
+  const st = accessState.get(code);
+  if (!st || !(st.pendingAccess > 0)) return;
+  const pending = st.pendingAccess;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const gh = await ghRead(env);
+    if (!gh) return;
+    const t = gh.data && gh.data.codes ? gh.data : { codes: [] };
+    const c = t.codes.find(x => x.code === code);
+    if (!c) return;
+    c.totalAccess = (c.totalAccess || 0) + pending;
+    c.lastAccess = st.lastAccess || nowISO();
+    const ok = await ghWrite(env, t, gh.sha, `share: stat ${code}`);
+    if (ok) { st.pendingAccess = 0; patchCache(code, c); return; }
+  }
 }
 
 // ---------- 页面模板 ----------
@@ -596,9 +624,11 @@ export default {
           const st = accessState.get(code);
           users.push({
             code, name: u.name, status: u.status,
-            totalAccess: st ? (st.totalAccess || 0) : (u.totalAccess || 0),
-            ips24h: st ? (st.ips24h || []) : (u.ips24h || []),
-            lastAccess: st ? (st.lastAccess || u.lastAccess) : u.lastAccess,
+            // 累计数 = 持久化值(跨实例/重启有效) + 本实例尚未落盘的 pending
+            totalAccess: (u.totalAccess || 0) + (st ? (st.pendingAccess || 0) : 0),
+            // IP 列表仅内存(实例级)，跨实例为 best-effort，管理面板看到的可能是 0
+            ips24h: st ? (st.ips24h || []) : [],
+            lastAccess: u.lastAccess || (st ? st.lastAccess : null),
             created: u.created,
           });
         }
