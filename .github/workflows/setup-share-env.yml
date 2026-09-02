@@ -4,9 +4,8 @@ name: 配置分享站环境变量
 # 使管理员在 /__admin 生成的邀请码能经 GitHub Contents API 写回仓库 share/codes.json。
 # 手动在 Actions 页面 Run workflow 触发。
 #
-# 机制：Pages Functions 运行期变量不能用 wrangler pages deploy --var（不支持），
-# 也不能只靠 deployment_configs.env_vars（wrangler 部署会把项目配置重置，运行期读不到）。
-# 正确做法是用 `wrangler pages secret put` 把变量写进项目侧（持久、跨部署保留）。
+# 机制（已验证的路径）：Pages Functions 运行期变量用 wrangler.toml 的 [vars] 在部署时注入最可靠。
+# GITHUB_TOKEN 由 secrets.SHARE_GITHUB_PAT 在 CI 内展开写入生成的 wrangler.toml，不入库、不进 git。
 # 依赖 Secrets: CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID（已有）、SHARE_GITHUB_PAT（已存入，值为有 repo 权限的 PAT）。
 on:
   workflow_dispatch:
@@ -26,20 +25,19 @@ jobs:
         with:
           python-version: '3.13'
 
-      - name: 写入 qs-agcl2 运行期环境变量（secret put，持久保留）
+      - name: 构建并写入运行期环境变量（wrangler.toml [vars] 部署时注入）
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           SHARE_GITHUB_PAT: ${{ secrets.SHARE_GITHUB_PAT }}
         run: |
-          echo "$SHARE_GITHUB_PAT" | npx --yes wrangler@4 pages secret put GITHUB_TOKEN --project-name=qs-agcl2
-          echo "a313341127/m3u-library" | npx --yes wrangler@4 pages secret put GITHUB_REPO --project-name=qs-agcl2
-          echo "0" | npx --yes wrangler@4 pages secret put MIGRATE_FROM_KV --project-name=qs-agcl2
-
-      - name: 重新部署分享站使环境变量生效
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
           python share/build.py
-          npx --yes wrangler@4 pages deploy share/dist --project-name=qs-agcl2 --branch=main
+          # 生成 wrangler.toml（含运行期变量），仅存在于 CI，不入库；[vars] 是 Pages Functions 运行期变量规范写法
+          cat > share/dist/wrangler.toml <<'WFEOF'
+          name = "qs-agcl2"
+          [vars]
+          GITHUB_REPO = "a313341127/m3u-library"
+          MIGRATE_FROM_KV = "0"
+          GITHUB_TOKEN = "${{ secrets.SHARE_GITHUB_PAT }}"
+          WFEOF
+          cd share/dist && npx --yes wrangler@4 pages deploy . --project-name=qs-agcl2 --branch=main
