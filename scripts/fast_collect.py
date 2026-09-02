@@ -47,6 +47,11 @@ from collector.cc0cd import (
 
 urllib3.disable_warnings()
 
+# 并发写锁：多源×多 type 共十几个线程各自开连接写同一 SQLite，
+# 不加锁会互相踩出 "database is locked"。WAL 只解决读写并发，写写仍串行，
+# 故用一把全局锁把「SELECT 查重 + INSERT + commit」包成原子段。
+DB_LOCK = threading.Lock()
+
 # ---------- 配置 ----------
 PROGRESS_FILE = os.path.join(REPO, "data", "fast_collect_progress.json")
 DB_PATH = str(config.DB_PATH)
@@ -221,11 +226,14 @@ def init_sqlite():
     conn = sqlite3.connect(DB_PATH)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
+    # 关键：写冲突时等待而非立即报 "database is locked"（默认 busy_timeout=0）。
+    conn.execute("PRAGMA busy_timeout=30000")
     return conn
 
 
 def bulk_insert_items(conn, items):
-    """批量插入，返回 (新增数, 重复数)"""
+    """批量插入，返回 (新增数, 重复数)。整段持 DB_LOCK 且带 busy_timeout 重试，
+    彻底消除并发写 "database is locked"。"""
     if not items:
         return 0, 0
     inserted = 0
@@ -233,26 +241,37 @@ def bulk_insert_items(conn, items):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     cur = conn.cursor()
     for it in items:
-        row = cur.execute(
-            "SELECT id FROM resources WHERE category=? AND name=? AND url=?",
-            (it["category"], it["name"], it["url"]),
-        ).fetchone()
-        if row:
-            dup += 1
-            continue
-        cur.execute(
-            """INSERT INTO resources
-               (name, category, media_type, region, year, cover,
-                description, url, quality, source, line_name, raw_type_name,
-                episodes, hits, score, updated_at, created_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-            (it["name"], it["category"], it["media_type"], it["region"],
-             it["year"], it["cover"], it["description"], it["url"],
-             it["quality"], it["source"], it["line_name"], it["raw_type_name"],
-             it["episodes"], it["hits"], it["score"], now, now),
-        )
-        inserted += 1
-    conn.commit()
+        for attempt in range(3):
+            try:
+                with DB_LOCK:
+                    row = cur.execute(
+                        "SELECT id FROM resources WHERE category=? AND name=? AND url=?",
+                        (it["category"], it["name"], it["url"]),
+                    ).fetchone()
+                    if row:
+                        dup += 1
+                        break
+                    cur.execute(
+                        """INSERT INTO resources
+                           (name, category, media_type, region, year, cover,
+                            description, url, quality, source, line_name, raw_type_name,
+                            episodes, hits, score, updated_at, created_at)
+                           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                        (it["name"], it["category"], it["media_type"], it["region"],
+                         it["year"], it["cover"], it["description"], it["url"],
+                         it["quality"], it["source"], it["line_name"], it["raw_type_name"],
+                         it["episodes"], it["hits"], it["score"], now, now),
+                    )
+                    conn.commit()
+                inserted += 1
+                break
+            except sqlite3.OperationalError as e:
+                if attempt < 2:
+                    time.sleep(0.5 * (attempt + 1))
+                    continue
+                # 实在写不进就跳过这条，不让整轮崩溃（已持锁提交失败极罕见）
+                print(f"[warn] 插入失败已跳过: {it['name']} -> {e}")
+                break
     return inserted, dup
 
 
@@ -441,6 +460,14 @@ def main():
 
     save_progress(progress)
     elapsed = time.time() - t0
+    # 写统计文件，供工作流判定「是否有新数据」以决定是否重新生成+部署（节省 Pages 构建额度）。
+    # 即便被 TIME_LIMIT 打断，此文件也已写入，下一轮续跑后继续累计。
+    stats = {"new": grand_new, "dup": grand_dup, "elapsed_min": round(elapsed / 60, 1)}
+    try:
+        with open(os.path.join(REPO, "data", "_collect_stats.json"), "w", encoding="utf-8") as f:
+            json.dump(stats, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
     print(f"\n=== 全部完成：新增 {grand_new}，重复 {grand_dup}，"
           f"耗时 {elapsed / 60:.1f} 分钟 ===")
 

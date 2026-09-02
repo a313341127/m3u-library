@@ -2,6 +2,11 @@ __pycache__/
 *.pyc
 data/media_backup*.db
 data/*.log
+# media.db 已移出 git：会涨过 GitHub 单文件 100MB 硬限制(GH001)导致所有 push 被拒。
+# 现托管为 GitHub Release 资产(scripts/db_store.py, tag=db-store)，CI 开头 download / 结尾 upload。
+data/media.db
+data/media.db-wal
+data/media.db-shm
 output/
 .env
 node_modules/

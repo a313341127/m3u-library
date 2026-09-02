@@ -53,6 +53,14 @@ jobs:
         with:
           python-version: '3.13'
 
+      - name: 恢复 media.db（从 Release 资产，绕过 git 100MB 限制）
+        # media.db 已不再进 git（会涨过 100MB 触发 GH001 大文件拒绝→所有 push 失败→限额邮件）。
+        # 改为存 GitHub Release 资产（上限 2GB、无带宽配额）；CI 开头拉回上次采集的库。
+        # 若下载失败（网络/API 异常）本步以非 0 退出，让工作流失败以便下次重试，避免误清空。
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/db_store.py download
+
       - name: 并发采集（多源并发 + TIME_LIMIT 续跑）
         id: collect
         # fast_collect.py 直接写 media.db；进度存 data/fast_collect_progress.json，
@@ -64,11 +72,13 @@ jobs:
           python scripts/fast_collect.py \
             --time-limit ${{ github.event.inputs.TIME_LIMIT || '1500' }} \
             --workers 5 --type-workers 3
-          # 标记数据是否变化，供后续生成/部署步骤条件执行（节省 Pages 构建额度）
-          if git diff --quiet data/media.db; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          else
+          # 标记是否有新数据：读 fast_collect.py 写出的统计文件（不再用 git diff media.db，
+          # 因为 media.db 已移出 git）。new>0 表示本轮采到新片，后续才重新生成+部署。
+          NEW=$(python -c "import json;print(json.load(open('data/_collect_stats.json')).get('new',0))" 2>/dev/null || echo 0)
+          if [ "$NEW" -gt 0 ]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: 生成途播 Jellyfin 后端数据（api/movies.json + 地区分片）
@@ -174,15 +184,17 @@ jobs:
             Cache-Control: max-age=0, must-revalidate
           EOF
 
-      - name: 提交数据库与进度（供下次续跑 + 增量去重）
-        # 顺序：先提交数据，最后才部署；即便部署失败数据也已落库 main。
-        # 额外提交 data/fast_collect_progress.json（断点续跑状态），这是云端高频轮转的关键。
+      - name: 提交进度与规则（media.db 不进 git，改走 Release 资产）
+        if: always()
+        # 顺序：先提交小文件，最后才部署；即便部署失败也已落库。
+        # 仅提交 data/fast_collect_progress.json（断点续跑状态）+ 直播台标 + 直连规则等小文件；
+        # media.db 体积会涨过 100MB，改由下方「上传 media.db」步骤存到 Release 资产。
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/media.db data/fast_collect_progress.json data/live_logos/ data/host_health.json scripts/shadowrocket_direct_rules.list scripts/shadowrocket_direct_module.conf scripts/direct_rules_clash.yaml
+          git add data/fast_collect_progress.json data/live_logos/ data/host_health.json scripts/shadowrocket_direct_rules.list scripts/shadowrocket_direct_module.conf scripts/direct_rules_clash.yaml
           if git diff --cached --quiet; then
-            echo "数据库无变化，跳过提交"
+            echo "无小文件变化，跳过提交"
           else
             git commit -m "chore: 并发采集进度更新 $(date +%F)"
             git fetch origin main
@@ -191,6 +203,14 @@ jobs:
             git merge origin/main --ff-only 2>/dev/null || true
             git push origin HEAD:main
           fi
+
+      - name: 上传 media.db 到 Release 资产（绕过 git 100MB 限制）
+        if: always()
+        # 把更新后的 media.db 存回 Release 资产（db-store / media.db），供下一轮 CI 拉回续跑。
+        # 库 <5MB 时自动跳过，避免「下载失败→空库」误清空好库。
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/db_store.py upload
 
       - name: 部署到 Cloudflare Pages（裸域名 qinjin.pages.dev = 途播入口）
         if: steps.collect.outputs.changed == 'true'

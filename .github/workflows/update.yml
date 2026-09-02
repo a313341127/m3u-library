@@ -59,6 +59,11 @@ jobs:
         with:
           python-version: '3.13'
 
+      - name: 恢复 media.db（从 Release 资产，绕过 git 100MB 限制）
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/db_store.py download
+
       - name: 增量采集（按天轮换，3 天一循环全覆盖）
         if: ${{ inputs.MODE != 'full' }}
         run: |
@@ -237,10 +242,11 @@ jobs:
         # ⚠️ 关键顺序修复：此前此步骤在「部署」之后，一旦部署失败(如 25MiB 超限)提交就不执行，
         # 采集到的数据全部丢失(白采)。现改为「采集+生成后立即提交，最后才部署」——
         # 即便部署出问题，数据已安全落库 main，下次重跑只需续采。
+        # media.db 已移出 git（会涨过 100MB 触发 GH001 大文件拒绝），改由下方「上传 media.db」步骤存 Release 资产。
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/media.db data/live_logos/ data/host_health.json scripts/shadowrocket_direct_rules.list scripts/shadowrocket_direct_module.conf scripts/direct_rules_clash.yaml
+          git add data/live_logos/ data/host_health.json scripts/shadowrocket_direct_rules.list scripts/shadowrocket_direct_module.conf scripts/direct_rules_clash.yaml
           if git diff --cached --quiet; then
             echo "数据库无变化，跳过提交"
           else
@@ -251,6 +257,13 @@ jobs:
             git merge origin/main --ff-only 2>/dev/null || true
             git push origin HEAD:main
           fi
+
+      - name: 上传 media.db 到 Release 资产（绕过 git 100MB 限制）
+        # 把更新后的 media.db 存回 Release 资产（db-store / media.db），供下一轮 CI 拉回续跑。
+        # 库 <5MB 时自动跳过，避免「下载失败→空库」误清空好库。
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/db_store.py upload
 
       - name: 部署到 Cloudflare Pages（裸域名 qinjin.pages.dev = 途播入口，由 main 分支提供）
         env:
