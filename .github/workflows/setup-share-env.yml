@@ -1,0 +1,39 @@
+name: 配置分享站环境变量
+
+# 用途：给 qs-agcl2（零 KV 分享站）Pages 项目设置持久化所需环境变量，
+# 使管理员在 /__admin 生成的邀请码能经 GitHub Contents API 写回仓库 share/codes.json。
+# 手动在 Actions 页面 Run workflow 触发。
+# 依赖 Secrets: CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID（已有）、SHARE_GITHUB_PAT（已存入，值为有 repo 权限的 PAT）。
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: 设置 qs-agcl2 Pages 环境变量
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          SHARE_GITHUB_PAT: ${{ secrets.SHARE_GITHUB_PAT }}
+          SHARE_GITHUB_REPO: "a313341127/m3u-library"
+        run: python .github/scripts/setup_share_env.py
+
+      - name: 重新部署分享站使环境变量生效
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          python share/build.py
+          npx --yes wrangler@4 pages deploy share/dist --project-name=qs-agcl2 --branch=main
