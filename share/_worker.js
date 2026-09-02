@@ -751,6 +751,15 @@ export default {
       }
     }
 
+    // ===== 公开静态资源（影片元数据/封面/站点图标，不含 M3U/TXT 播放链接）=====
+    // 首页数据分片 /web/data_*.js、描述 /web/desc_*.js、海报 /covers/* 都是公开影片信息，
+    // 直接放行 ASSETS 可让未登录/未带 cookie 的首页也能渲染卡片；播放仍受 key/cookie 保护。
+    const PUBLIC_PATHS = ["/web/", "/covers/", "/favicon.ico"];
+    if (PUBLIC_PATHS.some(p => path === p || path.startsWith(p))) {
+      const r = await env.ASSETS.fetch(request);
+      return wrapAsset(r, path, null);
+    }
+
     // ===== 未登录 → 登录页 / 403 =====
     if (path === "/" || path === "/index.html") {
       return new Response(LOGIN_HTML.replace("<!--ERR-->", ""), {
