@@ -145,14 +145,25 @@ function patchCache(code, user) {
   codeCacheAt = Date.now();
 }
 
-function isBlocked(user, code) {
-  if (user && user.status === "blocked") return true;
+// 24h 内不同设备数：优先用 D1（跨边缘实例一致 + 持久 + 自然过期），未绑定时回退本实例内存（方案 A+D 行为）。
+async function distinctDevices(env, code) {
+  if (env && env.DB) {
+    try {
+      const cutoff = Date.now() - DEVICE_TTL;
+      const r = await env.DB.prepare("SELECT COUNT(DISTINCT did) AS c FROM access_log WHERE code=? AND ts>?")
+        .bind(code, cutoff).first();
+      return (r && r.c) || 0;
+    } catch (e) { /* D1 不可用 → 回退内存 */ }
+  }
   const st = accessState.get(code);
-  return !!(st && st.softBlocked);
+  return (st && st.devices24h) ? st.devices24h.length : 0;
 }
-function isAnomaly(code) {
-  const st = accessState.get(code);
-  return !!(st && (st.softAnomaly || st.softBlocked));
+async function isBlocked(env, user, code) {
+  if (user && user.status === "blocked") return true;        // 手动封禁永久生效
+  return (await distinctDevices(env, code)) > BLOCK_DEVICES;  // 自动封禁由 24h 窗口自然过期
+}
+async function isAnomaly(env, code) {
+  return (await distinctDevices(env, code)) > ANOMALY_DEVICES;
 }
 
 // 记录访问 + IP 异常检测。
@@ -194,6 +205,16 @@ async function logAccess(env, code, request, path, did) {
     st.lastIP = ip;
     st.recentLogs = [...(st.recentLogs || []), { ts, ip, ua: ua.substring(0, 80), path, did: did.substring(0, 6) }].slice(-MAX_LOGS);
     accessState.set(code, st);
+    // D1 遥测（方案 B）：跨边缘实例一致的设备计数，使自动封禁真正可靠。未绑定时跳过，回退内存。
+    if (env && env.DB) {
+      try {
+        await env.DB.prepare("INSERT INTO access_log (code, did, ip, ts) VALUES (?, ?, ?, ?)")
+          .bind(code, did, ip, Date.now()).run();
+        // 异步清理 48h 前的旧行（best-effort，不阻塞本次请求）
+        env.DB.prepare("DELETE FROM access_log WHERE ts < ?")
+          .bind(Date.now() - 2 * DEVICE_TTL).run().catch(() => {});
+      } catch (e) { /* D1 写入失败不阻塞访问 */ }
+    }
     // 节流落盘：每 10s 最多写回一次 GitHub，合并 pending 计数（失败不阻塞访问）
     if (!st.lastFlush || Date.now() - st.lastFlush > 10000) {
       st.lastFlush = Date.now();
@@ -394,7 +415,7 @@ async function loadUsers() {
       '<td><span class="code">' + u.code + '</span></td>' +
       '<td>' + badge + '</td>' +
       '<td>' + (u.totalAccess || 0) + '</td>' +
-      '<td class="ips">' + (u.devices24h || []).length + ' 个设备<br>' + devs + '</td>' +
+      '<td class="ips">' + (u.devices24hCount != null ? u.devices24hCount : (u.devices24h || []).length) + ' 个设备(跨实例)<br>' + devs + '</td>' +
       '<td class="ips">' + fmtTime(u.lastAccess) + '</td>' +
       '<td class="actions">' +
         '<button class="btn btn-sm" onclick="showCode(\\'' + u.code + '\\')">二维码</button>' +
@@ -506,8 +527,8 @@ loadUsers();
 function escHtml(s) {
   return String(s || "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 }
-function popupHTML(code, user, anomaly) {
-  const devs = (user.devices24h || []).length;
+function popupHTML(code, user, anomaly, devs) {
+  devs = devs || (user.devices24h || []).length;
   const banner = anomaly
     ? `<div class="qg-pn-warn">警告：你的邀请码 24 小时内已在 <b>${devs}</b> 个不同设备上使用，已被标记为异常。请立即停止分享，再扩散将自动封禁（24h 后自动恢复）。</div>`
     : "";
@@ -650,10 +671,11 @@ export default {
           users.push({
             code, name: u.name,
             // 软异常(设备维度)叠加到 status，使管理面板能反映运行时异常
-            status: isAnomaly(code) ? "anomaly" : u.status,
+            status: (await isAnomaly(env, code)) ? "anomaly" : u.status,
             // 累计数 = 持久化值(跨实例/重启有效) + 本实例尚未落盘的 pending
             totalAccess: (u.totalAccess || 0) + (st ? (st.pendingAccess || 0) : 0),
-            // 设备数(判定维度, 内存实例级 best-effort) + 最近 IP(审计展示)
+            // 设备数(判定维度)：devices24hCount 为 D1 真实跨实例值(未绑定时回退内存)，devices24h 为内存明细(审计)
+            devices24hCount: await distinctDevices(env, code),
             devices24h: st ? (st.devices24h || []) : [],
             ips24h: st ? (st.ips24h || []) : [],
             lastAccess: u.lastAccess || (st ? st.lastAccess : null),
@@ -748,7 +770,7 @@ export default {
           headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "set-cookie": cookieStr(DEVICE_COOKIE, did) },
         });
       }
-      if (isBlocked(user, code)) {
+      if (await isBlocked(env, user, code)) {
         return new Response(BLOCKED_HTML, { status: 403, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
       }
       await logAccess(env, code, request, "/", did);
@@ -768,7 +790,7 @@ export default {
           headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "set-cookie": cookieStr(DEVICE_COOKIE, did) },
         });
       }
-      if (isBlocked(user, code)) {
+      if (await isBlocked(env, user, code)) {
         return new Response(BLOCKED_HTML, { status: 403, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
       }
       await logAccess(env, code, request, "/", did);
@@ -783,7 +805,7 @@ export default {
     if (keyParam) {
       const code = keyParam.toUpperCase();
       const user = await getUser(env, code);
-      if (!user || isBlocked(user, code)) return new Response("Forbidden", { status: 403 });
+      if (!user || await isBlocked(env, user, code)) return new Response("Forbidden", { status: 403 });
       // 限速：每码每设备每分钟 ?key= 资源请求上限，防刷/防源站被打
       if (rateLimited(code, did)) {
         return new Response("请求过于频繁，请稍后再试", { status: 429, headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
@@ -797,19 +819,21 @@ export default {
     const cookieCode = getCookie(request, COOKIE);
     if (cookieCode) {
       let user = await getUser(env, cookieCode);
-      if (user && !isBlocked(user, cookieCode)) {
+      if (user && !(await isBlocked(env, user, cookieCode))) {
         const isPage = path === "/" || path === "/index.html";
         // 网页访问也记录设备（此前仅登录/M3U 请求记录）；用更新后的数据渲染弹窗
         if (isPage) user = (await logAccess(env, cookieCode, request, path, did)) || user;
         const r = await env.ASSETS.fetch(request);
         // 首次访问（无 qgnote）或异常状态 → 注入弹窗
-        const needPopup = getCookie(request, NOTE_COOKIE) !== "1" || isAnomaly(cookieCode) || user.status === "anomaly";
+        const anom = await isAnomaly(env, cookieCode);
+        const dn = await distinctDevices(env, cookieCode);
+        const needPopup = getCookie(request, NOTE_COOKIE) !== "1" || anom || user.status === "anomaly";
         const isHtml = (r.headers.get("content-type") || "").includes("text/html");
         if (isPage && needPopup && isHtml) {
           let html = await r.text();
           const idx = html.toLowerCase().lastIndexOf("</body>");
-          if (idx >= 0) html = html.slice(0, idx) + popupHTML(cookieCode, user, isAnomaly(cookieCode)) + html.slice(idx);
-          else html += popupHTML(cookieCode, user, isAnomaly(cookieCode));
+          if (idx >= 0) html = html.slice(0, idx) + popupHTML(cookieCode, user, anom, dn) + html.slice(idx);
+          else html += popupHTML(cookieCode, user, anom, dn);
           const res = new Response(html, r);
           res.headers.set("cache-control", "no-store");
           res.headers.set("X-Robots-Tag", "noindex");
