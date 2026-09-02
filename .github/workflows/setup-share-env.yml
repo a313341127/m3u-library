@@ -1,0 +1,45 @@
+name: 配置分享站环境变量
+
+# 用途：给 qs-agcl2（零 KV 分享站）Pages 项目写入运行期环境变量，
+# 使管理员在 /__admin 生成的邀请码能经 GitHub Contents API 写回仓库 share/codes.json。
+# 手动在 Actions 页面 Run workflow 触发。
+#
+# 机制：Pages Functions 运行期变量不能用 wrangler pages deploy --var（不支持），
+# 也不能只靠 deployment_configs.env_vars（wrangler 部署会把项目配置重置，运行期读不到）。
+# 正确做法是用 `wrangler pages secret put` 把变量写进项目侧（持久、跨部署保留）。
+# 依赖 Secrets: CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID（已有）、SHARE_GITHUB_PAT（已存入，值为有 repo 权限的 PAT）。
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: 写入 qs-agcl2 运行期环境变量（secret put，持久保留）
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          SHARE_GITHUB_PAT: ${{ secrets.SHARE_GITHUB_PAT }}
+        run: |
+          echo "$SHARE_GITHUB_PAT" | npx --yes wrangler@4 pages secret put GITHUB_TOKEN --project-name=qs-agcl2
+          echo "a313341127/m3u-library" | npx --yes wrangler@4 pages secret put GITHUB_REPO --project-name=qs-agcl2
+          echo "0" | npx --yes wrangler@4 pages secret put MIGRATE_FROM_KV --project-name=qs-agcl2
+
+      - name: 重新部署分享站使环境变量生效
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          python share/build.py
+          npx --yes wrangler@4 pages deploy share/dist --project-name=qs-agcl2 --branch=main
