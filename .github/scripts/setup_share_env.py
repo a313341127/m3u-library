@@ -2,8 +2,9 @@
 """给 qs-agcl2 Pages 项目设置环境变量（邀请码持久化所需）。
 
 通过 Cloudflare API：
-  - GET  /accounts/{acct}/pages/projects/qs-agcl2  读取现有 deployment_configs
+  - GET  /accounts/{acct}/pages/projects/qs-agcl2  读取现有 deployment_configs + production_branch
   - 合并 env_vars: GITHUB_TOKEN / GITHUB_REPO / MIGRATE_FROM_KV
+  - 同时写入 production 与 preview 两个环境（避免 wrangler --branch=main 产生 preview 部署时吃不到变量）
   - PATCH /accounts/{acct}/pages/projects/qs-agcl2  写回
 
 环境变量来源（CI secrets）：
@@ -50,35 +51,41 @@ def cf(method, path, body=None):
 
 
 def main():
-    # 1) 读取当前项目配置
     st, d = cf("GET", f"/accounts/{ACCT}/pages/projects/{PROJ}")
     if not d.get("success"):
         print("GET project failed:", st, json.dumps(d)[:500])
         sys.exit(1)
     result = d["result"]
+    print("production_branch:", result.get("production_branch"))
     cfg = dict(result.get("deployment_configs", {}) or {})
-    prod = dict(cfg.get("production", {}) or {})
-    env_vars = dict(prod.get("env_vars", {}) or {})
 
-    # 2) 合并我们要设的变量
-    env_vars["GITHUB_TOKEN"] = {"value": GH_PAT}
-    env_vars["GITHUB_REPO"] = {"value": GH_REPO}
-    env_vars["MIGRATE_FROM_KV"] = {"value": "0"}
-    prod["env_vars"] = env_vars
-    cfg["production"] = prod
+    env_vars = {
+        "GITHUB_TOKEN": {"value": GH_PAT},
+        "GITHUB_REPO": {"value": GH_REPO},
+        "MIGRATE_FROM_KV": {"value": "0"},
+    }
 
-    # 3) 写回
+    for env_name in ("production", "preview"):
+        env = dict(cfg.get(env_name, {}) or {})
+        existing = dict(env.get("env_vars", {}) or {})
+        existing.update(env_vars)
+        env["env_vars"] = existing
+        cfg[env_name] = env
+
     st2, d2 = cf("PATCH", f"/accounts/{ACCT}/pages/projects/{PROJ}",
                   {"deployment_configs": cfg})
     if not d2.get("success"):
         print("PATCH failed:", st2, json.dumps(d2)[:600])
         sys.exit(1)
 
-    ev = (d2.get("result") or {}).get("deployment_configs", {}).get("production", {}).get("env_vars", {})
-    print("PATCH success. qs-agcl2 env vars:")
-    for k, v in ev.items():
-        val = v.get("value") if isinstance(v, dict) else v
-        print(f"  {k} = {'***' if k == 'GITHUB_TOKEN' else val}")
+    res_cfg = (d2.get("result") or {}).get("deployment_configs", {})
+    print("PATCH success. env vars now set on environments:", list(res_cfg.keys()))
+    for env_name, env in res_cfg.items():
+        ev = env.get("env_vars", {})
+        if ev:
+            print(f"  [{env_name}] " + ", ".join(
+                f"{k}={'***' if k == 'GITHUB_TOKEN' else v.get('value') if isinstance(v, dict) else v}"
+                for k, v in ev.items()))
 
 
 if __name__ == "__main__":
