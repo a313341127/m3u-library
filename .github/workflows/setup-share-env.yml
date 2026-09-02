@@ -32,7 +32,6 @@ jobs:
           SHARE_GITHUB_PAT: ${{ secrets.SHARE_GITHUB_PAT }}
         run: |
           python share/build.py
-          # 生成 wrangler.toml（含运行期变量），仅存在于 CI，不入库；[vars] 是 Pages Functions 运行期变量规范写法
           cat > share/dist/wrangler.toml <<'WFEOF'
           name = "qs-agcl2"
           [vars]
