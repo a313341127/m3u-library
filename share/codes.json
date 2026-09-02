@@ -1,3 +1,13 @@
 {
-  "codes": []
+  "codes": [
+    {
+      "name": "E2E测试",
+      "code": "BGBBB8",
+      "status": "active",
+      "created": "2026-09-02T04:44:46.730Z",
+      "totalAccess": 0,
+      "ips24h": [],
+      "recentLogs": []
+    }
+  ]
 }
