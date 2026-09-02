@@ -4,8 +4,9 @@ name: 配置分享站环境变量
 # 使管理员在 /__admin 生成的邀请码能经 GitHub Contents API 写回仓库 share/codes.json。
 # 手动在 Actions 页面 Run workflow 触发。
 #
-# 机制（已验证的路径）：Pages Functions 运行期变量用 wrangler.toml 的 [vars] 在部署时注入最可靠。
-# GITHUB_TOKEN 由 secrets.SHARE_GITHUB_PAT 在 CI 内展开写入生成的 wrangler.toml，不入库、不进 git。
+# 机制：用 Cloudflare API（CLOUDFLARE_API_TOKEN）PATCH deployment_configs.production.env_vars，
+# 变量值必须带 type 字段（secret / plain_text），否则 Cloudflare 存了也不绑定到 Functions 运行期。
+# 随后 wrangler pages deploy 会沿用项目配置里的 env_vars。
 # 依赖 Secrets: CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID（已有）、SHARE_GITHUB_PAT（已存入，值为有 repo 权限的 PAT）。
 on:
   workflow_dispatch:
@@ -19,24 +20,42 @@ jobs:
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
-
       - name: 安装 Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-
-      - name: 构建并写入运行期环境变量（wrangler.toml [vars] 部署时注入）
+      - name: PATCH qs-agcl2 运行期环境变量（带 type）
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           SHARE_GITHUB_PAT: ${{ secrets.SHARE_GITHUB_PAT }}
         run: |
+          python - <<'PY'
+          import os, json, urllib.request
+          TOKEN=os.environ["CLOUDFLARE_API_TOKEN"]; ACCT=os.environ["CLOUDFLARE_ACCOUNT_ID"]
+          GH=os.environ["SHARE_GITHUB_PAT"]; PROJ="qs-agcl2"
+          BASE="https://api.cloudflare.com/client/v4"
+          def cf(m,p,b=None):
+              d=json.dumps(b).encode() if b is not None else None
+              r=urllib.request.Request(BASE+p,data=d,headers={"Authorization":f"Bearer {TOKEN}","Content-Type":"application/json"},method=m)
+              with urllib.request.urlopen(r,timeout=60) as x: return json.load(x)
+          cur=cf("GET",f"/accounts/{ACCT}/pages/projects/{PROJ}")["result"]
+          cfg=dict(cur.get("deployment_configs",{}) or {})
+          prod=dict(cfg.get("production",{}) or {})
+          ev=prod.get("env_vars",{}) or {}
+          ev["GITHUB_TOKEN"]={"type":"secret","value":GH}
+          ev["GITHUB_REPO"]={"type":"plain_text","value":"a313341127/m3u-library"}
+          ev["MIGRATE_FROM_KV"]={"type":"plain_text","value":"0"}
+          prod["env_vars"]=ev; cfg["production"]=prod
+          out=cf("PATCH",f"/accounts/{ACCT}/pages/projects/{PROJ}",{"deployment_configs":cfg})
+          print("PATCH success:", out.get("success"))
+          for k,v in out["result"]["deployment_configs"]["production"]["env_vars"].items():
+              print(" ", k, "=", "***" if k=="GITHUB_TOKEN" else v.get("value"))
+          PY
+      - name: 重新部署使环境变量生效
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
           python share/build.py
-          cat > share/dist/wrangler.toml <<'WFEOF'
-          name = "qs-agcl2"
-          [vars]
-          GITHUB_REPO = "a313341127/m3u-library"
-          MIGRATE_FROM_KV = "0"
-          GITHUB_TOKEN = "${{ secrets.SHARE_GITHUB_PAT }}"
-          WFEOF
-          cd share/dist && npx --yes wrangler@4 pages deploy . --project-name=qs-agcl2 --branch=main
+          npx --yes wrangler@4 pages deploy share/dist --project-name=qs-agcl2 --branch=main
