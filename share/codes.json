@@ -1,31 +1,3 @@
 {
-  "codes": [
-    {
-      "name": "E2E测试",
-      "code": "BGBBB8",
-      "status": "active",
-      "created": "2026-09-02T04:44:46.730Z",
-      "totalAccess": 0,
-      "ips24h": [],
-      "recentLogs": []
-    },
-    {
-      "name": "E2E测试",
-      "code": "YGPQU3",
-      "status": "active",
-      "created": "2026-09-02T04:45:03.575Z",
-      "totalAccess": 0,
-      "ips24h": [],
-      "recentLogs": []
-    },
-    {
-      "name": "E2E测试",
-      "code": "MACU79",
-      "status": "active",
-      "created": "2026-09-02T04:45:21.018Z",
-      "totalAccess": 0,
-      "ips24h": [],
-      "recentLogs": []
-    }
-  ]
+  "codes": []
 }
