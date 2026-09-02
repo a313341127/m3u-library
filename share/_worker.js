@@ -36,7 +36,7 @@ function json(data, status = 200) {
 }
 
 // ---------- 码表（静态 JSON via ASSETS，零 KV）----------
-// 码表文件：仓库内 m3u-library/share/codes.json，部署后由 env.ASSETS 提供（路径 /codes.json）。
+// 码表文件：仓库内 share/codes.json，部署后由 env.ASSETS 提供（路径 /codes.json）。
 // 管理面板增删改 → 通过 GitHub Contents API 写回仓库（需 GITHUB_TOKEN + GITHUB_REPO 环境变量/密钥），
 //   同时更新内存缓存立即生效；下次部署后 ASSETS 自动同步。
 // 访问遥测（ips24h / 访问次数等）仅存内存，worker 重启后重置（无 KV/D1 写入）。
@@ -93,7 +93,7 @@ async function getIndex(env) {
 // ---- GitHub Contents API（把码表写回仓库，实现零 KV 持久化）----
 async function ghRead(env) {
   if (!env.GITHUB_TOKEN || !env.GITHUB_REPO) return null;
-  const url = `https://api.github.com/repos/${env.GITHUB_REPO}/contents/m3u-library/share/codes.json`;
+  const url = `https://api.github.com/repos/${env.GITHUB_REPO}/contents/share/codes.json`;
   try {
     const r = await fetch(url, { headers: { Authorization: `Bearer ${env.GITHUB_TOKEN}`, Accept: "application/vnd.github+json", "User-Agent": "qs-agcl2" } });
     if (!r.ok) return null;
@@ -103,7 +103,7 @@ async function ghRead(env) {
 }
 async function ghWrite(env, content, sha, message) {
   if (!env.GITHUB_TOKEN || !env.GITHUB_REPO) return false;
-  const url = `https://api.github.com/repos/${env.GITHUB_REPO}/contents/m3u-library/share/codes.json`;
+  const url = `https://api.github.com/repos/${env.GITHUB_REPO}/contents/share/codes.json`;
   const body = JSON.stringify({ message, content: b64encode(JSON.stringify(content, null, 2)), sha });
   try {
     const r = await fetch(url, {
