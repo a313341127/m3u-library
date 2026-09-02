@@ -30,10 +30,16 @@ jobs:
           SHARE_GITHUB_REPO: "a313341127/m3u-library"
         run: python .github/scripts/setup_share_env.py
 
-      - name: 重新部署分享站使环境变量生效
+      - name: 重新部署分享站使环境变量生效（运行期变量用 --var 注入）
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          SHARE_GITHUB_PAT: ${{ secrets.SHARE_GITHUB_PAT }}
         run: |
           python share/build.py
-          npx --yes wrangler@4 pages deploy share/dist --project-name=qs-agcl2 --branch=main
+          # --var 把运行期 Functions 变量直接打进本次部署（deployment_configs.env_vars 只是构建期，运行期读不到）
+          # GitHub Actions 会自动把 secret 值在日志中打码，不会泄露。
+          npx --yes wrangler@4 pages deploy share/dist --project-name=qs-agcl2 --branch=main \
+            --var GITHUB_TOKEN=${{ secrets.SHARE_GITHUB_PAT }} \
+            --var GITHUB_REPO=a313341127/m3u-library \
+            --var MIGRATE_FROM_KV=0
