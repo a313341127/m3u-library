@@ -197,28 +197,32 @@ def parse_vod_to_items(v, source_name, source_type_name="",
 
 
 def map_source_types(api):
-    """获取源站类型映射"""
+    """获取源站类型映射。任何解析异常都安全返回空（单源出错不中止整轮）。"""
     try:
         data = http_get_json(join_params(api, ac="list"))
-    except Exception:
+        # 部分源站 ac=list 可能返回 JSON 数组/错误页而非对象，必须兜底。
+        if not isinstance(data, dict):
+            return []
+        classes = data.get("class") or []
+        mapped = []
+        for cls in classes:
+            tid = cls.get("type_id")
+            tname = (cls.get("type_name") or "").strip()
+            if not tname:
+                continue
+            classified = classify_category(tname)
+            if classified is None:
+                continue
+            cat, mt = classified
+            try:
+                tid = int(tid) if tid is not None else None
+            except (TypeError, ValueError):
+                tid = None
+            mapped.append((tid, tname, cat, mt))
+        return mapped
+    except Exception as e:
+        print(f"[warn] map_source_types 解析失败，跳过该源: {e}")
         return []
-    classes = data.get("class") or []
-    mapped = []
-    for cls in classes:
-        tid = cls.get("type_id")
-        tname = (cls.get("type_name") or "").strip()
-        if not tname:
-            continue
-        classified = classify_category(tname)
-        if classified is None:
-            continue
-        cat, mt = classified
-        try:
-            tid = int(tid) if tid is not None else None
-        except (TypeError, ValueError):
-            tid = None
-        mapped.append((tid, tname, cat, mt))
-    return mapped
 
 
 # ---------- 数据库 ----------
@@ -342,39 +346,47 @@ def collect_type(api, site_name, tid, tname, forced_cat, forced_mt,
 
 
 def collect_source(api, site_name, pages, start_page, want_category, progress, lock, type_workers):
-    """采集单个源"""
-    type_map = map_source_types(api)
-    if not type_map:
-        print(f"[{site_name}] 未获取到类型列表，fallback 全量混采")
-        type_map = [(None, "", None, "")]
-
-    # 探测 t=type_id 是否生效：部分源忽略 type 参数
-    first_tid = next((t[0] for t in type_map if t[0] is not None), None)
-    if first_tid is not None:
-        probe = http_get_json(join_params(api, ac="list", t=first_tid, pg=1))
-        if not probe or not probe.get("list"):
-            print(f"[{site_name}] 源不支持按类型筛选，改用全量混采模式")
+    """采集单个源。任何异常安全返回 (site_name,0,0)，不让单源错误中止整轮。"""
+    try:
+        type_map = map_source_types(api)
+        if not type_map:
+            print(f"[{site_name}] 未获取到类型列表，fallback 全量混采")
             type_map = [(None, "", None, "")]
 
-    if want_category:
-        type_map = [t for t in type_map if t[2] == want_category or t[2] is None]
-    if not type_map:
-        print(f"[{site_name}] 无匹配目标分类，跳过")
-        return site_name, 0, 0
+        # 探测 t=type_id 是否生效：部分源忽略 type 参数（返回非 dict 时按全量处理）
+        first_tid = next((t[0] for t in type_map if t[0] is not None), None)
+        if first_tid is not None:
+            probe = http_get_json(join_params(api, ac="list", t=first_tid, pg=1))
+            if not isinstance(probe, dict) or not probe.get("list"):
+                print(f"[{site_name}] 源不支持按类型筛选，改用全量混采模式")
+                type_map = [(None, "", None, "")]
 
-    total_new = 0
-    total_dup = 0
-    with ThreadPoolExecutor(max_workers=type_workers) as ex:
-        futs = []
-        for tid, tname, cat, mt in type_map:
-            futs.append(ex.submit(
-                collect_type, api, site_name, tid, tname, cat, mt,
-                pages, start_page, want_category, progress, lock
-            ))
-        for f in as_completed(futs):
-            _, n, d = f.result()
-            total_new += n
-            total_dup += d
+        if want_category:
+            type_map = [t for t in type_map if t[2] == want_category or t[2] is None]
+        if not type_map:
+            print(f"[{site_name}] 无匹配目标分类，跳过")
+            return site_name, 0, 0
+
+        total_new = 0
+        total_dup = 0
+        with ThreadPoolExecutor(max_workers=type_workers) as ex:
+            futs = []
+            for tid, tname, cat, mt in type_map:
+                futs.append(ex.submit(
+                    collect_type, api, site_name, tid, tname, cat, mt,
+                    pages, start_page, want_category, progress, lock
+                ))
+            for f in as_completed(futs):
+                try:
+                    _, n, d = f.result()
+                except Exception as e:
+                    print(f"[{site_name}] 某类型采集异常，已跳过: {e}")
+                    n, d = 0, 0
+                total_new += n
+                total_dup += d
+    except Exception as e:
+        print(f"[{site_name}] 采集异常，已跳过该源: {e}")
+        return site_name, 0, 0
 
     return site_name, total_new, total_dup
 
@@ -452,7 +464,13 @@ def main():
             for name, api in sources.items()
         }
         for f in as_completed(futs):
-            name, n, d = f.result()
+            try:
+                name, n, d = f.result()
+            except Exception as e:
+                # 理论上 collect_source 已内部兜底；此处再兜一层，确保整轮绝不崩。
+                name = futs[f]
+                print(f"[{name}] 采集异常，已跳过: {e}")
+                n, d = 0, 0
             grand_new += n
             grand_dup += d
             print(f"[{name}] 完成，新增 {n}，重复 {d}")
