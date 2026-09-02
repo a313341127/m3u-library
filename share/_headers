@@ -1,0 +1,52 @@
+/movie.m3u
+  Content-Type: application/vnd.apple.mpegurl
+  Cache-Control: max-age=0, must-revalidate
+/tv.m3u
+  Content-Type: application/vnd.apple.mpegurl
+  Cache-Control: max-age=0, must-revalidate
+/anime.m3u
+  Content-Type: application/vnd.apple.mpegurl
+  Cache-Control: max-age=0, must-revalidate
+/variety.m3u
+  Content-Type: application/vnd.apple.mpegurl
+  Cache-Control: max-age=0, must-revalidate
+/movie.txt
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: max-age=0, must-revalidate
+/tv.txt
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: max-age=0, must-revalidate
+/anime.txt
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: max-age=0, must-revalidate
+/variety.txt
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: max-age=0, must-revalidate
+/movie.best.m3u
+  Content-Type: application/vnd.apple.mpegurl
+  Cache-Control: max-age=0, must-revalidate
+/tv.best.m3u
+  Content-Type: application/vnd.apple.mpegurl
+  Cache-Control: max-age=0, must-revalidate
+/anime.best.m3u
+  Content-Type: application/vnd.apple.mpegurl
+  Cache-Control: max-age=0, must-revalidate
+/variety.best.m3u
+  Content-Type: application/vnd.apple.mpegurl
+  Cache-Control: max-age=0, must-revalidate
+/movie.best.txt
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: max-age=0, must-revalidate
+/tv.best.txt
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: max-age=0, must-revalidate
+/anime.best.txt
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: max-age=0, must-revalidate
+/variety.best.txt
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: max-age=0, must-revalidate
+/index.html
+  Cache-Control: max-age=0, must-revalidate
+/codes.json
+  Cache-Control: no-store
