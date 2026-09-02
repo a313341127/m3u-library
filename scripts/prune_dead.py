@@ -111,6 +111,25 @@ def _ensure_health_table(con):
     )
 
 
+def _self_heal(con):
+    """自愈：把历史误标为 dead、但实际是成功响应的链接纠正回 alive。
+
+    旧版 prune_dead 曾把 206(Partial Content) 等 2xx/3xx 成功码判为 dead，
+    导致这类影片被整片隐藏（如 ly166.com 等 m3u8 源）。当前 _classify 对
+    2xx/3xx 一律判 alive/unknown、只把 410(Gone) 与连接级失败(code=0) 判 dead，
+    故任何 status='dead' 且 code 非 0/410 的行都是陈旧误杀。每轮运行先纠正，
+    确保不会因陈旧数据隐藏影片。幂等：纠正后这些行不再是 dead，后续轮次无影响。
+    """
+    cur = con.execute(
+        "UPDATE url_health SET status='alive' "
+        "WHERE status='dead' AND code NOT IN (0, 410)"
+    )
+    n = cur.rowcount
+    if n:
+        print("[prune] 自愈：纠正 %d 条陈旧误杀(dead→alive, code 2xx/3xx 等非 0/410)" % n)
+    return n
+
+
 def _pick_urls(con, limit, age_days):
     """选取本次要检测的 URL：age_days 内未检测的优先，按检测时间升序（最久未检的先查）。"""
     cutoff = (datetime.now() - timedelta(days=age_days)).strftime("%Y-%m-%d %H:%M:%S")
@@ -145,6 +164,7 @@ def main():
 
     con = sqlite3.connect(DB_PATH)
     _ensure_health_table(con)
+    _self_heal(con)  # 先纠正陈旧误杀(dead→alive)，避免隐藏影片
 
     urls = _pick_urls(con, args.limit, args.age_days)
     if not urls:
