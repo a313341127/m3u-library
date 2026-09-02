@@ -6,8 +6,11 @@ const COOKIE = "qgcode";           // 用户身份 Cookie（值为邀请码）
 const NOTE_COOKIE = "qgnote";      // 首次弹窗已确认 Cookie
 const ADMIN_COOKIE = "qgadmin";    // 管理员 Cookie
 const MAX_AGE = 7776000;           // 90 天
-const ANOMALY_IPS = 3;             // 24h 内超过 N 个不同 IP → 异常
-const BLOCK_IPS = 5;               // 24h 内超过 N 个不同 IP → 自动封禁
+const ANOMALY_DEVICES = 3;         // 24h 内超过 N 个不同设备 → 异常（替代原 IP 维度，避免手机换网误封）
+const BLOCK_DEVICES = 4;           // 24h 内超过 N 个不同设备 → 自动封禁（24h 自过期，不污染 GitHub）
+const RATE_LIMIT = 120;            // 每码每设备每分钟 ?key= 资源请求上限（防刷/防源站被打）
+const DEVICE_TTL = 86400000;       // 24h 窗口（设备计数 + 自动封禁自过期）
+const DEVICE_COOKIE = "qgdev";     // 设备指纹 Cookie（HttpOnly 随机值，跨 IP 稳定）
 const MAX_LOGS = 30;               // 每人保留最近 N 条访问日志
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // 无易混淆字符
 
@@ -19,6 +22,20 @@ function generateCode() {
 }
 function getClientIP(request) {
   return request.headers.get("cf-connecting-ip") || "unknown";
+}
+function genDeviceId() {
+  const a = new Uint8Array(16);
+  crypto.getRandomValues(a);
+  return Array.from(a).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+const rateStore = new Map();       // "code:did" -> [ts,...]（?key= 限速，内存 best-effort）
+function rateLimited(code, did) {
+  const key = code + ":" + did;
+  const now = Date.now();
+  let arr = (rateStore.get(key) || []).filter(t => now - t < 60000);
+  if (arr.length >= RATE_LIMIT) { rateStore.set(key, arr); return true; }
+  arr.push(now); rateStore.set(key, arr);
+  return false;
 }
 function nowISO() { return new Date().toISOString(); }
 function getCookie(request, name) {
@@ -48,7 +65,7 @@ let SELF_ORIGIN = SITE_URL;
 let codeCache = null;            // { codes: [...] }
 let codeCacheAt = 0;
 const CODE_TTL = 60_000;         // 内存缓存 60s，自动拾取新部署
-const accessState = new Map();   // code -> { ips24h, pendingAccess, lastAccess, lastIP, recentLogs, softBlocked, softAnomaly, lastFlush }
+const accessState = new Map();   // code -> { devices24h, ips24h, pendingAccess, lastAccess, lastIP, recentLogs, softBlocked, softBlockedAt, softAnomaly, lastFlush }
 
 function b64encode(str) { return btoa(unescape(encodeURIComponent(str))); }
 function b64decode(str) { return decodeURIComponent(escape(atob(str))); }
@@ -143,31 +160,39 @@ function isAnomaly(code) {
 //  - 内存 accessState：本实例的 IP 列表 / 未落盘计数（用于即时异常判定与去重）
 //  - 持久化：累计访问次数 totalAccess / 最近访问 lastAccess 节流写回 GitHub codes.json，
 //    使管理面板跨实例/重启后仍能看到真实累计数（IP 列表因隐私与跨实例一致性不持久化）。
-async function logAccess(env, code, request, path) {
+async function logAccess(env, code, request, path, did) {
   let user = await getUser(env, code);
   if (!user) return null;
-  let st = accessState.get(code) || { ips24h: [], pendingAccess: 0, recentLogs: [] };
+  let st = accessState.get(code) || { devices24h: [], ips24h: [], pendingAccess: 0, recentLogs: [] };
   try {
     const ip = getClientIP(request);
     const ua = (request.headers.get("user-agent") || "").substring(0, 120);
     const ts = nowISO();
-    const cutoff = Date.now() - 86400000;
-    // 清理 24h 以外的 IP 记录
+    const cutoff = Date.now() - DEVICE_TTL;
+    // 设备维度（跨 IP 稳定，根治手机换网误封）：统计 24h 内不同设备数
+    st.devices24h = (st.devices24h || []).filter(e => new Date(e.ts).getTime() > cutoff);
+    const dh = st.devices24h.find(e => e.did === did);
+    if (dh) { dh.ts = ts; dh.ip = ip; dh.count = (dh.count || 1) + 1; }
+    else st.devices24h.push({ did, ip, ts, count: 1 });
+    // 审计用：最近 IP 列表（仅展示，不计入判定）
     st.ips24h = (st.ips24h || []).filter(e => new Date(e.ts).getTime() > cutoff);
-    const hit = st.ips24h.find(e => e.ip === ip);
-    if (hit) { hit.ts = ts; hit.count = (hit.count || 1) + 1; }
-    else st.ips24h.push({ ip, ts, count: 1 });
-    // 异常判定（手动 blocked 不自动降级）
-    const n = st.ips24h.length;
+    const ih = st.ips24h.find(e => e.ip === ip);
+    if (ih) ih.ts = ts; else st.ips24h.push({ ip, ts });
+    // 自动封禁 24h 自过期（仅软封禁；手动 blocked 持久不受影响）
+    if (st.softBlocked && st.softBlockedAt && Date.now() - st.softBlockedAt > DEVICE_TTL) {
+      st.softBlocked = false; st.softBlockedAt = 0;
+    }
+    // 异常/封禁判定（设备维度；手动 blocked 不自动降级）
+    const n = st.devices24h.length;
     if (user.status !== "blocked") {
-      if (n > BLOCK_IPS) st.softBlocked = true;
-      else if (n > ANOMALY_IPS) st.softAnomaly = true;
+      if (n > BLOCK_DEVICES) { st.softBlocked = true; if (!st.softBlockedAt) st.softBlockedAt = Date.now(); }
+      else if (n > ANOMALY_DEVICES) st.softAnomaly = true;
       else st.softAnomaly = false;
     }
     st.pendingAccess = (st.pendingAccess || 0) + 1;
     st.lastAccess = ts;
     st.lastIP = ip;
-    st.recentLogs = [...(st.recentLogs || []), { ts, ip, ua: ua.substring(0, 80), path }].slice(-MAX_LOGS);
+    st.recentLogs = [...(st.recentLogs || []), { ts, ip, ua: ua.substring(0, 80), path, did: did.substring(0, 6) }].slice(-MAX_LOGS);
     accessState.set(code, st);
     // 节流落盘：每 10s 最多写回一次 GitHub，合并 pending 计数（失败不阻塞访问）
     if (!st.lastFlush || Date.now() - st.lastFlush > 10000) {
@@ -315,7 +340,7 @@ const ADMIN_HTML = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8
   .logout{float:right;background:none;border:1px solid #2a2f37;color:#9aa0a6;border-radius:8px;padding:6px 14px;font-size:12px;cursor:pointer;text-decoration:none}
 </style></head><body>
 <h1>分享管理面板 <a class="logout" href="/__admin/api/logout">退出</a></h1>
-<div class="sub">一人一码 · 超过 ${ANOMALY_IPS} 个 IP(24h) 标异常 · 超过 ${BLOCK_IPS} 个自动封禁</div>
+<div class="sub">一人一码 · 超过 ${ANOMALY_DEVICES} 个设备(24h) 标异常 · 超过 ${BLOCK_DEVICES} 个自动封禁(24h 自过期)</div>
 <div class="stats" id="stats"></div>
 <div class="addbar">
   <input id="newName" placeholder="朋友名字（如：张三）" maxlength="12">
@@ -324,7 +349,7 @@ const ADMIN_HTML = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8
 <table>
   <thead><tr>
     <th>名字</th><th>邀请码</th><th>状态</th><th>访问次数</th>
-    <th>24h IP数</th><th>最近访问</th><th>操作</th>
+    <th>24h 设备数</th><th>最近访问</th><th>操作</th>
   </tr></thead>
   <tbody id="tbody"></tbody>
 </table>
@@ -363,20 +388,20 @@ async function loadUsers() {
     const badge = u.status === 'active' ? '<span class="badge b-active">正常</span>'
       : u.status === 'anomaly' ? '<span class="badge b-anomaly">异常</span>'
       : '<span class="badge b-blocked">已封禁</span>';
-    const ips = (u.ips24h || []).map(e => e.ip).join('<br>');
+    const devs = (u.devices24h || []).map(e => (e.ip || '?') + (e.count > 1 ? (' ×' + e.count) : '')).join('<br>');
     return '<tr>' +
       '<td><b>' + esc(u.name) + '</b></td>' +
       '<td><span class="code">' + u.code + '</span></td>' +
       '<td>' + badge + '</td>' +
       '<td>' + (u.totalAccess || 0) + '</td>' +
-      '<td class="ips">' + (u.ips24h || []).length + ' 个<br>' + ips + '</td>' +
+      '<td class="ips">' + (u.devices24h || []).length + ' 个设备<br>' + devs + '</td>' +
       '<td class="ips">' + fmtTime(u.lastAccess) + '</td>' +
       '<td class="actions">' +
         '<button class="btn btn-sm" onclick="showCode(\\'' + u.code + '\\')">二维码</button>' +
         (u.status === 'blocked'
           ? '<button class="btn btn-warn" onclick="blockUser(\\'' + u.code + '\\', false)">解封</button>'
           : '<button class="btn btn-danger" onclick="blockUser(\\'' + u.code + '\\', true)">封禁</button>') +
-        '<button class="btn btn-sm" onclick="resetIPs(\\'' + u.code + '\\')">重置IP</button>' +
+        '<button class="btn btn-sm" onclick="resetIPs(\\'' + u.code + '\\')">重置设备</button>' +
         '<button class="btn btn-danger" onclick="delUser(\\'' + u.code + '\\')">删除</button>' +
       '</td></tr>';
   }).join('');
@@ -417,7 +442,7 @@ async function blockUser(code, blocked) {
 }
 
 async function resetIPs(code) {
-  if (!confirm('清空该码的 IP 记录？异常状态将恢复正常')) return;
+  if (!confirm('清空该码的设备/IP 记录？异常状态将恢复正常')) return;
   await fetch('/__admin/api/reset', {
     method: 'POST',
     headers: {'content-type': 'application/json'},
@@ -481,11 +506,10 @@ loadUsers();
 function escHtml(s) {
   return String(s || "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 }
-function popupHTML(code, user) {
-  const ips = (user.ips24h || []).length;
-  const isAnomaly = user.status === "anomaly";
-  const banner = isAnomaly
-    ? `<div class="qg-pn-warn">警告：你的邀请码 24 小时内已在 <b>${ips}</b> 个不同 IP 上使用，已被标记为异常。请立即停止分享，再扩散将自动封禁。</div>`
+function popupHTML(code, user, anomaly) {
+  const devs = (user.devices24h || []).length;
+  const banner = anomaly
+    ? `<div class="qg-pn-warn">警告：你的邀请码 24 小时内已在 <b>${devs}</b> 个不同设备上使用，已被标记为异常。请立即停止分享，再扩散将自动封禁（24h 后自动恢复）。</div>`
     : "";
   return `
 <style>
@@ -534,13 +558,13 @@ function popupHTML(code, user) {
     </div>
     <ul class="qg-pn-rules">
       <li>本邀请码<b>仅限本人使用，严禁转发</b>给他人</li>
-      <li>系统实时监测访问 IP，超过 <b>${ANOMALY_IPS} 个 IP</b> 标记异常</li>
-      <li>超过 <b>${BLOCK_IPS} 个 IP</b> 将<b>自动封禁</b>，无法访问</li>
+      <li>系统实时监测访问设备，超过 <b>${ANOMALY_DEVICES} 个设备</b> 标记异常</li>
+      <li>超过 <b>${BLOCK_DEVICES} 个设备</b> 将<b>自动封禁</b>（24h 后自动恢复）</li>
       <li>封禁后需联系分享者人工解封</li>
     </ul>
     <div class="qg-pn-ip">
       <span>当前 24h 已监测到</span>
-      <span class="v">${ips} / ${ANOMALY_IPS} 个 IP</span>
+      <span class="v">${devs} / ${ANOMALY_DEVICES} 个设备</span>
     </div>
     <button id="qg-pn-ok">我已知晓</button>
   </div>
@@ -580,6 +604,7 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;
+    const did = getCookie(request, DEVICE_COOKIE) || genDeviceId();   // 设备指纹（跨 IP 稳定）
     SELF_ORIGIN = url.origin;
 
     // ===== 管理面板路由 =====
@@ -623,10 +648,13 @@ export default {
           if (!u) continue;
           const st = accessState.get(code);
           users.push({
-            code, name: u.name, status: u.status,
+            code, name: u.name,
+            // 软异常(设备维度)叠加到 status，使管理面板能反映运行时异常
+            status: isAnomaly(code) ? "anomaly" : u.status,
             // 累计数 = 持久化值(跨实例/重启有效) + 本实例尚未落盘的 pending
             totalAccess: (u.totalAccess || 0) + (st ? (st.pendingAccess || 0) : 0),
-            // IP 列表仅内存(实例级)，跨实例为 best-effort，管理面板看到的可能是 0
+            // 设备数(判定维度, 内存实例级 best-effort) + 最近 IP(审计展示)
+            devices24h: st ? (st.devices24h || []) : [],
             ips24h: st ? (st.ips24h || []) : [],
             lastAccess: u.lastAccess || (st ? st.lastAccess : null),
             created: u.created,
@@ -717,16 +745,16 @@ export default {
       if (!user) {
         return new Response(LOGIN_HTML.replace("<!--ERR-->", "邀请码无效"), {
           status: 401,
-          headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+          headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "set-cookie": cookieStr(DEVICE_COOKIE, did) },
         });
       }
       if (isBlocked(user, code)) {
         return new Response(BLOCKED_HTML, { status: 403, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
       }
-      await logAccess(env, code, request, "/");
+      await logAccess(env, code, request, "/", did);
       return new Response(null, {
         status: 302,
-        headers: { Location: "/", "Set-Cookie": cookieStr(COOKIE, code) },
+        headers: { Location: "/", "Set-Cookie": cookieStr(COOKIE, code) + ", " + cookieStr(DEVICE_COOKIE, did) },
       });
     }
 
@@ -737,16 +765,16 @@ export default {
       if (!user) {
         return new Response(LOGIN_HTML.replace("<!--ERR-->", "邀请码无效"), {
           status: 401,
-          headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+          headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "set-cookie": cookieStr(DEVICE_COOKIE, did) },
         });
       }
       if (isBlocked(user, code)) {
         return new Response(BLOCKED_HTML, { status: 403, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
       }
-      await logAccess(env, code, request, "/");
+      await logAccess(env, code, request, "/", did);
       return new Response(null, {
         status: 302,
-        headers: { Location: "/", "Set-Cookie": cookieStr(COOKIE, code) },
+        headers: { Location: "/", "Set-Cookie": cookieStr(COOKIE, code) + ", " + cookieStr(DEVICE_COOKIE, did) },
       });
     }
 
@@ -756,9 +784,13 @@ export default {
       const code = keyParam.toUpperCase();
       const user = await getUser(env, code);
       if (!user || isBlocked(user, code)) return new Response("Forbidden", { status: 403 });
-      await logAccess(env, code, request, path);
+      // 限速：每码每设备每分钟 ?key= 资源请求上限，防刷/防源站被打
+      if (rateLimited(code, did)) {
+        return new Response("请求过于频繁，请稍后再试", { status: 429, headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
+      }
+      await logAccess(env, code, request, path, did);
       const r = await env.ASSETS.fetch(new Request(url.origin + path, request));
-      return wrapAsset(r, path, cookieStr(COOKIE, code));
+      return wrapAsset(r, path, cookieStr(COOKIE, code) + ", " + cookieStr(DEVICE_COOKIE, did));
     }
 
     // ===== Cookie 会话访问 =====
@@ -767,8 +799,8 @@ export default {
       let user = await getUser(env, cookieCode);
       if (user && !isBlocked(user, cookieCode)) {
         const isPage = path === "/" || path === "/index.html";
-        // 网页访问也记录 IP（此前仅登录/M3U 请求记录）；用更新后的数据渲染弹窗
-        if (isPage) user = (await logAccess(env, cookieCode, request, path)) || user;
+        // 网页访问也记录设备（此前仅登录/M3U 请求记录）；用更新后的数据渲染弹窗
+        if (isPage) user = (await logAccess(env, cookieCode, request, path, did)) || user;
         const r = await env.ASSETS.fetch(request);
         // 首次访问（无 qgnote）或异常状态 → 注入弹窗
         const needPopup = getCookie(request, NOTE_COOKIE) !== "1" || isAnomaly(cookieCode) || user.status === "anomaly";
@@ -776,11 +808,12 @@ export default {
         if (isPage && needPopup && isHtml) {
           let html = await r.text();
           const idx = html.toLowerCase().lastIndexOf("</body>");
-          if (idx >= 0) html = html.slice(0, idx) + popupHTML(cookieCode, user) + html.slice(idx);
-          else html += popupHTML(cookieCode, user);
+          if (idx >= 0) html = html.slice(0, idx) + popupHTML(cookieCode, user, isAnomaly(cookieCode)) + html.slice(idx);
+          else html += popupHTML(cookieCode, user, isAnomaly(cookieCode));
           const res = new Response(html, r);
           res.headers.set("cache-control", "no-store");
           res.headers.set("X-Robots-Tag", "noindex");
+          res.headers.append("Set-Cookie", cookieStr(DEVICE_COOKIE, did));
           return res;
         }
         return wrapAsset(r, path, null);
@@ -799,7 +832,7 @@ export default {
     // ===== 未登录 → 登录页 / 403 =====
     if (path === "/" || path === "/index.html") {
       return new Response(LOGIN_HTML.replace("<!--ERR-->", ""), {
-        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "set-cookie": cookieStr(DEVICE_COOKIE, did) },
       });
     }
     return new Response("Forbidden", { status: 403 });
