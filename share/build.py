@@ -8,6 +8,7 @@ OUT = ROOT / "output"
 DIST = Path(__file__).resolve().parent / "dist"
 WORKER = Path(__file__).resolve().parent / "_worker.js"
 CODES = Path(__file__).resolve().parent / "codes.json"
+HEADERS = Path(__file__).resolve().parent / "_headers"
 
 
 def build():
@@ -16,6 +17,9 @@ def build():
     shutil.copytree(OUT, DIST, ignore=shutil.ignore_patterns(
         ".wrangler", "backfill.log", "*.log", "media.db*"), dirs_exist_ok=True)
     shutil.copy2(WORKER, DIST / "_worker.js")
+    # 静态响应头：控制 M3U/TXT/HTML/codes.json 等缓存策略
+    if HEADERS.exists():
+        shutil.copy2(HEADERS, DIST / "_headers")
     # 静态码表（零 KV）：源文件随仓库提交，部署时一并进入 dist 由 ASSETS 提供
     if CODES.exists():
         shutil.copy2(CODES, DIST / "codes.json")

@@ -57,7 +57,11 @@ async function loadCodes(env) {
   if (codeCache && now - codeCacheAt < CODE_TTL) return codeCache;
   let table = null;
   try {
-    const res = await env.ASSETS.fetch(new URL(CODES_FILE, SELF_ORIGIN));
+    // 强制绕过 ASSETS/Cloudflare 边缘缓存，确保管理面板读到最新码表
+    const res = await env.ASSETS.fetch(new Request(new URL(CODES_FILE, SELF_ORIGIN), {
+      headers: { "Cache-Control": "no-store" },
+      cf: { cacheTtl: 0, cacheEverything: false },
+    }));
     if (res.ok) {
       const txt = await res.text();
       if (txt && txt.trim()) table = JSON.parse(txt);
@@ -537,6 +541,8 @@ function wrapAsset(r, path, setCookie) {
   const ct = contentTypeFor(path);
   if (ct) res.headers.set("Content-Type", ct);
   if (/\.(m3u|txt|html)$/.test(path)) res.headers.set("Cache-Control", "max-age=0, must-revalidate");
+  // JSON 码表/配置不允许任何缓存，避免管理面板看到旧码
+  if (/\.(json)$/.test(path)) res.headers.set("Cache-Control", "no-store");
   if (setCookie) res.headers.set("Set-Cookie", setCookie);
   return res;
 }
