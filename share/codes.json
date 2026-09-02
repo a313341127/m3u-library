@@ -17,6 +17,15 @@
       "totalAccess": 0,
       "ips24h": [],
       "recentLogs": []
+    },
+    {
+      "name": "E2E测试",
+      "code": "MACU79",
+      "status": "active",
+      "created": "2026-09-02T04:45:21.018Z",
+      "totalAccess": 0,
+      "ips24h": [],
+      "recentLogs": []
     }
   ]
 }
