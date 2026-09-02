@@ -1,3 +1,13 @@
 {
-  "codes": []
+  "codes": [
+    {
+      "name": "秦进",
+      "code": "9WYQ5M",
+      "status": "active",
+      "created": "2026-09-02T05:28:49.486Z",
+      "totalAccess": 0,
+      "ips24h": [],
+      "recentLogs": []
+    }
+  ]
 }
