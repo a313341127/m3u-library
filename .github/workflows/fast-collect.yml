@@ -80,34 +80,43 @@ jobs:
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
+          # 部署时间闸门：Cloudflare Pages 免费仅 500 次构建/月。若每轮(30分钟)有新数据就部署，
+          # 约 48 轮/天 × 3 项目 = 144 次/天，远超额度会触发新的限额邮件。
+          # 故仅在 03/09/15/21 点的整点(:00)那一轮才真正部署（约 4 次/天 × 3 = 12 次/天，< 500/月）。
+          HOUR=$(date +%H); MIN=$(date +%M)
+          if [ "$NEW" -gt 0 ] && { [ "$HOUR" = "3" ] || [ "$HOUR" = "9" ] || [ "$HOUR" = "15" ] || [ "$HOUR" = "21" ]; } && [ "$MIN" -lt 30 ]; then
+            echo "do_deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "do_deploy=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: 生成途播 Jellyfin 后端数据（api/movies.json + 地区分片）
-        if: steps.collect.outputs.changed == 'true'
+        if: steps.collect.outputs.do_deploy == 'true'
         env:
           WEB_STRICT_HEALTH: 1
         run: |
           python generate_movies_json.py
 
       - name: 生成电影墙分类封面
-        if: steps.collect.outputs.changed == 'true' && inputs.SKIP_COVERS != 'true'
+        if: steps.collect.outputs.do_deploy == 'true' && inputs.SKIP_COVERS != 'true'
         run: |
           python -m pip install -q pillow
           python scripts/generate_covers.py
 
       - name: 生成直连分流规则（来自 media.db，订阅自动更新）
-        if: steps.collect.outputs.changed == 'true'
+        if: steps.collect.outputs.do_deploy == 'true'
         run: |
           python scripts/gen_direct_rules.py
 
       - name: 复制直连规则到站点（供 Shadowrocket/Clash 订阅，经 VPN 可达）
-        if: steps.collect.outputs.changed == 'true'
+        if: steps.collect.outputs.do_deploy == 'true'
         run: |
           cp scripts/shadowrocket_direct_rules.list output/
           cp scripts/shadowrocket_direct_module.conf output/
           cp scripts/direct_rules_clash.yaml output/
 
       - name: 递增 DATA_VERSION（避免客户端/途播缓存旧数据）
-        if: steps.collect.outputs.changed == 'true'
+        if: steps.collect.outputs.do_deploy == 'true'
         run: |
           VER="$(date +%Y%m%d%H)"
           sed -i "s/const DATA_VERSION = \".*\";/const DATA_VERSION = \"$VER\";/" output/_worker.js
@@ -213,7 +222,7 @@ jobs:
         run: python scripts/db_store.py upload
 
       - name: 部署到 Cloudflare Pages（裸域名 qinjin.pages.dev = 途播入口）
-        if: steps.collect.outputs.changed == 'true'
+        if: steps.collect.outputs.do_deploy == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -222,7 +231,7 @@ jobs:
           npx --yes wrangler@4 pages deploy output --project-name=qinjin --branch=production
 
       - name: 构建并部署分享站（带访问口令，独立项目 qs-agcl2）
-        if: steps.collect.outputs.changed == 'true'
+        if: steps.collect.outputs.do_deploy == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
