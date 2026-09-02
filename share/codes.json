@@ -8,6 +8,15 @@
       "totalAccess": 0,
       "ips24h": [],
       "recentLogs": []
+    },
+    {
+      "name": "E2E测试",
+      "code": "YGPQU3",
+      "status": "active",
+      "created": "2026-09-02T04:45:03.575Z",
+      "totalAccess": 0,
+      "ips24h": [],
+      "recentLogs": []
     }
   ]
 }
