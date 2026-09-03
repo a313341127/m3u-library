@@ -1141,15 +1141,30 @@ __DATA_SCRIPTS__
     // 打开沉浸式播放视图（item 含 name/url/sources；live 由调用方包装）
     // 简介按分类分片存放：首次打开某分类的详情页时才加载，
     // 避免首屏多下载 12.48 MiB（详见 _write_desc_shards 说明）。
+    // 简介可能因体积超限被切成多片（desc_{cat}.js + desc_{cat}_p1.js …），
+    // 第 0 片会声明总片数，这里顺序拉完剩余片再回调（见 _write_desc_shards）。
     const _descLoaded = {};
     function loadDescs(cat, cb) {
       if (cat === 'live' || _descLoaded[cat]) { if (cb) cb(); return; }
       _descLoaded[cat] = true;
-      const s = document.createElement('script');
-      s.src = '/web/desc_' + encodeURIComponent(cat) + '.js';
-      s.onload = function () { if (cb) cb(); };
-      s.onerror = function () { if (cb) cb(); };
-      document.head.appendChild(s);
+      const inject = function (src, done) {
+        const s = document.createElement('script');
+        s.src = src;
+        s.onload = done;
+        s.onerror = done;
+        document.head.appendChild(s);
+      };
+      const key = encodeURIComponent(cat);
+      inject('/web/desc_' + key + '.js', function () {
+        const total = (window.__DESC_PARTS__ || {})[cat] || 1;
+        let i = 1;
+        const next = function () {
+          if (i >= total) { if (cb) cb(); return; }
+          const p = i++;
+          inject('/web/desc_' + key + '_p' + p + '.js', next);
+        };
+        next();
+      });
     }
 
     function getDesc(cat, item) {
@@ -2398,6 +2413,9 @@ def generate_index(output_dir: Path = None) -> Path:
 # 单个数据分片的大小上限（字节）。Cloudflare Pages 单文件上限 25 MiB，取 6 MiB 留足余量：
 # 入库爱奇艺/魔都后全量数据在 40 MiB 量级，分片后可稳定部署且远低于上限。
 SHARD_MAX_BYTES = 6 * 1024 * 1024
+# 简介分片体积上限：必须显著小于 Cloudflare Pages 单文件 25 MiB 硬上限，
+# 否则超限会导致「整个部署失败 + 站点回退到上次成功部署」。
+DESC_MAX_BYTES = int(os.environ.get("DESC_MAX_BYTES", 8 * 1024 * 1024))
 
 # 详情页简介的最大字数（超出截断）。平均简介 173 字，400 字足够详情页展示，
 # 少数超长简介（最长 3428 字）截断后不影响阅读。
@@ -2472,20 +2490,31 @@ def _write_data_shards(resources: Dict[str, list], live_data: List[dict], out_di
         "    };\n"
         "    window.__LIVESET__ = function (a) { window.__LIVE_DATA__ = a; };\n"
         "    window.__DESCS__ = {};\n"
-        "    window.__DESC__ = function (c, m) { window.__DESCS__[c] = m; };\n"
+        "    window.__DESC_PARTS__ = {};\n"
+        # 简介按体积分片（见 _write_desc_shards），多分片必须合并而非覆盖
+        "    window.__DESC__ = function (c, m) {\n"
+        "      var t = window.__DESCS__[c] = window.__DESCS__[c] || {};\n"
+        "      for (var k in m) t[k] = m[k];\n"
+        "    };\n"
+        "    window.__DESCN__ = function (c, n) { window.__DESC_PARTS__[c] = n; };\n"
         "  </script>"
     )
     return "\n".join([header] + scripts)
 
 
 def _write_desc_shards(desc_map: Dict[str, Dict[str, str]], out_dir) -> None:
-    """把简介按分类写成独立分片 output/web/desc_{cat}.js，供详情页按需加载。
+    """把简介按分类 + 按体积写成分片 output/web/desc_{cat}[_p{N}].js，供详情页按需加载。
 
-    背景：全量简介 11.98 MiB，若并入主分片会让首屏从 13 MiB 涨到 25 MiB，
-    手机端加载体验很差（且逼近 Cloudflare Pages 单文件 25 MiB 上限）。
+    背景：全量简介若并入主分片会让首屏体积翻倍，手机端加载体验很差。
     改为按分类独立分片后，首屏大小不变，只有用户首次打开某分类的详情页时才
-    加载该分类的简介（movie 7.1 MiB / tv 2.9 / anime 1.5 / variety 0.5），
-    且同一会话内只加载一次。
+    加载该分类的简介，且同一会话内只加载一次。
+
+    ⚠️ 体积保护（2026-09-03）：资源持续增长后 desc_movie.js 涨到 25.4 MiB，
+    突破 Cloudflare Pages 单文件 25 MiB 上限 → 整个部署失败 → 站点回退到上次
+    成功部署（表现为「全站内容静止/为空」，极易误判成数据丢失）。
+    因此这里必须按「序列化体积」而非「条数」切分：单片 ≤ DESC_MAX_BYTES。
+    第 0 片仍叫 desc_{cat}.js（保持前端入口不变），并声明总片数，
+    后续片为 desc_{cat}_p1.js、_p2.js …，前端顺序加载后合并（见 __DESC__）。
     """
     web_dir = out_dir / "web"
     web_dir.mkdir(parents=True, exist_ok=True)
@@ -2494,13 +2523,39 @@ def _write_desc_shards(desc_map: Dict[str, Dict[str, str]], out_dir) -> None:
             old.unlink()
         except OSError:
             pass
+
     for cat, dmap in desc_map.items():
         if not dmap:
             continue
-        (web_dir / f"desc_{cat}.js").write_text(
-            "window.__DESC__(" + json.dumps(cat) + ","
-            + json.dumps(dmap, ensure_ascii=False) + ");\n",
-            encoding="utf-8")
+        # 按体积把 dmap 切成若干块（估算 = 键 + 值的 JSON 长度 + 分隔符）
+        parts: List[Dict[str, str]] = []
+        buf: Dict[str, str] = {}
+        size = 0
+        for k, v in dmap.items():
+            piece = len(json.dumps(k, ensure_ascii=False).encode("utf-8")) + \
+                    len(json.dumps(v, ensure_ascii=False).encode("utf-8")) + 2
+            if buf and size + piece > DESC_MAX_BYTES:
+                parts.append(buf)
+                buf, size = {}, 0
+            buf[k] = v
+            size += piece
+        if buf:
+            parts.append(buf)
+
+        for i, chunk in enumerate(parts):
+            body = ("window.__DESC__(" + json.dumps(cat) + ","
+                    + json.dumps(chunk, ensure_ascii=False) + ");\n")
+            if i == 0:
+                # 第 0 片额外声明总片数，前端据此顺序拉取剩余片
+                body = ("window.__DESCN__(" + json.dumps(cat) + ","
+                        + str(len(parts)) + ");\n") + body
+                fname = f"desc_{cat}.js"
+            else:
+                fname = f"desc_{cat}_p{i}.js"
+            (web_dir / fname).write_text(body, encoding="utf-8")
+        if len(parts) > 1:
+            print(f"[体积保护] desc_{cat}.js 超过 {DESC_MAX_BYTES // (1024*1024)}MiB"
+                  f" -> 切成 {len(parts)} 片（前端顺序加载后合并）")
 
 
 def _load_live_json() -> List[dict]:

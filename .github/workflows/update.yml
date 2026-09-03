@@ -288,6 +288,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python scripts/db_store.py upload
 
+      - name: 部署前体积闸门（Cloudflare Pages 单文件 25 MiB 硬上限）
+        # 超限会导致【整个部署失败 + 站点回退到上次成功部署（表现为内容为空）】，
+        # 因此在部署前就点名超限文件并直接失败，避免只能靠 wrangler 报错倒推。
+        run: python scripts/check_output_size.py output
+
       - name: 部署到 Cloudflare Pages（裸域名 qinjin.pages.dev = 途播入口，由 main 分支提供）
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
