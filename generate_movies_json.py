@@ -311,6 +311,29 @@ CHUNK = 12000
 MAX_PER_CAT = {
     "movie": 30000, "tv": 18000, "anime": 12000, "variety": 8000, "live": 2000,
 }
+# 单分片体积上限：Cloudflare Pages 单文件 25 MiB 是硬上限，超限会让「整个部署失败」、
+# 站点回退到上一次成功部署（2026-09-02 事故：movie.m3u 50.3 MiB 卡死部署，导致全站与
+# 途播内容回退为空）。取 20 MiB 留足余量。
+# 注意：CHUNK 只约束条数，无法保证体积——数据量增长后 12000 条可能远超 25 MiB，
+# 因此分片必须同时按体积切。
+MAX_SHARD_BYTES = 20 * 1024 * 1024
+
+
+def _json_bytes(obj) -> int:
+    """按实际写出方式（ensure_ascii=False + 紧凑分隔符）计算 UTF-8 字节数"""
+    return len(json.dumps(obj, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+
+
+def _cut_by_bytes(lst: list, max_bytes: int) -> list:
+    """按序列化体积截断列表，保证单独写出后不超过 max_bytes"""
+    out, used = [], 0
+    for m in lst:
+        b = _json_bytes(m)
+        if out and used + b > max_bytes:
+            break
+        out.append(m)
+        used += b
+    return out
 
 
 def main():
@@ -341,17 +364,30 @@ def main():
         per_cat[cat] = lst
         total += len(lst)
 
-        # 分片写入 cat_{cat}_{i}.json，避免单文件超过 25MB
+        # 分片写入 cat_{cat}_{i}.json：同时受「单文件体积」与「单文件条数」双重约束，
+        # 任一超阈值就切一片。体积是硬约束（Pages 25MiB 上限），条数保护 Worker 内存。
         files = []
-        n_chunks = max((len(lst) + CHUNK - 1) // CHUNK, 1)
-        for i in range(n_chunks):
-            chunk = lst[i * CHUNK:(i + 1) * CHUNK]
-            fname = "cat_%s_%d.json" % (cat, i)
+        cur: list = []
+        cur_bytes = 0
+
+        def _flush():
+            idx = len(files)
+            fname = "cat_%s_%d.json" % (cat, idx)
             _write_json(os.path.join(OUT_DIR, fname), {
-                "updated": updated, "cat": cat, "count": len(chunk),
-                "index": i, "movies": chunk,
+                "updated": updated, "cat": cat, "count": len(cur),
+                "index": idx, "movies": cur,
             })
             files.append(fname)
+
+        for m in lst:
+            b = _json_bytes(m)
+            if cur and (cur_bytes + b > MAX_SHARD_BYTES or len(cur) >= CHUNK):
+                _flush()
+                cur, cur_bytes = [], 0
+            cur.append(m)
+            cur_bytes += b
+        if cur:
+            _flush()
         cat_files[cat] = files
         print("分类 %s(%s): %d 部 -> %d 个分片" % (label, cat, len(lst), len(files)))
 
@@ -369,11 +405,12 @@ def main():
     print("生成 all.json(manifest): %d 部, 分片文件 %d 个" % (
         total, sum(len(v) for v in cat_files.values())))
 
-    # 2) 向后兼容：movies.json（仅电影，截断到单文件安全上限）
+    # 2) 向后兼容：movies.json（仅电影，条数 + 体积双重截断到单文件安全上限）
     movie_list = per_cat["movie"]
+    compat_movies = _cut_by_bytes(movie_list[:CHUNK], MAX_SHARD_BYTES)
     _write_json(OUT_MOVIES, {
-        "updated": updated, "count": len(movie_list[:CHUNK]),
-        "movies": movie_list[:CHUNK],
+        "updated": updated, "count": len(compat_movies),
+        "movies": compat_movies,
     })
 
     # 3) 向后兼容：电影地区分片（每地区截断到单文件安全上限）
@@ -383,6 +420,7 @@ def main():
     LIGHT_FIELDS = ("id", "name", "sort", "region", "year", "cover", "quality", "score", "pop", "sources", "cat")
     for region, rmovies in by_region.items():
         light = [{k: m[k] for k in LIGHT_FIELDS} for m in rmovies[:CHUNK]]
+        light = _cut_by_bytes(light, MAX_SHARD_BYTES)
         safe_name = region.replace(" ", "_").replace("/", "_")
         _write_json(os.path.join(OUT_DIR, f"movies_{safe_name}.json"), {
             "updated": updated, "count": len(light), "region": region, "movies": light,
