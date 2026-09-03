@@ -2,7 +2,7 @@
 // 部署在 qinjin.pages.dev
 
 const DATA_ORIGIN = "https://qinjin.pages.dev";
-const DATA_VERSION = "20260903b";
+const DATA_VERSION = "20260903c";
 // 数据源（cc0cd 苹果CMS）不提供真实时长字段，故不返回 RunTimeTicks，
 // 避免途播显示统一的虚假“1小时30分”。若日后采集到真实时长再补。
 // 统一库分类：电影/直播/剧集/综艺/动漫
@@ -18,6 +18,7 @@ const PAGE_SIZE = 300;
 
 let MANIFEST = null;
 let IDX = {};          // cat -> { ids:Map, pageSize, pages, count }
+const SEARCH = {};     // cat -> 搜索索引原文（仅缓存最近使用的一个分类）
 const CAT_OF = { m_: "movie", l_: "live", t_: "tv", v_: "variety", a_: "anime" };
 function catOfId(id) {
   if (!id) return "movie";
@@ -86,6 +87,23 @@ async function getPage(cat, p, ctx, origin) {
   return (j && j.movies) ? j.movies : [];
 }
 
+// 生成期搜索索引（search_{cat}.txt，每行 id\tyear\tname\tlow）。
+// 单次搜索只拉 1 个文本文件 → 子请求恒为 1；纯字符串扫描，无需 JSON.parse 数万条对象。
+async function getSearchText(cat, ctx, origin) {
+  if (SEARCH[cat] !== undefined) return SEARCH[cat];
+  const mf = await getManifest(ctx, origin);
+  const entry = (mf.cats && mf.cats[cat]) || {};
+  const fname = entry.search;
+  if (!fname) { SEARCH[cat] = null; return null; }
+  const res = await cachedFetch(origin + "/api/" + fname + "?v=" + DATA_VERSION, ctx);
+  if (!res.ok) { console.warn("search index miss", fname, res.status); SEARCH[cat] = null; return null; }
+  const txt = await res.text();
+  // 只缓存最近使用的索引，避免五个分类的索引同时常驻（每个约数 MB）。
+  for (const k of Object.keys(SEARCH)) if (k !== cat) delete SEARCH[k];
+  SEARCH[cat] = txt;
+  return txt;
+}
+
 // 按文件名读取一个指定分页（途播可播分页 cat_{cat}_tp_p{N}.json），单次调用仅 1 次 fetch。
 async function getPageFile(cat, fname, ctx, origin) {
   if (!fname) return [];
@@ -116,6 +134,7 @@ function makeData(ctx, origin) {
     getPage: (cat, p) => getPage(cat, p, ctx, origin),
     getIdx: (cat) => getIdx(cat, ctx, origin),
     getPageFile: (cat, fname) => getPageFile(cat, fname, ctx, origin),
+    getSearchText: (cat) => getSearchText(cat, ctx, origin),
   };
 }
 
@@ -255,22 +274,49 @@ async function itemsList(data, url) {
   const tpTotal = (entry.tpCount != null) ? entry.tpCount : (entry.count || 0);
 
   if (hasSearch) {
-    // 搜索：在「途播可播」分页里按名称过滤。限定扫描页数（MAX_SCAN）以守住子请求上限；
-    // 分页按热度排好序，最可能被搜到的热门片都在前若干页，偶发搜索足够覆盖。
+    // 搜索：读生成期搜索索引（1 次子请求），在文本上做稀疏 indexOf 跳跃扫描。
+    // 旧实现逐页读取（上百个分页文件）→ 单次调用子请求爆表 → /Items 500。
+    const txt = await data.getSearchText(cat);
+    if (txt) {
+      const lineStarts = [];
+      let i = txt.indexOf(q);
+      while (i >= 0) {
+        const ls = txt.lastIndexOf("\n", i) + 1;
+        const t1 = txt.indexOf("\t", ls);
+        if (t1 >= 0 && i > t1) {
+          // 命中发生在 name/low 字段（跳过 id 字段的十六进制误匹配）
+          if (!lineStarts.length || lineStarts[lineStarts.length - 1] !== ls) lineStarts.push(ls);
+          let le = txt.indexOf("\n", i);
+          if (le < 0) break;
+          i = txt.indexOf(q, le + 1);   // 同一行只计一次，直接跳到下一行
+        } else {
+          i = txt.indexOf(q, i + 1);
+        }
+      }
+      const win = lineStarts.slice(start, start + limit);
+      const items = win.map((ls) => {
+        let le = txt.indexOf("\n", ls);
+        if (le < 0) le = txt.length;
+        const f = txt.slice(ls, le).split("\t");
+        return toDto({
+          id: f[0],
+          year: f[1] ? parseInt(f[1], 10) : null,
+          name: f[2] || "",
+          sort: f[2] || "",
+          cat,
+        });
+      });
+      return { Items: items, TotalRecordCount: lineStarts.length };
+    }
+    // 兜底（索引缺失，如部署尚未更新）：仅扫描前若干热门分页，守住子请求上限。
     const matches = [];
-    const MAX_SCAN = 36;
-    for (let p = 0; p < Math.min(tpPages.length, MAX_SCAN); p++) {
+    for (let p = 0; p < Math.min(tpPages.length, 6); p++) {
       const movies = await data.getPageFile(cat, tpPages[p]);
       for (const m of movies) {
         if ((m.name || "").toLowerCase().includes(q) ||
             (m.sort || "").toLowerCase().includes(q)) matches.push(m);
       }
-      if (matches.length >= limit * 6) break;
     }
-    matches.sort((a, b) => {
-      const av = a.sort || "", bv = b.sort || "";
-      return av < bv ? -1 : av > bv ? 1 : 0;
-    });
     const page = matches.slice(start, start + limit);
     return { Items: page.map(toDto), TotalRecordCount: matches.length };
   }
