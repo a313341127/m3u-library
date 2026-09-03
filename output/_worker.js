@@ -2,15 +2,28 @@
 // 部署在 qinjin.pages.dev
 
 const DATA_ORIGIN = "https://qinjin.pages.dev";
-const DATA_VERSION = "20260827b";
+const DATA_VERSION = "20260903a";
 // 数据源（cc0cd 苹果CMS）不提供真实时长字段，故不返回 RunTimeTicks，
 // 避免途播显示统一的虚假“1小时30分”。若日后采集到真实时长再补。
 // 统一库分类：电影/直播/剧集/综艺/动漫
 const CAT_LABELS = { movie: "电影", live: "直播", tv: "剧集", variety: "综艺", anime: "动漫" };
 const CAT_ORDER = ["movie", "live", "tv", "variety", "anime"];
 
-let CACHE_ALL = null;
-let CACHE_ALL_LOADING = null;
+// 途播列表分页尺寸：必须 == generate_movies_json.PAGE_SIZE。
+// 生成期已把每个分类按热度排好序、切成固定尺寸的 cat_{cat}_p{p}.json 分页文件，
+// 并输出仅含有序 id 列表的 idx_{cat}.json。worker 不再把全量数据常驻内存——
+// 列表只读 1~2 个分页文件，详情/播放按 id 前缀定位分类后只读 1 个分页文件，
+// 内存占用与目录总量彻底解耦，突破 Cloudflare Worker 128MiB 内存墙。
+const PAGE_SIZE = 300;
+
+let MANIFEST = null;
+let IDX = {};          // cat -> { ids:Map, pageSize, pages, count }
+const FILT = {};       // cat -> Set(途播可播 id)，构建一次后缓存
+const CAT_OF = { m_: "movie", l_: "live", t_: "tv", v_: "variety", a_: "anime" };
+function catOfId(id) {
+  if (!id) return "movie";
+  return CAT_OF[id.slice(0, 2)] || "movie";
+}
 
 function dataUrl(origin) {
   return origin + "/api/all.json?v=" + DATA_VERSION;
@@ -36,53 +49,80 @@ async function cachedFetch(url, ctx) {
   }
 }
 
-async function loadAll(origin, ctx) {
-  if (CACHE_ALL && CACHE_ALL.movies) return CACHE_ALL;
-  if (CACHE_ALL_LOADING) return CACHE_ALL_LOADING;
+async function getManifest(ctx, origin) {
+  if (MANIFEST) return MANIFEST;
+  const res = await cachedFetch(dataUrl(origin), ctx);
+  if (!res.ok) throw new Error("all.json " + res.status);
+  MANIFEST = await res.json();
+  return MANIFEST;
+}
 
-  CACHE_ALL_LOADING = (async () => {
-    try {
-      const res = await cachedFetch(dataUrl(origin), ctx);
-      if (!res.ok) throw new Error("all.json " + res.status);
-      const manifest = await res.json();
-      let movies = [];
-      if (manifest.sharded && manifest.cats) {
-        // 分片模式：按分类加载各自 cat_{cat}_{i}.json，合并为全量
-        for (const c of CAT_ORDER) {
-          const entry = manifest.cats[c];
-          if (!entry) continue;
-          const files = entry.files || (entry.file ? [entry.file] : []);
-          for (const f of files) {
-            try {
-              const r = await cachedFetch(origin + "/api/" + f + "?v=" + DATA_VERSION, ctx);
-              if (!r.ok) { console.warn("shard miss", f, r.status); continue; }
-              const j = await r.json();
-              if (j && j.movies) movies = movies.concat(j.movies);
-            } catch (e) {
-              console.warn("shard err", f, e);
-            }
-          }
-        }
-      } else if (manifest.movies) {
-        // 兼容旧版单文件 all.json
-        movies = manifest.movies;
-      }
-      const json = Object.assign({}, manifest, { movies });
-      json.byId = new Map(json.movies.map((m) => [m.id, m]));
-      // 按分类预建索引，分类视图直接取，避免每次全量过滤
-      json.byCat = {};
-      for (const c of CAT_ORDER) json.byCat[c] = [];
-      for (const m of json.movies) {
-        const c = m.cat || "movie";
-        (json.byCat[c] || (json.byCat[c] = [])).push(m);
-      }
-      CACHE_ALL = json;
-      return CACHE_ALL;
-    } finally {
-      CACHE_ALL_LOADING = null;
+async function getIdx(cat, ctx, origin) {
+  if (IDX[cat]) return IDX[cat];
+  const mf = await getManifest(ctx, origin);
+  const entry = (mf.cats && mf.cats[cat]) || {};
+  const name = entry.idx;
+  if (!name) throw new Error("no idx for " + cat);
+  const res = await cachedFetch(origin + "/api/" + name + "?v=" + DATA_VERSION, ctx);
+  if (!res.ok) throw new Error("idx " + name + " " + res.status);
+  const j = await res.json();
+  IDX[cat] = {
+    ids: new Map(j.ids.map((id, i) => [id, i])),
+    pageSize: j.pageSize,
+    pages: j.pages,
+    count: j.count,
+  };
+  return IDX[cat];
+}
+
+async function getPage(cat, p, ctx, origin) {
+  const mf = await getManifest(ctx, origin);
+  const entry = (mf.cats && mf.cats[cat]) || {};
+  const fname = (entry.pageFiles && entry.pageFiles[p]) ||
+                (entry.files && entry.files[p]);
+  if (!fname) return [];
+  const res = await cachedFetch(origin + "/api/" + fname + "?v=" + DATA_VERSION, ctx);
+  if (!res.ok) { console.warn("page miss", fname, res.status); return []; }
+  const j = await res.json();
+  return (j && j.movies) ? j.movies : [];
+}
+
+async function getItem(id, ctx, origin) {
+  const cat = catOfId(id);
+  const idx = await getIdx(cat, ctx, origin);
+  if (!idx.ids.has(id)) return null;
+  const pos = idx.ids.get(id);
+  const p = Math.floor(pos / idx.pageSize);
+  const local = pos % idx.pageSize;
+  const movies = await getPage(cat, p, ctx, origin);
+  return (movies && movies[local]) ? movies[local] : null;
+}
+
+async function getFilt(cat, data) {
+  if (FILT[cat]) return FILT[cat];
+  const idx = await data.getIdx(cat);
+  const set = new Set();
+  for (let p = 0; p < idx.pages; p++) {
+    const movies = await data.getPage(cat, p);
+    for (const m of movies) {
+      if (tuboSources(m).length > 0) set.add(m.id);
     }
-  })();
-  return CACHE_ALL_LOADING;
+  }
+  FILT[cat] = set;
+  return set;
+}
+
+// 对外暴露的惰性数据 API：manifest 常驻，索引/分页按需读取，内存与目录总量解耦。
+function makeData(ctx, origin) {
+  return {
+    catOfId,
+    manifest: () => getManifest(ctx, origin),
+    total: async (cat) => (await getIdx(cat, ctx, origin)).count,
+    getItem: (id) => getItem(id, ctx, origin),
+    getPage: (cat, p) => getPage(cat, p, ctx, origin),
+    getIdx: (cat) => getIdx(cat, ctx, origin),
+    getFilt: (cat) => getFilt(cat, { getIdx: (c) => getIdx(c, ctx, origin), getPage: (c, p) => getPage(c, p, ctx, origin) }),
+  };
 }
 
 function json(obj, status = 200, extraHeaders = {}) {
@@ -192,18 +232,15 @@ function views(data) {
   return { Items: items, TotalRecordCount: items.length };
 }
 
-function itemsList(data, url) {
+async function itemsList(data, url) {
   const parentId = url.searchParams.get("ParentId");
   let scope = "all";
   if (parentId && parentId.startsWith("view_cat_")) {
     scope = parentId.slice("view_cat_".length);
   }
-  // 按分类取数据：分类=预建索引
-  let items = data.byCat[scope] || [];
-  if (scope === "all" || !items.length) {
-    // 兼容旧客户端或无 ParentId 的列表请求：返回全量
-    items = data.movies || [];
-  }
+  // 途播只通过分类视图浏览（views() 仅返回五分类，无“全部”根库），
+  // 无 ParentId / 未知分类统一按电影处理，避免跨分类分页的复杂度。
+  const cat = (scope !== "all" && CAT_LABELS[scope]) ? scope : "movie";
 
   const searchTerm =
     url.searchParams.get("searchTerm") ||
@@ -211,68 +248,49 @@ function itemsList(data, url) {
     url.searchParams.get("Search") ||
     "";
   const hasSearch = searchTerm.trim().length > 0;
-  if (hasSearch) {
-    const q = searchTerm.trim().toLowerCase();
-    items = items.filter(
-      (m) =>
-        (m.name || "").toLowerCase().includes(q) ||
-        (m.sort || "").toLowerCase().includes(q)
-    );
-  }
-
-  // 途播侧只暴露“有可播线路”的影片：过滤掉所有源都被封的片。
-  items = items.filter((m) => tuboSources(m).length > 0);
-
-  const rawSortBy = (url.searchParams.get("SortBy") || "pop").split(",")[0];
-  const rawSortOrder = (url.searchParams.get("SortOrder") || "Descending").toLowerCase();
-
-  // 途播客户端默认按 SortName 字母排序，导致首页总是显示“100天/100道/10间…”这类固定内容；
-  // 另外若客户端发 DateCreated/升序，会把冷门老片顶到最前。
-  // 首页/分类视图（无搜索）强制按热度降序；搜索场景仍按名称排序最直观。
-  let sortBy = rawSortBy;
-  let forceDesc = false;
-  if (!hasSearch) {
-    if (sortBy === "SortName" || sortBy === "ProductionYear" || sortBy === "" ||
-        sortBy === "DateCreated" || sortBy === "PremiereDate" || sortBy === "Default") {
-      sortBy = "pop";
-    }
-    forceDesc = true;  // 首页永远热度降序，避免老片/冷门置顶
-  }
-  const dir = forceDesc ? -1 : (rawSortOrder === "ascending" ? 1 : -1);
-
-  items = items.slice().sort((a, b) => {
-    let av, bv;
-    if (sortBy === "SortName") {
-      av = a.sort || "";
-      bv = b.sort || "";
-      return av < bv ? -1 * dir : av > bv ? 1 * dir : 0;
-    } else if (sortBy === "ProductionYear") {
-      av = a.year || 0;
-      bv = b.year || 0;
-    } else if (sortBy === "CommunityRating") {
-      av = a.score || 0;
-      bv = b.score || 0;
-    } else {
-      // 默认 pop 热度（hits * (score/10)^2）
-      av = a.pop || 0;
-      bv = b.pop || 0;
-    }
-    let cmp = av < bv ? -1 : av > bv ? 1 : 0;
-    // 同热度时新片优先（年份降序）
-    if (cmp === 0 && sortBy === "pop") {
-      const ya = a.year || 0, yb = b.year || 0;
-      cmp = ya > yb ? 1 : ya < yb ? -1 : 0;
-    }
-    return cmp * dir;
-  });
+  const q = searchTerm.trim().toLowerCase();
 
   const start = parseInt(url.searchParams.get("StartIndex") || "0", 10);
   const limit = parseInt(url.searchParams.get("Limit") || "60", 10);
-  const page = items.slice(start, start + limit);
-  return {
-    Items: page.map(toDto),
-    TotalRecordCount: items.length,
-  };
+
+  if (hasSearch) {
+    // 搜索：遍历该分类全部分页，按名称过滤 + 排序，再切片
+    // （内存 O(单分类)，搜索为偶发操作，可接受）
+    const idx = await data.getIdx(cat);
+    const matches = [];
+    for (let p = 0; p < idx.pages; p++) {
+      const movies = await data.getPage(cat, p);
+      for (const m of movies) {
+        if ((m.name || "").toLowerCase().includes(q) ||
+            (m.sort || "").toLowerCase().includes(q)) matches.push(m);
+      }
+    }
+    matches.sort((a, b) => {
+      const av = a.sort || "", bv = b.sort || "";
+      return av < bv ? -1 : av > bv ? 1 : 0;
+    });
+    const page = matches.slice(start, start + limit);
+    return { Items: page.map(toDto), TotalRecordCount: matches.length };
+  }
+
+  // 非搜索列表：预分页 + 按需读页，内存 O(页)。用 getFilt 跳过途播不可播影片。
+  const filt = await data.getFilt(cat);
+  const idx = await data.getIdx(cat);
+  const collected = [];
+  let pos = 0, taken = 0;
+  for (let p = 0; p < idx.pages; p++) {
+    const movies = await data.getPage(cat, p);
+    for (const m of movies) {
+      const playable = filt.has(m.id);
+      if (playable && pos >= start && taken < limit) {
+        collected.push(toDto(m));
+        taken++;
+      }
+      pos++;
+    }
+    if (taken >= limit && pos > start + limit) break;
+  }
+  return { Items: collected, TotalRecordCount: filt.size };
 }
 
 async function imagePrimary(data, id, origin, request) {
@@ -286,7 +304,7 @@ async function imagePrimary(data, id, origin, request) {
       },
     });
   }
-  const m = data.byId.get(id);
+  const m = await data.getItem(id);
   if (!m || !m.cover) return new Response("no cover", { status: 404 });
   // 封面可能是外站 URL（电影海报）或本仓库生成的相对路径（/covers/live_xxx.jpg 直播台标）。
   // 相对路径补成绝对地址，交给 ASSETS 静态托管。
@@ -699,7 +717,7 @@ function redirect302(loc) {
 }
 
 async function streamProxy(data, id, url, request, ctx) {
-  const m = data.byId.get(id);
+  const m = await data.getItem(id);
   if (!m) return new Response("not found", { status: 404 });
   const cat = m.cat || "movie";
   const srcIdx = parseInt(url.searchParams.get("src") || "0", 10) || 0;
@@ -882,8 +900,8 @@ function tuboSources(m) {
   return srcs.filter(u => !isTuboBlocked(u));
 }
 
-function playbackInfo(data, id, origin) {
-  const m = data.byId.get(id);
+async function playbackInfo(data, id, origin) {
+  const m = await data.getItem(id);
   if (!m) return { MediaSources: [] };
   const cat = m.cat || "movie";
   const sourcesRaw = (m.sources && m.sources.length)
@@ -996,8 +1014,8 @@ export default {
         return cacheJson(request, userObject(), 200, DATA_VERSION + "_user", 3600, 86400);
 
       if (p.endsWith("/Views")) {
-        const data = await loadAll(url.origin, ctx);
-        return cacheJson(request, views(data), 200, DATA_VERSION + "_views", 3600, 86400);
+        const data = makeData(ctx, url.origin);
+        return cacheJson(request, views(), 200, DATA_VERSION + "_views", 3600, 86400);
       }
 
       // 途播「风格/标签/演员/年份」Tab 会请求这些端点；返回空列表避免「格式不正确」报错。
@@ -1008,36 +1026,37 @@ export default {
 
       let m = p.match(/^\/Users\/[^\/]+\/Items\/([^\/]+)$/);
       if (m) {
-        const data = await loadAll(url.origin, ctx);
-        return cacheJson(request, toDto(data.byId.get(m[1]) || {}), 200, DATA_VERSION + "_item_" + m[1], 3600, 86400);
+        const data = makeData(ctx, url.origin);
+        const it = await data.getItem(m[1]);
+        return cacheJson(request, toDto(it || {}), 200, DATA_VERSION + "_item_" + m[1], 3600, 86400);
       }
       m = p.match(/^\/Items\/([^\/]+)\/Images\/Primary/);
       if (m) {
-        const data = await loadAll(url.origin, ctx);
+        const data = makeData(ctx, url.origin);
         return imagePrimary(data, m[1], url.origin, request);
       }
       m = p.match(/^\/Items\/([^\/]+)\/PlaybackInfo/);
       if (m) {
-        const data = await loadAll(url.origin, ctx);
-        return cacheJson(request, playbackInfo(data, m[1], url.origin), 200, DATA_VERSION + "_play_" + m[1], 60, 300);
+        const data = makeData(ctx, url.origin);
+        return cacheJson(request, await playbackInfo(data, m[1], url.origin), 200, DATA_VERSION + "_play_" + m[1], 60, 300);
       }
       m = p.match(/^\/Videos\/([^\/]+)(\/stream)?/);
       if (m) {
-        const data = await loadAll(url.origin, ctx);
+        const data = makeData(ctx, url.origin);
         return streamProxy(data, m[1], url, request, ctx);
       }
       m = p.match(/^\/Items\/([^\/]+)$/);
       if (m) {
-        const data = await loadAll(url.origin, ctx);
-        const it = data.byId.get(m[1]);
+        const data = makeData(ctx, url.origin);
+        const it = await data.getItem(m[1]);
         return it
           ? cacheJson(request, toDto(it), 200, DATA_VERSION + "_item_" + m[1], 3600, 86400)
           : json({ error: "not found" }, 404);
       }
 
       if (p.endsWith("/Items")) {
-        const data = await loadAll(url.origin, ctx);
-        return cacheJson(request, itemsList(data, url), 200, listEtag(url), 3600, 86400);
+        const data = makeData(ctx, url.origin);
+        return cacheJson(request, await itemsList(data, url), 200, listEtag(url), 3600, 86400);
       }
 
       return json({ error: "not found", path: p }, 404);
