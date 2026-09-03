@@ -112,17 +112,22 @@ def _group_value(item: dict, field: str) -> str:
     return (item.get(field) or "").strip()
 
 
-def group_titles(item: dict) -> List[str]:
+def group_titles(item: dict, max_dims: int = None) -> List[str]:
     """返回该资源应归属的所有 group-title 列表。
 
     按 config.GROUP_TITLE_RULES 配置的维度展开，例如：
       电影 -> ['电影-类型-科幻', '电影-地区-中国大陆', '电影-年份-2023']
     空值维度会被跳过。
+
+    max_dims: 只取前 N 个维度（体积保护用，见 PAGES_MAX_FILE_BYTES）。
     """
     rule = config.GROUP_TITLE_RULES[item["category"]]
     label = rule["label"]
     groups = []
-    for dim in rule["dimensions"]:
+    dims = rule["dimensions"]
+    if max_dims is not None:
+        dims = dims[:max_dims]
+    for dim in dims:
         value = _group_value(item, dim)
         if not value:
             continue
@@ -219,22 +224,69 @@ def _merge_small_groups(groups: Dict[str, List[dict]]) -> Dict[str, List[dict]]:
     return dict(final)
 
 
+# ---------------------------------------------------------------- 体积保护
+# Cloudflare Pages 单文件硬上限 25 MiB。超限会让「整个部署失败」，站点回退到上一次
+# 成功部署（2026-09-02 事故：movie.m3u 涨到 50.3 MiB 卡死部署，全站与途播内容全部
+# 回退为空）。留 1 MiB 余量作为安全阈值。
+PAGES_MAX_FILE_BYTES = 24 * 1024 * 1024
+
+
+def _group_items(items: List[dict], max_dims: int = None) -> Dict[str, List[dict]]:
+    """按 group-title 归组（max_dims 可只取前 N 个维度，体积保护用）"""
+    groups: Dict[str, List[dict]] = defaultdict(list)
+    for it in items:
+        for g in group_titles(it, max_dims):
+            groups[g].append(it)
+    return groups
+
+
+def _size_of(text: str) -> int:
+    """按实际写出编码计算字节数（中文等按 UTF-8 多字节计）"""
+    return len(text.encode(config.M3U_ENCODING))
+
+
+def _join_entries(entries: List[str], header: str = "#EXTM3U") -> str:
+    parts = [header] if header else []
+    parts.extend(entries)
+    return "\n".join(parts) + "\n"
+
+
+def _write_shards(entries: List[str], out: Path, max_bytes: int,
+                  header: str = "#EXTM3U", tag: str = "full") -> List[Path]:
+    """把条目切成多个 <= max_bytes 的分片，命名 <stem>_{tag}_part{N}<suffix>。
+
+    按条目边界切分（M3U 每条 2 行不会被截断），每个分片自带表头，可独立使用。
+    """
+    enc = config.M3U_ENCODING
+    head_cost = _size_of(header) + 1 if header else 0
+    chunks: List[List[str]] = []
+    cur: List[str] = []
+    cur_size = head_cost
+    for e in entries:
+        es = _size_of(e) + 1
+        if cur and cur_size + es > max_bytes:
+            chunks.append(cur)
+            cur, cur_size = [], head_cost
+        cur.append(e)
+        cur_size += es
+    if cur:
+        chunks.append(cur)
+
+    paths: List[Path] = []
+    for i, ch in enumerate(chunks, 1):
+        p = out.with_name(f"{out.stem}_{tag}_part{i}{out.suffix}")
+        p.write_text(_join_entries(ch, header), encoding=enc)
+        paths.append(p)
+    return paths
+
+
 def generate_m3u(category: str, output_dir: Path = None) -> Path:
     """生成单个分类的 M3U 文件（清洗/去重/小分类合并/多维分组后输出），返回文件路径"""
     items, stats = prepare_items(category)
     out = (output_dir or config.OUTPUT_DIR) / config.M3U_OUTPUT[category]
     out.parent.mkdir(parents=True, exist_ok=True)
 
-    # 1. 先统计每个 group 的原始条目数
-    raw_groups: Dict[str, List[dict]] = defaultdict(list)
-    for it in items:
-        for g in group_titles(it):
-            raw_groups[g].append(it)
-
-    # 2. 小分类合并（注意：同一个资源在不同维度可能分别被合并或保留，这是允许的）
-    final_groups = _merge_small_groups(raw_groups)
-
-    # 3. 组排序：按维度顺序（类型 -> 地区 -> 年份），「其他」兜底组放最后
+    # 1. 组排序：按维度顺序（类型 -> 地区 -> 年份），「其他」兜底组放最后
     dim_order = {d: i for i, d in enumerate(config.GROUP_DIMENSION_LABELS.values())}
 
     def sort_key(kv: Tuple[str, List[dict]]) -> tuple:
@@ -246,30 +298,104 @@ def generate_m3u(category: str, output_dir: Path = None) -> Path:
         is_other = value == config.GROUP_FALLBACK
         return (label, dim_order.get(dim, 99), is_other, g)
 
-    lines = ["#EXTM3U"]
-    for g, gitems in sorted(final_groups.items(), key=sort_key):
-        for it in gitems:
-            lines.append(build_entry(it, g))
-    out.write_text("\n".join(lines) + "\n", encoding=config.M3U_ENCODING)
+    def compose(src_items: List[dict], max_dims: int = None) -> Tuple[str, List[str]]:
+        """按给定条目 + 维度数构建 (完整文本, 条目列表)。
 
+        小分类合并沿用原逻辑（同一资源在不同维度可能分别被合并或保留，这是允许的）。
+        """
+        groups = _merge_small_groups(_group_items(src_items, max_dims))
+        entries: List[str] = []
+        for g, gitems in sorted(groups.items(), key=sort_key):
+            for it in gitems:
+                entries.append(build_entry(it, g))
+        return _join_entries(entries), entries
+
+    n_dims = len(config.GROUP_TITLE_RULES[category]["dimensions"])
+
+    # 2. 体积保护（Cloudflare Pages 单文件 25 MiB 硬上限，超限会导致整个部署失败）
+    #    优先「全线路 + 全维度」；超限则先逐级降维（保住全部线路），
+    #    再降到「每片最优线路」；完整版始终另存分片，保证数据一条不丢。
+    full_text, full_entries = compose(items, n_dims)
+    if _size_of(full_text) <= PAGES_MAX_FILE_BYTES:
+        out.write_text(full_text, encoding=config.M3U_ENCODING)
+    else:
+        chosen_text, chosen_desc, used_best = None, "", False
+        # 先保住全部线路，只降维度（分组少几个维度，线路一条不丢）
+        for dims in range(n_dims - 1, 0, -1):
+            text, _ = compose(items, dims)
+            if _size_of(text) <= PAGES_MAX_FILE_BYTES:
+                chosen_text, chosen_desc = text, f"全线路·{dims}维分组"
+                break
+        # 仍超限则每部片只留最优线路，重新从多维往下降
+        if chosen_text is None:
+            used_best = True
+            best_items = _flat_best_items(items)
+            for dims in range(n_dims, 0, -1):
+                text, _ = compose(best_items, dims)
+                if _size_of(text) <= PAGES_MAX_FILE_BYTES:
+                    chosen_text, chosen_desc = text, f"最优线路·{dims}维分组"
+                    break
+        # 极端兜底：仍超限则分片，主文件取第 1 片
+        if chosen_text is None:
+            _, entries1 = compose(items, 1)
+            shards0 = _write_shards(entries1, out, PAGES_MAX_FILE_BYTES)
+            chosen_text = shards0[0].read_text(encoding=config.M3U_ENCODING)
+            chosen_desc = "分片第1片（兜底）"
+        out.write_text(chosen_text, encoding=config.M3U_ENCODING)
+        note = (f"[体积保护] {out.name}: 完整版 {_size_of(full_text)/1048576:.1f} MiB 超过 Pages "
+                f"25MiB 上限 -> 主文件改用「{chosen_desc}」（{_size_of(chosen_text)/1048576:.1f} MiB）")
+        if used_best:
+            # 仅当「线路真的被削减」时才另存分片保住完整线路；
+            # 单纯降维不丢线路，再存一份完整版只会让部署体积无谓翻倍。
+            shards = _write_shards(full_entries, out, PAGES_MAX_FILE_BYTES)
+            note += f"，完整版另存 {len(shards)} 个分片 {shards[0].name}…{shards[-1].name}"
+        print(note)
+
+    full_groups = _merge_small_groups(_group_items(items, n_dims))
     problems = verify_m3u(out)
     if problems:
         for p in problems:
             print(f"[自检失败] {out.name}: {p}")
     else:
-        print(f"[自检通过] {out.name}: {len(items)} 条资源 / {len(final_groups)} 个分组"
+        print(f"[自检通过] {out.name}: {len(items)} 条资源 / {len(full_groups)} 个分组"
               f"（原始 {stats['raw']} 条，去重 {stats['duplicates']} 条）")
     return out
 
 
 def generate_txt(category: str, output_dir: Path = None) -> Path:
-    """生成单个分类的 TXT 文本源（同样清洗去重），返回文件路径"""
+    """生成单个分类的 TXT 文本源（同样清洗去重），返回文件路径
+
+    体积保护同 generate_m3u：超过 Pages 25MiB 上限时先降到「每片最优线路」，
+    完整版另存分片，保证数据不丢。
+    """
     items, stats = prepare_items(category)
     out = (output_dir or config.OUTPUT_DIR) / config.TXT_OUTPUT[category]
     out.parent.mkdir(parents=True, exist_ok=True)
-    lines = [config.TXT_LINE_FORMAT.format(
-        name=it["_clean_name"] or it["name"], url=it["url"]) for it in items]
-    out.write_text("\n".join(lines) + "\n", encoding=config.M3U_ENCODING)
+
+    def _lines_of(src: List[dict]) -> List[str]:
+        return [config.TXT_LINE_FORMAT.format(
+            name=it["_clean_name"] or it["name"], url=it["url"]) for it in src]
+
+    entries = _lines_of(items)
+    text = _join_entries(entries, header="")
+    if _size_of(text) > PAGES_MAX_FILE_BYTES:
+        best = _lines_of(_flat_best_items(items))
+        best_text = _join_entries(best, header="")
+        if _size_of(best_text) <= PAGES_MAX_FILE_BYTES:
+            out.write_text(best_text, encoding=config.M3U_ENCODING)
+            desc = "最优线路"
+            # 线路被削减 -> 另存完整版分片保住全部线路
+            shards = _write_shards(entries, out, PAGES_MAX_FILE_BYTES, header="")
+            desc += f"，完整版另存 {len(shards)} 个分片"
+        else:
+            shards0 = _write_shards(best, out, PAGES_MAX_FILE_BYTES, header="")
+            out.write_text(shards0[0].read_text(encoding=config.M3U_ENCODING),
+                           encoding=config.M3U_ENCODING)
+            desc = "分片第1片（兜底）"
+        print(f"[体积保护] {out.name}: 完整版 {_size_of(text)/1048576:.1f} MiB 超过 Pages "
+              f"25MiB 上限 -> 主文件改用「{desc}」")
+    else:
+        out.write_text(text, encoding=config.M3U_ENCODING)
     return out
 
 
