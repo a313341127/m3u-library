@@ -304,19 +304,19 @@ def _write_json(path, obj):
 
 
 # 单分片上限：Cloudflare Pages 单文件 25MB 限制，按 ~0.9KB/条预留安全余量。
-# 同时约束 Worker 内存（全量数据会常驻 CACHE_ALL），避免超大分类拖垮实例。
 CHUNK = 12000
-# 各分类安全上限（按热度降序后截断），总上限约 7 万条，控制在 Worker 内存与
-# 单文件 25MB 双重约束内，同时覆盖绝大多数“找片”场景。
-MAX_PER_CAT = {
-    "movie": 30000, "tv": 18000, "anime": 12000, "variety": 8000, "live": 2000,
-}
 # 单分片体积上限：Cloudflare Pages 单文件 25 MiB 是硬上限，超限会让「整个部署失败」、
 # 站点回退到上一次成功部署（2026-09-02 事故：movie.m3u 50.3 MiB 卡死部署，导致全站与
 # 途播内容回退为空）。取 20 MiB 留足余量。
 # 注意：CHUNK 只约束条数，无法保证体积——数据量增长后 12000 条可能远超 25 MiB，
 # 因此分片必须同时按体积切。
 MAX_SHARD_BYTES = 20 * 1024 * 1024
+
+# 途播列表分页尺寸：worker 改为「生成期预分页 + 按需读页」，内存占用与目录总量解耦
+# （不再把全量数据常驻 Worker 内存，彻底突破 128MiB 内存墙）。途播每次列表请求只读
+# 1~2 个分页文件（≤ ~200KB），详情/播放按 id 前缀定位分类后只读 1 个分页文件。
+# 必须与 output/_worker.js 中的 PAGE_SIZE 保持一致。
+PAGE_SIZE = 300
 
 
 def _json_bytes(obj) -> int:
@@ -336,11 +336,39 @@ def _cut_by_bytes(lst: list, max_bytes: int) -> list:
     return out
 
 
+def _write_pages(cat: str, lst: list, updated: str):
+    """生成期预分页：把已按热度排好序的 lst 切成固定尺寸的 cat_{cat}_p{p}.json，
+    并输出轻量索引 idx_{cat}.json（仅有序 id 列表），供 worker 按需读页、按 id 定位。
+
+    返回 (page_files, idx_name)。每个分页文件 ≤ PAGE_SIZE 条（远小于 25MiB），
+    索引仅存 id 串（movie ~5万条 ≈ 1MB），worker 据此把内存占用从「全量」降到「单页」。
+    """
+    n = len(lst)
+    npages = max((n + PAGE_SIZE - 1) // PAGE_SIZE, 1)
+    page_files = []
+    for i in range(npages):
+        chunk = lst[i * PAGE_SIZE:(i + 1) * PAGE_SIZE]
+        fname = "cat_%s_p%d.json" % (cat, i)
+        _write_json(os.path.join(OUT_DIR, fname), {
+            "updated": updated, "cat": cat, "count": len(chunk),
+            "page": i, "pageSize": PAGE_SIZE, "total": n, "movies": chunk,
+        })
+        page_files.append(fname)
+    idx_name = "idx_%s.json" % cat
+    _write_json(os.path.join(OUT_DIR, idx_name), {
+        "updated": updated, "cat": cat, "count": n,
+        "pageSize": PAGE_SIZE, "pages": npages,
+        "ids": [m["id"] for m in lst],
+    })
+    return page_files, idx_name
+
+
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     # 先清理上一轮可能残留的更高序号分片（分类条数下降时旧分片不会被覆盖，
     # 若放任会在 Pages 留下孤立文件、并干扰本地校验）
-    for _f in glob.glob(os.path.join(OUT_DIR, "cat_*.json")):
+    for _f in (glob.glob(os.path.join(OUT_DIR, "cat_*.json")) +
+               glob.glob(os.path.join(OUT_DIR, "idx_*.json"))):
         try:
             os.remove(_f)
         except OSError:
@@ -349,18 +377,17 @@ def main():
 
     per_cat = {}
     cat_files = {}
+    page_files = {}
+    idx_files = {}
     total = 0
     for cat, prefix, label in JELLYFIN_CATS:
         if cat == "live":
             lst = build_live(prefix)
         else:
             lst = build_category(cat, prefix)
-        # 按热度降序，截断/分页时优先保留高热度影片；同热度新片优先（年份降序）
+        # 按热度降序；同热度新片优先（年份降序）。不再按热度截断——
+        # 全量资源都进途播，Worker 内存墙由「生成期预分页 + 按需读页」突破（见 PAGE_SIZE）。
         lst.sort(key=lambda m: ((m.get("pop") or 0), (m.get("year") or 0)), reverse=True)
-        cap = MAX_PER_CAT.get(cat)
-        if cap and len(lst) > cap:
-            print("分类 %s(%s): %d 部，按热度截断到 %d 部" % (label, cat, len(lst), cap))
-            lst = lst[:cap]
         per_cat[cat] = lst
         total += len(lst)
 
@@ -389,21 +416,35 @@ def main():
         if cur:
             _flush()
         cat_files[cat] = files
-        print("分类 %s(%s): %d 部 -> %d 个分片" % (label, cat, len(lst), len(files)))
 
-    # 1) 统一库入口：all.json 作为分片清单（manifest），worker 按需加载各 cat 分片
+        # 预分页：worker 不再把全量常驻内存，而是按页读取（见 output/_worker.js）。
+        pf, idxn = _write_pages(cat, lst, updated)
+        page_files[cat] = pf
+        idx_files[cat] = idxn
+        print("分类 %s(%s): %d 部 -> %d 个体积分片 / %d 个分页 / 索引 %s"
+              % (label, cat, len(lst), len(files), len(pf), idxn))
+
+    # 1) 统一库入口：all.json 作为分片清单（manifest），worker 按需加载各 cat 分页/索引
     manifest = {
         "updated": updated,
         "count": total,
         "sharded": True,
+        "pageSize": PAGE_SIZE,
         "cats": {
-            cat: {"count": len(per_cat[cat]), "files": cat_files[cat]}
+            cat: {
+                "count": len(per_cat[cat]),
+                "files": cat_files[cat],
+                "pageFiles": page_files[cat],
+                "idx": idx_files[cat],
+                "pageSize": PAGE_SIZE,
+            }
             for cat, _, _ in JELLYFIN_CATS
         },
     }
     _write_json(os.path.join(OUT_DIR, "all.json"), manifest)
-    print("生成 all.json(manifest): %d 部, 分片文件 %d 个" % (
-        total, sum(len(v) for v in cat_files.values())))
+    print("生成 all.json(manifest): %d 部, 体积分片 %d 个 / 分页 %d 个"
+          % (total, sum(len(v) for v in cat_files.values()),
+             sum(len(v) for v in page_files.values())))
 
     # 2) 向后兼容：movies.json（仅电影，条数 + 体积双重截断到单文件安全上限）
     movie_list = per_cat["movie"]
