@@ -2,7 +2,7 @@
 // 部署在 qinjin.pages.dev
 
 const DATA_ORIGIN = "https://qinjin.pages.dev";
-const DATA_VERSION = "20260903a";
+const DATA_VERSION = "20260903b";
 // 数据源（cc0cd 苹果CMS）不提供真实时长字段，故不返回 RunTimeTicks，
 // 避免途播显示统一的虚假“1小时30分”。若日后采集到真实时长再补。
 // 统一库分类：电影/直播/剧集/综艺/动漫
@@ -18,7 +18,6 @@ const PAGE_SIZE = 300;
 
 let MANIFEST = null;
 let IDX = {};          // cat -> { ids:Map, pageSize, pages, count }
-const FILT = {};       // cat -> Set(途播可播 id)，构建一次后缓存
 const CAT_OF = { m_: "movie", l_: "live", t_: "tv", v_: "variety", a_: "anime" };
 function catOfId(id) {
   if (!id) return "movie";
@@ -87,6 +86,15 @@ async function getPage(cat, p, ctx, origin) {
   return (j && j.movies) ? j.movies : [];
 }
 
+// 按文件名读取一个指定分页（途播可播分页 cat_{cat}_tp_p{N}.json），单次调用仅 1 次 fetch。
+async function getPageFile(cat, fname, ctx, origin) {
+  if (!fname) return [];
+  const res = await cachedFetch(origin + "/api/" + fname + "?v=" + DATA_VERSION, ctx);
+  if (!res.ok) { console.warn("tp page miss", fname, res.status); return []; }
+  const j = await res.json();
+  return (j && j.movies) ? j.movies : [];
+}
+
 async function getItem(id, ctx, origin) {
   const cat = catOfId(id);
   const idx = await getIdx(cat, ctx, origin);
@@ -98,20 +106,6 @@ async function getItem(id, ctx, origin) {
   return (movies && movies[local]) ? movies[local] : null;
 }
 
-async function getFilt(cat, data) {
-  if (FILT[cat]) return FILT[cat];
-  const idx = await data.getIdx(cat);
-  const set = new Set();
-  for (let p = 0; p < idx.pages; p++) {
-    const movies = await data.getPage(cat, p);
-    for (const m of movies) {
-      if (tuboSources(m).length > 0) set.add(m.id);
-    }
-  }
-  FILT[cat] = set;
-  return set;
-}
-
 // 对外暴露的惰性数据 API：manifest 常驻，索引/分页按需读取，内存与目录总量解耦。
 function makeData(ctx, origin) {
   return {
@@ -121,7 +115,7 @@ function makeData(ctx, origin) {
     getItem: (id) => getItem(id, ctx, origin),
     getPage: (cat, p) => getPage(cat, p, ctx, origin),
     getIdx: (cat) => getIdx(cat, ctx, origin),
-    getFilt: (cat) => getFilt(cat, { getIdx: (c) => getIdx(c, ctx, origin), getPage: (c, p) => getPage(c, p, ctx, origin) }),
+    getPageFile: (cat, fname) => getPageFile(cat, fname, ctx, origin),
   };
 }
 
@@ -253,17 +247,25 @@ async function itemsList(data, url) {
   const start = parseInt(url.searchParams.get("StartIndex") || "0", 10);
   const limit = parseInt(url.searchParams.get("Limit") || "60", 10);
 
+  const mf = await data.manifest();
+  const entry = (mf.cats && mf.cats[cat]) || {};
+  // 途播可播分页（生成期已过滤死链），单次列表调用仅读取 1 个文件，
+  // 彻底规避 Cloudflare 单次调用子请求上限（旧实现扫描全部分页 → 500）。
+  const tpPages = entry.tpPageFiles || entry.pageFiles || [];
+  const tpTotal = (entry.tpCount != null) ? entry.tpCount : (entry.count || 0);
+
   if (hasSearch) {
-    // 搜索：遍历该分类全部分页，按名称过滤 + 排序，再切片
-    // （内存 O(单分类)，搜索为偶发操作，可接受）
-    const idx = await data.getIdx(cat);
+    // 搜索：在「途播可播」分页里按名称过滤。限定扫描页数（MAX_SCAN）以守住子请求上限；
+    // 分页按热度排好序，最可能被搜到的热门片都在前若干页，偶发搜索足够覆盖。
     const matches = [];
-    for (let p = 0; p < idx.pages; p++) {
-      const movies = await data.getPage(cat, p);
+    const MAX_SCAN = 36;
+    for (let p = 0; p < Math.min(tpPages.length, MAX_SCAN); p++) {
+      const movies = await data.getPageFile(cat, tpPages[p]);
       for (const m of movies) {
         if ((m.name || "").toLowerCase().includes(q) ||
             (m.sort || "").toLowerCase().includes(q)) matches.push(m);
       }
+      if (matches.length >= limit * 6) break;
     }
     matches.sort((a, b) => {
       const av = a.sort || "", bv = b.sort || "";
@@ -273,24 +275,23 @@ async function itemsList(data, url) {
     return { Items: page.map(toDto), TotalRecordCount: matches.length };
   }
 
-  // 非搜索列表：预分页 + 按需读页，内存 O(页)。用 getFilt 跳过途播不可播影片。
-  const filt = await data.getFilt(cat);
-  const idx = await data.getIdx(cat);
-  const collected = [];
-  let pos = 0, taken = 0;
-  for (let p = 0; p < idx.pages; p++) {
-    const movies = await data.getPage(cat, p);
-    for (const m of movies) {
-      const playable = filt.has(m.id);
-      if (playable && pos >= start && taken < limit) {
-        collected.push(toDto(m));
-        taken++;
-      }
-      pos++;
-    }
-    if (taken >= limit && pos > start + limit) break;
+  // 非搜索列表：预分页按需读页。单次调用通常只读 1 个 tp 分页文件；仅当请求窗口跨越
+  // 分页边界（StartIndex 贴近页尾 + Limit 较大）时才顺读下一页，最多 8 页（≤ 2400 条），
+  // 子请求数始终远小于 Cloudflare 上限。
+  const pageIndex = Math.floor(start / PAGE_SIZE);
+  const local = start % PAGE_SIZE;
+  if (pageIndex < 0 || pageIndex >= tpPages.length) {
+    return { Items: [], TotalRecordCount: tpTotal };
   }
-  return { Items: collected, TotalRecordCount: filt.size };
+  let collected = [];
+  let p = pageIndex;
+  while (collected.length < local + limit && p < tpPages.length && p - pageIndex < 8) {
+    const movies = await data.getPageFile(cat, tpPages[p]);
+    collected = collected.concat(movies);
+    p++;
+  }
+  const page = collected.slice(local, local + limit);
+  return { Items: page.map(toDto), TotalRecordCount: tpTotal };
 }
 
 async function imagePrimary(data, id, origin, request) {

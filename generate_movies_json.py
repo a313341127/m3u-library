@@ -36,6 +36,7 @@ import datetime
 import hashlib
 import sqlite3
 from collections import defaultdict
+from urllib.parse import urlparse
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, ROOT)
@@ -298,6 +299,34 @@ def _sort_sources(sources):
     return sorted(out, key=key)
 
 
+# 途播侧可见源黑名单（CF 出口取不到 / 海外封禁），须与 output/_worker.js 的 TUBO_BLOCKED 保持一致。
+# 文采 6g9ba6/hhuus/hhwenjian：CF 出口 530/1010 反爬封禁；非凡 ffzy-online*：CF 出口 403 海外封禁。
+# 这些源网页端（本机直连）能放，但途播经 CF Worker 取不到 → 在途播侧过滤掉，只暴露「途播可播」的线路。
+TUBO_BLOCKED = ["6g9ba6.com", "hhuus.com", "hhwenjian.com", "ffzy-online"]
+
+
+def _host_blocked(u: str) -> bool:
+    try:
+        h = (urlparse(u or "").hostname or "").lower()
+    except Exception:
+        return False
+    return any(b in h for b in TUBO_BLOCKED)
+
+
+def tubo_playable(m: dict) -> bool:
+    """途播可播 = 至少有一条非黑名单源。直播全部保留（途播直播走客户端直连，不过滤）。
+
+    在「生成期」一次性判定，避免 worker 运行时为过滤死链而扫描全部分页
+    （旧实现因此触发 Cloudflare 单次调用子请求上限 → /Items 返回 500 → 途播无法添加）。
+    """
+    if m.get("cat") == "live":
+        return True
+    srcs = m.get("sources") or ([m["url"]] if m.get("url") else [])
+    if not srcs:
+        return False
+    return any(not _host_blocked(u) for u in srcs)
+
+
 def _write_json(path, obj):
     with open(path, "w", encoding="utf-8") as f:
         json.dump(obj, f, ensure_ascii=False, separators=(",", ":"))
@@ -337,11 +366,14 @@ def _cut_by_bytes(lst: list, max_bytes: int) -> list:
 
 
 def _write_pages(cat: str, lst: list, updated: str):
-    """生成期预分页：把已按热度排好序的 lst 切成固定尺寸的 cat_{cat}_p{p}.json，
-    并输出轻量索引 idx_{cat}.json（仅有序 id 列表），供 worker 按需读页、按 id 定位。
+    """生成期预分页：把已按热度排好序的 lst 切成固定尺寸的 cat_{cat}_p{p}.json（全量，
+    供 getItem 按 id 定位），并输出轻量索引 idx_{cat}.json（仅有序 id 列表）。
 
-    返回 (page_files, idx_name)。每个分页文件 ≤ PAGE_SIZE 条（远小于 25MiB），
-    索引仅存 id 串（movie ~5万条 ≈ 1MB），worker 据此把内存占用从「全量」降到「单页」。
+    额外产出「途播可播」分页 cat_{cat}_tp_p{p}.json：仅保留至少一条非黑名单源的影片，
+    顺序与全量一致。worker 列表浏览只读 1 个 tp 分页文件即可，单次调用子请求数恒为 1，
+    彻底规避 Cloudflare 单次调用子请求上限（旧实现为过滤死链扫描全部分页 → 500）。
+
+    返回 (page_files, idx_name, tp_page_files, tp_count)。
     """
     n = len(lst)
     npages = max((n + PAGE_SIZE - 1) // PAGE_SIZE, 1)
@@ -360,7 +392,21 @@ def _write_pages(cat: str, lst: list, updated: str):
         "pageSize": PAGE_SIZE, "pages": npages,
         "ids": [m["id"] for m in lst],
     })
-    return page_files, idx_name
+
+    # 途播可播分页（过滤死链，生成期一次性完成）
+    tp_lst = [m for m in lst if tubo_playable(m)]
+    tp_n = len(tp_lst)
+    tp_pages = max((tp_n + PAGE_SIZE - 1) // PAGE_SIZE, 1)
+    tp_page_files = []
+    for i in range(tp_pages):
+        chunk = tp_lst[i * PAGE_SIZE:(i + 1) * PAGE_SIZE]
+        fname = "cat_%s_tp_p%d.json" % (cat, i)
+        _write_json(os.path.join(OUT_DIR, fname), {
+            "updated": updated, "cat": cat, "count": len(chunk),
+            "page": i, "pageSize": PAGE_SIZE, "total": tp_n, "movies": chunk,
+        })
+        tp_page_files.append(fname)
+    return page_files, idx_name, tp_page_files, tp_n
 
 
 def main():
@@ -379,6 +425,8 @@ def main():
     cat_files = {}
     page_files = {}
     idx_files = {}
+    tp_pages = {}
+    tp_count = {}
     total = 0
     for cat, prefix, label in JELLYFIN_CATS:
         if cat == "live":
@@ -418,11 +466,13 @@ def main():
         cat_files[cat] = files
 
         # 预分页：worker 不再把全量常驻内存，而是按页读取（见 output/_worker.js）。
-        pf, idxn = _write_pages(cat, lst, updated)
+        pf, idxn, tp_pf, tp_n = _write_pages(cat, lst, updated)
         page_files[cat] = pf
         idx_files[cat] = idxn
-        print("分类 %s(%s): %d 部 -> %d 个体积分片 / %d 个分页 / 索引 %s"
-              % (label, cat, len(lst), len(files), len(pf), idxn))
+        tp_pages[cat] = tp_pf
+        tp_count[cat] = tp_n
+        print("分类 %s(%s): %d 部(途播可播 %d) -> %d 个体积分片 / %d 个全量分页 / %d 个可播分页 / 索引 %s"
+              % (label, cat, len(lst), tp_n, len(files), len(pf), len(tp_pf), idxn))
 
     # 1) 统一库入口：all.json 作为分片清单（manifest），worker 按需加载各 cat 分页/索引
     manifest = {
@@ -437,6 +487,8 @@ def main():
                 "pageFiles": page_files[cat],
                 "idx": idx_files[cat],
                 "pageSize": PAGE_SIZE,
+                "tpCount": tp_count[cat],
+                "tpPageFiles": tp_pages[cat],
             }
             for cat, _, _ in JELLYFIN_CATS
         },
