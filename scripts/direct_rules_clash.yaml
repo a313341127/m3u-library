@@ -26,6 +26,7 @@ rules:
   - DOMAIN-SUFFIX,0472.org,DIRECT
   - DOMAIN-SUFFIX,061899.xyz,DIRECT
   - DOMAIN-SUFFIX,130519.xyz,DIRECT
+  - DOMAIN-SUFFIX,163189.xyz,DIRECT
   - DOMAIN-SUFFIX,188766.xyz,DIRECT
   - DOMAIN-SUFFIX,264788.xyz,DIRECT
   - DOMAIN-SUFFIX,360zyx.vip,DIRECT
@@ -67,7 +68,6 @@ rules:
   - DOMAIN-SUFFIX,cdnlz7.com,DIRECT
   - DOMAIN-SUFFIX,cdnlz9.com,DIRECT
   - DOMAIN-SUFFIX,cftest5.cn,DIRECT
-  - DOMAIN-SUFFIX,cgtn.com,DIRECT
   - DOMAIN-SUFFIX,chinamobile.com,DIRECT
   - DOMAIN-SUFFIX,cmread.com,DIRECT
   - DOMAIN-SUFFIX,cnr.cn,DIRECT
@@ -122,10 +122,12 @@ rules:
   - DOMAIN-SUFFIX,ffzy-video.com,DIRECT
   - DOMAIN-SUFFIX,ffzyread1.com,DIRECT
   - DOMAIN-SUFFIX,ffzyread2.com,DIRECT
+  - DOMAIN-SUFFIX,ffzyvideo.com,DIRECT
   - DOMAIN-SUFFIX,freetv.fun,DIRECT
   - DOMAIN-SUFFIX,ganzitv.com,DIRECT
   - DOMAIN-SUFFIX,gatv.com.cn,DIRECT
   - DOMAIN-SUFFIX,gggread.com,DIRECT
+  - DOMAIN-SUFFIX,githubusercontent.com,DIRECT
   - DOMAIN-SUFFIX,gstv.com.cn,DIRECT
   - DOMAIN-SUFFIX,gsuus.com,DIRECT
   - DOMAIN-SUFFIX,guoluche.com,DIRECT
@@ -171,6 +173,7 @@ rules:
   - DOMAIN-SUFFIX,jyrmt.cn,DIRECT
   - DOMAIN-SUFFIX,kankanlive.com,DIRECT
   - DOMAIN-SUFFIX,kunyu.com.cn,DIRECT
+  - DOMAIN-SUFFIX,kwimgs.com,DIRECT
   - DOMAIN-SUFFIX,kylintv.tv,DIRECT
   - DOMAIN-SUFFIX,lfthirtytwo.com,DIRECT
   - DOMAIN-SUFFIX,livehwc3.cn,DIRECT
@@ -288,6 +291,7 @@ rules:
   - DOMAIN-SUFFIX,sxmty.com,DIRECT
   - DOMAIN-SUFFIX,thmz.com,DIRECT
   - DOMAIN-SUFFIX,tjbh.com,DIRECT
+  - DOMAIN-SUFFIX,tlkqc.com,DIRECT
   - DOMAIN-SUFFIX,tv12.xyz,DIRECT
   - DOMAIN-SUFFIX,tyyszywvod.com,DIRECT
   - DOMAIN-SUFFIX,tyyszywvod1.com,DIRECT
