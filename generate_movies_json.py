@@ -406,7 +406,38 @@ def _write_pages(cat: str, lst: list, updated: str):
             "page": i, "pageSize": PAGE_SIZE, "total": tp_n, "movies": chunk,
         })
         tp_page_files.append(fname)
-    return page_files, idx_name, tp_page_files, tp_n
+
+    # 生成期搜索索引：紧凑 TSV（id\tyear\tname\tlow），worker 单次 fetch 即可全量搜索。
+    # 旧实现在运行时逐页读取来搜索，电影有上百个分页 → 单次调用子请求爆表 → /Items 500。
+    search_name = _write_search_index(cat, tp_lst)
+    return page_files, idx_name, tp_page_files, tp_n, search_name
+
+
+def _write_search_index(cat: str, tp_lst: list) -> str:
+    """写出 search_{cat}.txt：每行 `id\\tyear\\tname\\tlow`，按热度顺序（与 tp 分页一致）。
+
+    - `low` 为小写检索键（含 name 与 sort），worker 无需在运行时做 toLowerCase 全量转换。
+    - 纯文本而非 JSON：worker 用 indexOf 扫描即可，避免 JSON.parse 数万条对象的 CPU/内存开销。
+    - 单文件体积可控（电影约 5 万条 ≈ 4MB），远小于 Cloudflare Pages 单文件 25MiB 上限。
+    """
+    def _clean(s):
+        return (s or "").replace("\t", " ").replace("\n", " ").replace("\r", " ")
+
+    lines = []
+    for m in tp_lst:
+        name = _clean(m.get("name"))
+        sort = _clean(m.get("sort"))
+        low = name.lower() if sort.lower() == name.lower() else (name + " " + sort).lower()
+        lines.append("%s\t%s\t%s\t%s" % (m["id"], m.get("year") or "", name, low))
+    fname = "search_%s.txt" % cat
+    path = os.path.join(OUT_DIR, fname)
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write("\n".join(lines))
+    size = os.path.getsize(path)
+    if size > MAX_SHARD_BYTES:
+        print("  !! 警告：搜索索引 %s 体积 %.1f MiB 超过 Pages 单文件上限"
+              % (fname, size / 1048576))
+    return fname
 
 
 def main():
@@ -414,7 +445,8 @@ def main():
     # 先清理上一轮可能残留的更高序号分片（分类条数下降时旧分片不会被覆盖，
     # 若放任会在 Pages 留下孤立文件、并干扰本地校验）
     for _f in (glob.glob(os.path.join(OUT_DIR, "cat_*.json")) +
-               glob.glob(os.path.join(OUT_DIR, "idx_*.json"))):
+               glob.glob(os.path.join(OUT_DIR, "idx_*.json")) +
+               glob.glob(os.path.join(OUT_DIR, "search_*.txt"))):
         try:
             os.remove(_f)
         except OSError:
@@ -427,6 +459,7 @@ def main():
     idx_files = {}
     tp_pages = {}
     tp_count = {}
+    search_files = {}
     total = 0
     for cat, prefix, label in JELLYFIN_CATS:
         if cat == "live":
@@ -466,9 +499,10 @@ def main():
         cat_files[cat] = files
 
         # 预分页：worker 不再把全量常驻内存，而是按页读取（见 output/_worker.js）。
-        pf, idxn, tp_pf, tp_n = _write_pages(cat, lst, updated)
+        pf, idxn, tp_pf, tp_n, sname = _write_pages(cat, lst, updated)
         page_files[cat] = pf
         idx_files[cat] = idxn
+        search_files[cat] = sname
         tp_pages[cat] = tp_pf
         tp_count[cat] = tp_n
         print("分类 %s(%s): %d 部(途播可播 %d) -> %d 个体积分片 / %d 个全量分页 / %d 个可播分页 / 索引 %s"
@@ -489,6 +523,7 @@ def main():
                 "pageSize": PAGE_SIZE,
                 "tpCount": tp_count[cat],
                 "tpPageFiles": tp_pages[cat],
+                "search": search_files[cat],
             }
             for cat, _, _ in JELLYFIN_CATS
         },
