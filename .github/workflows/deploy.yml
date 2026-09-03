@@ -149,6 +149,12 @@ jobs:
           /live.txt
             Content-Type: text/plain; charset=utf-8
             Cache-Control: max-age=0, must-revalidate
+          /*_full_part*.m3u
+            Content-Type: application/vnd.apple.mpegurl
+            Cache-Control: max-age=0, must-revalidate
+          /*_full_part*.txt
+            Content-Type: text/plain; charset=utf-8
+            Cache-Control: max-age=0, must-revalidate
           /shadowrocket_direct_module.conf
             Content-Type: text/plain; charset=utf-8
             Cache-Control: max-age=0, must-revalidate
