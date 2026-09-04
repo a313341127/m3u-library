@@ -50,6 +50,7 @@ permissions:
 jobs:
   update:
     runs-on: ubuntu-latest
+    timeout-minutes: 350        # 硬上限: 卡死时 GitHub 自动结束 run 并释放 qinjin-collection 并发组, 杜绝死锁永久阻塞全量采集
     steps:
       - name: 检出代码
         uses: actions/checkout@v4

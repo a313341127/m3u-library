@@ -8,6 +8,9 @@ on:
   schedule:
     - cron: '*/30 * * * *'      # 每 30 分钟 (与 fast-collect 节奏对齐)
   workflow_dispatch: {}         # 可手动 Run workflow 立即验证
+  workflow_run:                # 冗余触发: 任一采集流水线创建/跑完即触发监控
+    workflows: ["fast-collect.yml", "update.yml", "backfill-episodes.yml"]
+    types: [requested, completed]   # requested=每次采集 run 创建即触发, 即使并发组死锁排队也触发, 彻底免疫 cron 静默
 
 permissions:
   contents: write   # 提交 data/collect_monitor_state.json / collect_status.json
