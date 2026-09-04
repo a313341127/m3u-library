@@ -33,7 +33,7 @@ PRIMARY = "fast-collect.yml"          # 兜底安全网工作流
 COOLDOWN_HOURS = 2                     # 同一工作流两次自动重投最小间隔 (防烧 Actions 额度)
 MAX_FAILS = 4                          # 单工作流连续失败次数上限 -> 开 Issue
 STALL_HOURS = 3                        # 全局无任何成功采集的停滞判定阈值
-STUCK_HOURS = 2                        # run 卡死判定 (fast-collect job 上限 50min, 留余量)
+STUCK_HOURS = 1                         # run 卡死判定: in_progress 且 updated_at 长期不前进 (>1h) 即视为卡死
 
 PROGRESS_FILE = "data/fast_collect_progress.json"
 STATUS_FILE = "data/collect_status.json"
@@ -99,6 +99,35 @@ def latest_run(wf):
         return None
     runs = d.get("workflow_runs", [])
     return runs[0] if runs else None
+
+
+def find_stuck_run(wf, stuck_hours):
+    """扫描近期 run, 找出占用并发组、卡死(updated_at 长期不前进)的 in_progress run。
+
+    关键: 不只看最新 run。并发组被一个卡死 run 长期占用时, 更新的 run 会被 GitHub
+    排队/取消, 导致最新 run 是 cancelled 而非卡死 run 本身。本函数直接扫描所有近期
+    run, 命中「in_progress 且 updated_at 几乎停在创建时刻(从未推进)且已存在 > stuck_hours」
+    的 run = 真卡死。健康 run 的 updated_at 会随步骤推进, 不会命中。
+    """
+    d = api("/repos/%s/actions/workflows/%s/runs?per_page=15" % (REPO, wf))
+    if not d:
+        return None
+    now = datetime.now(timezone.utc)
+    for r in d.get("workflow_runs", []):
+        if r.get("status") != "in_progress":
+            continue
+        upd = r.get("updated_at"); cre = r.get("created_at")
+        if not upd or not cre:
+            continue
+        try:
+            upd_age = (now - datetime.fromisoformat(upd.replace("Z", "+00:00"))).total_seconds() / 3600.0
+            cre_age = (now - datetime.fromisoformat(cre.replace("Z", "+00:00"))).total_seconds() / 3600.0
+        except Exception:
+            continue
+        # 卡死 = in_progress 且 updated_at 长期不前进(几乎停在创建时刻), 且已存在 > stuck_hours
+        if upd_age > stuck_hours and (upd_age - cre_age) < 0.1:
+            return r
+    return None
 
 
 def latest_success_ts():
@@ -187,6 +216,15 @@ def main():
 
     # 1) 逐工作流检查最新 run
     for wf in WATCH_WF:
+        # 1a) 卡死检测: 扫描近期 run, 找占用并发组、updated_at 长期不前进的 in_progress run
+        blocked = find_stuck_run(wf, STUCK_HOURS)
+        if blocked:
+            actions.append("[%s] 卡死阻塞 run %s (created %s, updated %s, >%sh 无进展) 取消+重投"
+                           % (wf, blocked["id"], blocked.get("created_at"),
+                              blocked.get("updated_at"), STUCK_HOURS))
+            cancel(blocked["id"])
+            maybe_redispatch(state, wf, now_iso, actions)
+            continue
         run = latest_run(wf)
         if not run:
             actions.append("[%s] 无历史 run" % wf)
