@@ -184,7 +184,7 @@ def build_category(cat: str, prefix: str) -> list:
     con = sqlite3.connect(DB)
     con.row_factory = sqlite3.Row
     cur = con.execute(
-        "SELECT id,name,region,year,cover,description,url,line_name,quality,score,hits "
+        "SELECT id,name,region,year,cover,description,url,line_name,quality,score,hits,source "
         "FROM resources WHERE category=?", (cat,)
     )
     rows = cur.fetchall()
@@ -197,7 +197,12 @@ def build_category(cat: str, prefix: str) -> list:
         year = yi if (isinstance(yi, int) and 1900 <= yi <= 2026) else None
         key = norm_key(row["name"], year)
         u = (row["url"] or "").strip()
-        line_name = (row["line_name"] or "").strip() or "未知线路"
+        # 线路名优先；缺失时回退到采集源名（总比显示「未知线路」有用）
+        _ln = (row["line_name"] or "").strip()
+        _src = (row["source"] or "").strip()
+        line_name = (config.SOURCE_LABELS.get(_ln)
+                     or config.SOURCE_LABELS.get(_src)
+                     or _ln or _src or "未知线路")
         if not u:
             continue
         if key not in merged:

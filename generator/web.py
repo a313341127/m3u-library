@@ -2284,6 +2284,13 @@ _REGION_ORDER = ["内地", "香港", "台湾", "美国", "日本", "英国", "�
                  "马来西亚", "墨西哥"]
 
 
+def _source_label(raw: str) -> str:
+    """把 MacCMS 线路代码转成中文显示名；未命中保持原值。"""
+    if not raw:
+        return ""
+    return config.SOURCE_LABELS.get(raw, raw)
+
+
 def _normalize_region(raw: str) -> str:
     """把原始地区字段映射成页面标签"""
     if not raw:
@@ -2344,7 +2351,18 @@ def generate_index(output_dir: Path = None) -> Path:
                     except Exception:
                         pass
                 # _rank 仅用于排序（直连优先、需中转的靠后），落盘前移除
-                lst.append({"src": it.get("line_name") or it.get("source") or ("线路%d" % (len(lst) + 1)),
+                src_name = _source_label(it.get("line_name") or it.get("source") or "")
+                if not src_name:
+                    src_name = "线路%d" % (len(lst) + 1)
+                # 同片多条线路映射到同一中文名时（如 jsm3u8 / jsyun 都叫「极速」）
+                # 加数字后缀，否则播放器里会出现两个同名按钮，用户分不清该点哪个
+                used = {s["src"] for s in lst}
+                if src_name in used:
+                    n = 2
+                    while "%s%d" % (src_name, n) in used:
+                        n += 1
+                    src_name = "%s%d" % (src_name, n)
+                lst.append({"src": src_name,
                             "url": play, "episodes": eps, "_rank": _health.rank(url)})
         for lst in src_map.values():
             lst.sort(key=lambda s: s.get("_rank", 1))
