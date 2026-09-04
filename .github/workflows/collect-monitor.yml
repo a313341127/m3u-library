@@ -1,0 +1,27 @@
+name: 采集监控(云端自愈)
+
+# 跑在 GitHub 云端, 与用户电脑开关机无关: 每 30 分钟检查 fast-collect/update/backfill-episodes
+# 三条采集流水线的健康度, 发现失败/卡死自动重投 (带冷却+重试上限防烧额度), 全局停滞兜底重投。
+# 进度写入 data/collect_status.json, 连续失败开 Issue 升级人工。
+# 仅提交 data/ 下状态文件, 不命中 deploy.yml 的 paths 过滤, 不会触发额外部署。
+on:
+  schedule:
+    - cron: '*/30 * * * *'      # 每 30 分钟 (与 fast-collect 节奏对齐)
+  workflow_dispatch: {}         # 可手动 Run workflow 立即验证
+
+permissions:
+  contents: write   # 提交 data/collect_monitor_state.json / collect_status.json
+  actions: write    # 取消卡死 run / 重新 dispatch 采集工作流
+  issues: write     # 连续失败开 Issue 升级
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 云端监控 + 异常自动修复
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/collect_monitor.py

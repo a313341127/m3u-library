@@ -85,7 +85,7 @@ def dispatch(source, start, chunk):
     raise RuntimeError("找不到刚触发的 run")
 
 
-def wait_run(run_id, label, timeout_h=7.5):
+def wait_run(run_id, label, timeout_h=6.0):
     deadline = time.time() + timeout_h * 3600
     while time.time() < deadline:
         r = api("GET", "https://api.github.com/repos/%s/actions/runs/%s" % (REPO, run_id))
@@ -144,29 +144,41 @@ BATCHES = [
 ]
 
 LOG("CHAIN START: %d batches" % len(BATCHES))
+MAX_RETRY = 3  # 单批最多重试次数，避免无限占用 Actions 额度（仍守住"不触碰配额"）
 for i, (source, run_id, start, chunk) in enumerate(BATCHES):
+    label = ("%s run %s (监控)" % (source, run_id)) if run_id else ("%s %d-%d" % (source, start, start + chunk - 1))
+    LOG("[BATCH %d/%d] %s" % (i + 1, len(BATCHES), label))
+    success = False
     if run_id:
-        label = "%s run %s (监控)" % (source, run_id)
-        LOG("[BATCH %d/%d] %s" % (i + 1, len(BATCHES), label))
+        # 已触发的批次：仅监控，不重派（避免重复触发 side effect）
         con = wait_run(run_id, label)
+        success = (con == "success")
+        if not success:
+            LOG("  !! 监控批次未成功: %s（记录缺口，不静默丢弃）" % con)
     else:
-        label = "%s %d-%d" % (source, start, start + chunk - 1)
-        LOG("[BATCH %d/%d] dispatch %s" % (i + 1, len(BATCHES), label))
-        try:
-            rid = dispatch(source, start, chunk)
-            LOG("  -> run %s" % rid)
-            con = wait_run(rid, label)
-        except Exception as e:
-            LOG("  dispatch error: %r" % e)
-            con = None
-    if con == "success":
+        # 未触发的批次：跑到成功为止，失败/超时（暂停）就重试同批。
+        # CI 内的 fast_collect_progress.json 已按源|类型续跑页码，重试不丢数据、不从头重采。
+        for attempt in range(1, MAX_RETRY + 1):
+            try:
+                rid = dispatch(source, start, chunk)
+                LOG("  -> run %s (重试 %d/%d)" % (rid, attempt, MAX_RETRY))
+                con = wait_run(rid, label)
+            except Exception as e:
+                LOG("  dispatch error: %r" % e)
+                con = None
+            if con == "success":
+                success = True
+                break
+            LOG("  !! 本批未成功(%s)，重试同批(第%d/%d次)" % (con, attempt, MAX_RETRY))
+            time.sleep(30)
+    if success:
         try:
             cnt = unique_counts()
             LOG("  唯一片数: %s" % cnt)
         except Exception as e:
             LOG("  count error: %r" % e)
     else:
-        LOG("  !! 本批未成功: %s（继续下一批）" % con)
+        LOG("  !! 本批经 %d 次重试仍失败，记录缺口，继续后续批次（可单独补采，不静默丢弃）" % MAX_RETRY)
 
 LOG("CHAIN DONE")
 try:
