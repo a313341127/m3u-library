@@ -33,7 +33,7 @@ PRIMARY = "fast-collect.yml"          # 兜底安全网工作流
 COOLDOWN_HOURS = 2                     # 同一工作流两次自动重投最小间隔 (防烧 Actions 额度)
 MAX_FAILS = 4                          # 单工作流连续失败次数上限 -> 开 Issue
 STALL_HOURS = 3                        # 全局无任何成功采集的停滞判定阈值
-STUCK_HOURS = 1                         # run 卡死判定: in_progress 且 updated_at 长期不前进 (>1h) 即视为卡死
+STALE_MIN = 120                        # run 卡死判定: in_progress 且 updated_at 超过 120min 无进展(健康 run 步骤会持续推进 updated_at, 不会命中)
 
 PROGRESS_FILE = "data/fast_collect_progress.json"
 STATUS_FILE = "data/collect_status.json"
@@ -101,31 +101,38 @@ def latest_run(wf):
     return runs[0] if runs else None
 
 
-def find_stuck_run(wf, stuck_hours):
+def is_stale(run, stale_min=STALE_MIN):
+    """run 是否卡死: in_progress 且 updated_at 超过 stale_min 分钟无进展。
+
+    健康 run 的每个步骤开始都会推进 updated_at, 因此健康长任务 updated_at 频繁更新,
+    不会命中; 只有真正卡死(某步骤 hang, updated_at 冻结)的 run 才会持续 stale 超阈值。
+    这比旧的『updated_at≈created』启发式更准: 能同时抓「起步即卡死」和「跑到一半卡死」,
+    且不会误杀健康的长采集任务。
+    """
+    if run.get("status") != "in_progress":
+        return False
+    upd = run.get("updated_at")
+    if not upd:
+        return False
+    try:
+        age = (datetime.now(timezone.utc) - datetime.fromisoformat(upd.replace("Z", "+00:00"))).total_seconds() / 60.0
+    except Exception:
+        return False
+    return age > stale_min
+
+
+def find_stuck_run(wf, stale_min=STALE_MIN):
     """扫描近期 run, 找出占用并发组、卡死(updated_at 长期不前进)的 in_progress run。
 
     关键: 不只看最新 run。并发组被一个卡死 run 长期占用时, 更新的 run 会被 GitHub
     排队/取消, 导致最新 run 是 cancelled 而非卡死 run 本身。本函数直接扫描所有近期
-    run, 命中「in_progress 且 updated_at 几乎停在创建时刻(从未推进)且已存在 > stuck_hours」
-    的 run = 真卡死。健康 run 的 updated_at 会随步骤推进, 不会命中。
+    run, 命中 is_stale() 的 run = 真卡死。
     """
     d = api("/repos/%s/actions/workflows/%s/runs?per_page=15" % (REPO, wf))
     if not d:
         return None
-    now = datetime.now(timezone.utc)
     for r in d.get("workflow_runs", []):
-        if r.get("status") != "in_progress":
-            continue
-        upd = r.get("updated_at"); cre = r.get("created_at")
-        if not upd or not cre:
-            continue
-        try:
-            upd_age = (now - datetime.fromisoformat(upd.replace("Z", "+00:00"))).total_seconds() / 3600.0
-            cre_age = (now - datetime.fromisoformat(cre.replace("Z", "+00:00"))).total_seconds() / 3600.0
-        except Exception:
-            continue
-        # 卡死 = in_progress 且 updated_at 长期不前进(几乎停在创建时刻), 且已存在 > stuck_hours
-        if upd_age > stuck_hours and (upd_age - cre_age) < 0.1:
+        if is_stale(r, stale_min):
             return r
     return None
 
@@ -217,11 +224,11 @@ def main():
     # 1) 逐工作流检查最新 run
     for wf in WATCH_WF:
         # 1a) 卡死检测: 扫描近期 run, 找占用并发组、updated_at 长期不前进的 in_progress run
-        blocked = find_stuck_run(wf, STUCK_HOURS)
+        blocked = find_stuck_run(wf)
         if blocked:
-            actions.append("[%s] 卡死阻塞 run %s (created %s, updated %s, >%sh 无进展) 取消+重投"
+            actions.append("[%s] 卡死阻塞 run %s (created %s, updated %s, >%smin 无进展) 取消+重投"
                            % (wf, blocked["id"], blocked.get("created_at"),
-                              blocked.get("updated_at"), STUCK_HOURS))
+                              blocked.get("updated_at"), STALE_MIN))
             cancel(blocked["id"])
             maybe_redispatch(state, wf, now_iso, actions)
             continue
@@ -233,8 +240,8 @@ def main():
         actions.append("[%s] 最新 run %s: %s/%s (updated %s)"
                        % (wf, rid, status, concl, run.get("updated_at")))
         if status in ("queued", "in_progress", "pending", "requested", "waiting"):
-            if status == "in_progress" and age_hours(run.get("updated_at")) > STUCK_HOURS:
-                actions.append("  -> 卡死(>%sh) 取消+重投" % STUCK_HOURS)
+            if status == "in_progress" and is_stale(run):
+                actions.append("  -> 卡死(>%smin) 取消+重投" % STALE_MIN)
                 cancel(rid)
                 maybe_redispatch(state, wf, now_iso, actions)
             else:
