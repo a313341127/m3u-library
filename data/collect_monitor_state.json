@@ -5,9 +5,9 @@
     "backfill-episodes.yml": "2026-09-04T06:44:19.857102+00:00"
   },
   "fails": {
-    "fast-collect.yml": 1,
+    "fast-collect.yml": 2,
     "update.yml": 1,
-    "backfill-episodes.yml": 1
+    "backfill-episodes.yml": 2
   },
   "last_health": false
 }
