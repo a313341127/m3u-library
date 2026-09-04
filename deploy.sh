@@ -102,6 +102,10 @@ cat > output/_headers <<'EOF'
 /variety.best.txt
   Content-Type: text/plain; charset=utf-8
   Cache-Control: max-age=0, must-revalidate
+/web/*
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+/covers/*
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
 /index.html
   Cache-Control: max-age=0, must-revalidate
 EOF

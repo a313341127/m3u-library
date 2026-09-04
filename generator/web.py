@@ -1296,7 +1296,7 @@ __DATA_SCRIPTS__
           .then(r => {
             if (!r.ok && r.status !== 206) return;
             const cr = r.headers.get('content-range') || '';
-            const m = /[0-9]+\/([0-9]+)/.exec(cr);
+            const m = /[0-9]+\\/([0-9]+)/.exec(cr);
             if (m && parseInt(m[1], 10) > 0) nativeTotal = parseInt(m[1], 10);
             else {
               const cl = parseInt(r.headers.get('content-length') || '0', 10);
@@ -1903,6 +1903,30 @@ __DATA_SCRIPTS__
       copyToClipboard((s[0] && s[0].url) || d.item.url || '');
     };
 
+    // 网页数据分片按需加载：首屏只同步加载每分类第 0 片，切分类或点「加载更多」时
+    // 若还有未加载分片则动态注入后续片（__DATAMANIFEST__ 清单 + __LOADED_PARTS__ 计数）。
+    function ensureCat(cat, done) {
+      if (cat === 'live') { if (done) done(); return; }
+      const parts = (window.__DATAMANIFEST__ || {})[cat] || [];
+      const loaded = (window.__LOADED_PARTS__ || {})[cat] || 0;
+      if (loaded >= parts.length) { if (done) done(); return; }
+      let i = loaded;
+      const next = function () {
+        if (i >= parts.length) {
+          window.__LOADED_PARTS__[cat] = parts.length;
+          if (done) done();
+          return;
+        }
+        const name = parts[i++];
+        const s = document.createElement('script');
+        s.src = '/web/' + name + (window.__DVER__ ? '?v=' + window.__DVER__ : '');
+        s.onload = next;
+        s.onerror = next;
+        document.head.appendChild(s);
+      };
+      next();
+    }
+
     function copyToClipboard(text) {
       if (navigator.clipboard) {
         navigator.clipboard.writeText(text).then(showToast);
@@ -1993,7 +2017,7 @@ __DATA_SCRIPTS__
         const more = document.createElement('button');
         more.className = 'load-more';
         more.textContent = '加载更多（还剩 ' + (total - shown.length) + ' 部）';
-        more.onclick = () => { displayLimit += PAGE_SIZE; renderGrid(items); };
+        more.onclick = () => { displayLimit += PAGE_SIZE; ensureCat(currentCat, () => renderGridOnly()); };
         grid.appendChild(more);
       }
     }
@@ -2087,7 +2111,8 @@ __DATA_SCRIPTS__
       liveFilter = '';
       currentSort = cat === 'live' ? 'chan' : 'pop';
       displayLimit = PAGE_SIZE;
-      render();
+      // 首屏只加载了各分类第 0 片；切到某分类时按需补全该分类剩余分片后再渲染
+      ensureCat(cat, render);
     }
 
     function hcardHtml(it, rank) {
@@ -2472,34 +2497,49 @@ def _write_data_shards(resources: Dict[str, list], live_data: List[dict], out_di
         except OSError:
             pass
 
+    # 数据版本号：每次生成取当前时间戳，拼到所有 data 分片 URL（?v=）做 cache-bust。
+    # 配合 /web/* 的 max-age=86400 长缓存，部署后新版本自然失效、旧版本不再被请求。
+    WEB_DATA_VERSION = datetime.utcnow().strftime("%Y%m%d%H")
     scripts: List[str] = []
+    manifest: Dict[str, List[str]] = {}   # cat -> 该分类全部分片文件名（含第 0 片）
+    loaded: Dict[str, int] = {}           # cat -> 已加载到的分片数（首屏只加载第 0 片）
     for cat, items in resources.items():
         buf: List[str] = []
         size = 0
         part = 0
+        parts: List[str] = []
         for it in items:
             s = json.dumps(it, ensure_ascii=False)
             if buf and size + len(s) > SHARD_MAX_BYTES:
                 _write_shard(web_dir / f"data_{cat}_{part}.js", cat, buf)
-                scripts.append(f'  <script src="/web/data_{cat}_{part}.js"></script>')
+                parts.append(f"data_{cat}_{part}.js")
                 part += 1
                 buf, size = [], 0
             buf.append(s)
             size += len(s)
         if buf:
             _write_shard(web_dir / f"data_{cat}_{part}.js", cat, buf)
-            scripts.append(f'  <script src="/web/data_{cat}_{part}.js"></script>')
+            parts.append(f"data_{cat}_{part}.js")
+        manifest[cat] = parts
+        # 首屏只同步加载第 0 片；其余分片由前台 ensureCat() 按需动态注入，
+        # 避免一次性阻塞下载全量分片导致首屏慢（见 HTML 模板里的 ensureCat 实现）。
+        if parts:
+            scripts.append(f'  <script src="/web/{parts[0]}?v={WEB_DATA_VERSION}"></script>')
+            loaded[cat] = 1
 
     if live_data:
         live_path = web_dir / "live.js"
         live_path.write_text(
             "window.__LIVESET__(" + json.dumps(live_data, ensure_ascii=False) + ");\n",
             encoding="utf-8")
-        scripts.append('  <script src="/web/live.js"></script>')
+        scripts.append(f'  <script src="/web/live.js?v={WEB_DATA_VERSION}"></script>')
 
-    # 先定义全局容器与合并函数，再按序加载各分片
+    # 先定义全局容器与合并函数，再按序加载第 0 片分片。
+    # __DATAMANIFEST__ 给出每个分类的全部分片清单，__LOADED_PARTS__ 记录首屏已加载到的片数，
+    # 前台 ensureCat() 据此判断哪些分片还需按需加载。
     header = (
         "  <script>\n"
+        f"    window.__DVER__ = \"{WEB_DATA_VERSION}\";\n"
         "    window.__RESOURCES__ = {};\n"
         "    window.__LIVE_DATA__ = [];\n"
         "    window.__RES__ = function (c, a) {\n"
@@ -2509,12 +2549,13 @@ def _write_data_shards(resources: Dict[str, list], live_data: List[dict], out_di
         "    window.__LIVESET__ = function (a) { window.__LIVE_DATA__ = a; };\n"
         "    window.__DESCS__ = {};\n"
         "    window.__DESC_PARTS__ = {};\n"
-        # 简介按体积分片（见 _write_desc_shards），多分片必须合并而非覆盖
         "    window.__DESC__ = function (c, m) {\n"
         "      var t = window.__DESCS__[c] = window.__DESCS__[c] || {};\n"
         "      for (var k in m) t[k] = m[k];\n"
         "    };\n"
         "    window.__DESCN__ = function (c, n) { window.__DESC_PARTS__[c] = n; };\n"
+        "    window.__DATAMANIFEST__ = " + json.dumps(manifest, ensure_ascii=False) + ";\n"
+        "    window.__LOADED_PARTS__ = " + json.dumps(loaded, ensure_ascii=False) + ";\n"
         "  </script>"
     )
     return "\n".join([header] + scripts)
