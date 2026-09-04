@@ -10,7 +10,7 @@ name: 并发采集（云端高频）
 #
 # 串行化：与「每日自动更新」「分集回填」共用 concurrency 组，避免并发推送 media.db 冲突。
 # 仓库已设为 public → GitHub Actions 对公开库无限分钟，可高频轮转。
-# 频率：每 30 分钟一轮；单轮 TIME_LIMIT 到点暂停续跑，concurrency 串行避免 media.db 并发冲突。
+# 频率：每小时一轮；单轮 TIME_LIMIT 到点暂停续跑，concurrency 串行避免 media.db 并发冲突。
 # 部署闸门：仅当 media.db 有变化才重新生成+部署，节省 Cloudflare Pages 每月 500 次构建额度。
 
 concurrency:
@@ -19,7 +19,7 @@ concurrency:
 
 on:
   schedule:
-    - cron: '*/30 * * * *'   # 每 30 分钟一轮（公开库无限 Actions 分钟；跑完续跑、串行不冲突）
+    - cron: '0 * * * *'   # 每小时一轮; 单轮 ~25min, 留 ~30min 空档给 update/backfill 抢并发组, 防饿死全量采集
   repository_dispatch:
     types: [fast-collect]   # 可由 API(PAT 仅需 repo 权限) 立即触发，不占本机
   workflow_dispatch:
@@ -43,7 +43,7 @@ permissions:
 jobs:
   collect:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 40        # 硬上限 40min(<60min 间隔): 即使卡死也只占组 40min 即释放, 留空档给全量采集
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
