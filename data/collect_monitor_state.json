@@ -1,0 +1,13 @@
+{
+  "last_dispatch": {
+    "fast-collect.yml": "2026-09-04T06:44:19.857102+00:00",
+    "update.yml": "2026-09-04T06:44:19.857102+00:00",
+    "backfill-episodes.yml": "2026-09-04T06:44:19.857102+00:00"
+  },
+  "fails": {
+    "fast-collect.yml": 1,
+    "update.yml": 1,
+    "backfill-episodes.yml": 1
+  },
+  "last_health": false
+}
