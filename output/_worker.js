@@ -274,39 +274,47 @@ async function itemsList(data, url) {
   const tpTotal = (entry.tpCount != null) ? entry.tpCount : (entry.count || 0);
 
   if (hasSearch) {
-    // 搜索：读生成期搜索索引（1 次子请求），在文本上做稀疏 indexOf 跳跃扫描。
+    // 搜索：读生成期搜索索引（每个分类 1 次子请求），在文本上做稀疏 indexOf 跳跃扫描。
     // 旧实现逐页读取（上百个分页文件）→ 单次调用子请求爆表 → /Items 500。
-    const txt = await data.getSearchText(cat);
-    if (txt) {
-      const lineStarts = [];
+    //
+    // ⚠️ 途播的「全局搜索」不传 ParentId。旧实现把它统一回退到 movie，
+    // 导致只在剧集/动漫收录的片子（如《庆余年》）搜出来是 0 条。
+    // 现在改为跨全部分类检索：5 个索引文件 = 5 次子请求，远低于上限。
+    const cats = (scope !== "all" && CAT_LABELS[scope]) ? [scope] : CAT_ORDER.slice();
+    const hits = [];
+    let indexed = false;
+    for (const c of cats) {
+      const txt = await data.getSearchText(c);
+      if (!txt) continue;
+      indexed = true;
       let i = txt.indexOf(q);
       while (i >= 0) {
         const ls = txt.lastIndexOf("\n", i) + 1;
         const t1 = txt.indexOf("\t", ls);
         if (t1 >= 0 && i > t1) {
-          // 命中发生在 name/low 字段（跳过 id 字段的十六进制误匹配）
-          if (!lineStarts.length || lineStarts[lineStarts.length - 1] !== ls) lineStarts.push(ls);
+          // 命中发生在 name/low 字段（跳过 id 字段的十六进制误匹配）。
+          // 这里必须立即物化成记录：搜索索引只缓存最近一个分类，
+          // 不能只留行号等循环结束再回头取（届时文本已被驱逐）。
           let le = txt.indexOf("\n", i);
-          if (le < 0) break;
+          if (le < 0) le = txt.length;
+          const f = txt.slice(ls, le).split("\t");
+          hits.push({
+            id: f[0],
+            year: f[1] ? parseInt(f[1], 10) : null,
+            name: f[2] || "",
+            sort: f[2] || "",
+            cat: c,
+          });
+          if (le >= txt.length) break;
           i = txt.indexOf(q, le + 1);   // 同一行只计一次，直接跳到下一行
         } else {
           i = txt.indexOf(q, i + 1);
         }
       }
-      const win = lineStarts.slice(start, start + limit);
-      const items = win.map((ls) => {
-        let le = txt.indexOf("\n", ls);
-        if (le < 0) le = txt.length;
-        const f = txt.slice(ls, le).split("\t");
-        return toDto({
-          id: f[0],
-          year: f[1] ? parseInt(f[1], 10) : null,
-          name: f[2] || "",
-          sort: f[2] || "",
-          cat,
-        });
-      });
-      return { Items: items, TotalRecordCount: lineStarts.length };
+    }
+    if (indexed) {
+      const page = hits.slice(start, start + limit);
+      return { Items: page.map(toDto), TotalRecordCount: hits.length };
     }
     // 兜底（索引缺失，如部署尚未更新）：仅扫描前若干热门分页，守住子请求上限。
     const matches = [];
