@@ -224,15 +224,9 @@ class KVClient:
         self.writes = 0
         self.base = "https://api.cloudflare.com/client/v4/accounts/%s/storage/kv/namespaces/%s" % (
             account_id, ns_id)
-        # 代理探测：优先直连，失败回退 HTTPS_PROXY（与本项目网络约定一致）
-        proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy") or ""
-        self.opener = None
-        if proxy:
-            try:
-                from urllib.request import ProxyHandler, build_opener
-                self.opener = build_opener(ProxyHandler({"http": proxy, "https": proxy}))
-            except Exception:
-                self.opener = None
+        # 直连：Cloudflare API 在本沙箱/CI 均直连可达（无需代理）。
+        # 注意 build_opener() 返回 OpenerDirector，调用其 .open()（不是 .urlopen()）。
+        self.opener = urllib.request.build_opener()
 
     def _req(self, method, key, body=None):
         url = self.base + "/values/" + key
@@ -240,9 +234,8 @@ class KVClient:
         req = urllib.request.Request(url, data=data, method=method)
         req.add_header("Authorization", "Bearer " + self.token)
         req.add_header("Content-Type", "application/json")
-        opener = self.opener or urllib.request
         try:
-            with opener.urlopen(req, timeout=60) as r:
+            with self.opener.open(req, timeout=60) as r:
                 txt = r.read().decode("utf-8", "replace")
             return txt
         except urllib.error.HTTPError as e:
