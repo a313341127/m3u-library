@@ -11,8 +11,10 @@ concurrency:
 # 每天北京时间 03:30 自动增量采集 -> 生成 M3U/Web -> 生成途播 Jellyfin 数据 -> 部署 Cloudflare Pages -> 提交数据库
 # 也可在 Actions 页面手动点击 Run workflow 立即执行一次
 on:
-  schedule:
-    - cron: '30 19 * * *'   # UTC 19:30 = 北京时间 03:30
+  # 全量采集冲刺期已暂停定时触发（2026-09-05）：update 的 --pages 1 增量在全量未完成前
+  # 毫无意义，且占用 qinjin-collection 并发组会拖慢 fast-collect 接力链。全量完成后取消注释恢复。
+  # schedule:
+  #   - cron: '30 19 * * *'   # UTC 19:30 = 北京时间 03:30
   workflow_dispatch:
     inputs:
       MODE:
