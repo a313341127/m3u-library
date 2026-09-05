@@ -1,3 +1,8 @@
 name = "m3u-jellyfin"
 main = "src/worker.js"
 compatibility_date = "2024-09-23"
+
+# 实时增量层：每轮采集新增影片写入此 KV 命名空间，Worker 运行时读取并与静态基库合并
+[[kv_namespaces]]
+binding = "KV_DELTA"
+id = "6b5fbf41173f49d8a9cb769267afd260"
