@@ -3,6 +3,10 @@
 // 数据来自主库 Pages 上预生成的 JSON（运行时 fetch + 边缘缓存，不依赖 D1/KV）。
 // 播放采用「服务端代取」模式：途播只跟本 Worker 通信，由 Cloudflare 边缘节点去拉
 // 外部视频源（含海外源）并流式转发，手机裸网也能播放，不直连外部域名。
+//
+// 实时增量层（0 部署同步）：每轮采集新增影片先写入 Cloudflare 原生 KV（命名空间绑定为
+// KV_DELTA），本 Worker 运行时读取并与静态基库合并——基库优先（含全量线路），
+// 基库没有的（本轮新增、尚未进静态库）走 KV 增量，实现新片实时可见、无需等 Pages 构建。
 
 const DATA_URL = "https://production.qinjin.pages.dev/api/movies.json?v=20260825d";
 const REGION_ORDER = [
@@ -10,9 +14,15 @@ const REGION_ORDER = [
   "英国", "印度", "泰国", "欧美", "其他",
 ];
 
-let CACHE = null;
+// 增量层内存安全上限：仅加载最近若干轮、最多若干条，避免逼近 Worker 128MiB 内存墙。
+// （KV 侧由 sync_delta_kv.py 控制 16 轮保留 + 6h 部署闸门 --clear；Worker 侧只取窗口内最新增量）
+const DELTA_MAX_ROUNDS = 6;
+const DELTA_MAX_ITEMS = 6000;
 
-// 拉数据：优先用 Cloudflare 边缘 Cache（1h），避免每次冷启动重拉
+let CACHE = null;
+let DELTA = null; // { byId: Map<id, movie>, list: [movie] }（增量，新→旧）
+
+// 拉基库数据：优先用 Cloudflare 边缘 Cache（1h），避免每次冷启动重拉
 async function loadData(ctx) {
   if (CACHE && CACHE.movies) return CACHE;
   const cache = caches.default;
@@ -36,6 +46,53 @@ async function loadData(ctx) {
   json.byId = new Map(json.movies.map((m) => [m.id, m]));
   CACHE = json;
   return CACHE;
+}
+
+// 拉增量（KV_DELTA）：读 manifest → 倒序取最近若干轮的分片 → 拼成 byId + 列表
+async function loadDelta(env) {
+  if (DELTA) return DELTA;
+  const ns = env && env.KV_DELTA;
+  const empty = { byId: new Map(), list: [] };
+  if (!ns) { DELTA = empty; return DELTA; }
+  try {
+    const mfTxt = await ns.get("delta:manifest");
+    let mf = null;
+    try { mf = JSON.parse(mfTxt); } catch (_) {}
+    if (!mf || !Array.isArray(mf.rounds) || !mf.rounds.length) { DELTA = empty; return DELTA; }
+    const byId = new Map();
+    const list = [];
+    const seen = new Set();
+    // 取最近 DELTA_MAX_ROUNDS 轮，倒序（新→旧）
+    const rounds = mf.rounds.slice(-DELTA_MAX_ROUNDS).reverse();
+    for (const r of rounds) {
+      if (list.length >= DELTA_MAX_ITEMS) break;
+      for (const k of (r.movieKeys || [])) {
+        const t = await ns.get(k);
+        if (!t) continue;
+        let o; try { o = JSON.parse(t); } catch (_) { continue; }
+        if (!o || !Array.isArray(o.movies)) continue;
+        for (const m of o.movies) {
+          if (seen.has(m.id)) continue;
+          seen.add(m.id);
+          byId.set(m.id, m);
+          list.push(m);
+          if (list.length >= DELTA_MAX_ITEMS) break;
+        }
+        if (list.length >= DELTA_MAX_ITEMS) break;
+      }
+    }
+    DELTA = { byId, list };
+  } catch (_) {
+    DELTA = empty;
+  }
+  return DELTA;
+}
+
+// 基库优先，增量兜底（增量版可能只含新增线路，故基库优先避免源不全）
+function getById(id, data, delta) {
+  if (data && data.byId.has(id)) return data.byId.get(id);
+  if (delta && delta.byId.has(id)) return delta.byId.get(id);
+  return null;
 }
 
 function json(obj, status = 200) {
@@ -101,13 +158,20 @@ function views(data) {
   return { Items: items, TotalRecordCount: items.length };
 }
 
-function itemsList(data, url) {
+function itemsList(data, url, delta) {
   const parentId = url.searchParams.get("ParentId");
   const region =
     parentId && parentId.startsWith("view_") ? parentId.slice(5) : null;
-  let items = data.movies.filter(
+  // 基库（按地区过滤）
+  let baseItems = data.movies.filter(
     (m) => !region || (m.region || "其他") === region
   );
+  // 增量（新→旧，按地区过滤），与基库去重（同 id 用增量版，避免重复）
+  let deltaItems = delta
+    ? delta.list.filter((m) => !region || (m.region || "其他") === region)
+    : [];
+  const deltaIds = new Set(deltaItems.map((m) => m.id));
+  let items = deltaItems.concat(baseItems.filter((m) => !deltaIds.has(m.id)));
 
   const sortBy = (url.searchParams.get("SortBy") || "ProductionYear").split(",")[0];
   const sortOrder = (url.searchParams.get("SortOrder") || "Descending").toLowerCase();
@@ -139,8 +203,8 @@ function itemsList(data, url) {
 
 // 海报：Worker 流式代取外部图床（不缓冲，避开 Workers 资源限制），
 // Referer 用请求方域名动态生成，避免换域名后防盗链失效。
-async function imagePrimary(data, id, origin) {
-  const m = data.byId.get(id);
+async function imagePrimary(data, delta, id, origin) {
+  const m = getById(id, data, delta);
   if (!m || !m.cover) return new Response("no cover", { status: 404 });
   try {
     const upstream = await fetch(m.cover, {
@@ -299,8 +363,8 @@ async function proxyFetch(target, origin, depth = 0) {
 }
 
 // /Videos/{id}/stream?src=N  → 取第 N 条线路，代取并转发
-async function streamProxy(data, id, url) {
-  const m = data.byId.get(id);
+async function streamProxy(data, delta, id, url) {
+  const m = getById(id, data, delta);
   if (!m) return new Response("not found", { status: 404 });
   const srcIdx = parseInt(url.searchParams.get("src") || "0", 10) || 0;
   const sources = m.sources && m.sources.length ? m.sources : (m.url ? [m.url] : []);
@@ -315,8 +379,8 @@ function proxyRoute(url) {
   return proxyFetch(u, url.origin);
 }
 
-function playbackInfo(data, id, origin) {
-  const m = data.byId.get(id);
+function playbackInfo(data, delta, id, origin) {
+  const m = getById(id, data, delta);
   if (!m) return json({ MediaSources: [] }, 404);
   const sources = (m.sources && m.sources.length)
     ? m.sources
@@ -349,6 +413,7 @@ export default {
     const p = url.pathname;
     try {
       const data = await loadData(ctx);
+      const delta = await loadDelta(env);
 
       if (p === "/System/Info/Public" || p === "/System/Info")
         return json(systemInfo());
@@ -375,21 +440,21 @@ export default {
       if (p.endsWith("/Views")) return json(views(data));
 
       let m = p.match(/^\/Users\/[^\/]+\/Items\/([^\/]+)$/);
-      if (m) return json(toDto(data.byId.get(m[1]) || {}));
+      if (m) { const it = getById(m[1], data, delta); return json(it ? toDto(it) : {}); }
       m = p.match(/^\/Items\/([^\/]+)\/Images\/Primary/);
-      if (m) return imagePrimary(data, m[1], url.origin);
+      if (m) return imagePrimary(data, delta, m[1], url.origin);
       m = p.match(/^\/Items\/([^\/]+)\/PlaybackInfo/);
-      if (m) return playbackInfo(data, m[1], url.origin);
+      if (m) return playbackInfo(data, delta, m[1], url.origin);
       // 播放：途播会请求 /Videos/{id}/stream（或带 src 参数切换线路）
       m = p.match(/^\/Videos\/([^\/]+)(\/stream)?/);
-      if (m) return streamProxy(data, m[1], url);
+      if (m) return streamProxy(data, delta, m[1], url);
       m = p.match(/^\/Items\/([^\/]+)$/);
       if (m) {
-        const it = data.byId.get(m[1]);
+        const it = getById(m[1], data, delta);
         return it ? json(toDto(it)) : json({ error: "not found" }, 404);
       }
 
-      if (p.endsWith("/Items")) return json(itemsList(data, url));
+      if (p.endsWith("/Items")) return json(itemsList(data, url, delta));
 
       return json({ error: "not found", path: p }, 404);
     } catch (e) {
