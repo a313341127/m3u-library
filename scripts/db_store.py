@@ -166,6 +166,8 @@ def cmd_upload(token):
         return 0
 
     rel = ensure_release(token)
+    upload_base = rel["upload_url"].split("{")[0]
+    assets = rel.get("assets", [])
 
     # 压缩后再上传：SQLite 文本字段（分集 JSON）压缩比高，688MB→约 150-200MB，
     # 既延缓 2GB Release 资产上限，又缩短每轮传输耗时。
@@ -174,8 +176,19 @@ def cmd_upload(token):
     blob = gzip.compress(raw, GZIP_LEVEL)
     print(f"DB_STORE: 压缩 media.db {size/1024/1024:.1f} MB → {len(blob)/1024/1024:.1f} MB (gzip-{GZIP_LEVEL})")
 
-    # 原子上传：先传临时名，成功后再删旧+改名，避免「删旧的、新的又失败」丢数据
-    upload_base = rel["upload_url"].split("{")[0]
+    # 定位现有资产（快照）
+    old_gz  = next((a for a in assets if a.get("name") == ASSET_NAME), None)
+    old_raw = next((a for a in assets if a.get("name") == RAW_ASSET_NAME), None)
+    old_tmp = next((a for a in assets if a.get("name") == TMP_NAME), None)
+    old_bak_gz  = next((a for a in assets if a.get("name") == ASSET_NAME + ".bak"), None)
+    old_bak_raw = next((a for a in assets if a.get("name") == RAW_ASSET_NAME + ".bak"), None)
+
+    # 清理上次可能残留的临时/备份资产，避免重名冲突
+    for a in (old_tmp, old_bak_gz, old_bak_raw):
+        if a:
+            _request("DELETE", f"/repos/{OWNER}/{REPO_NAME}/releases/assets/{a['id']}", token)
+
+    # 1) 先传临时资产（数据先落盘成功，确保新数据不丢）
     req = urllib.request.Request(f"{upload_base}?name={TMP_NAME}", data=blob, method="POST")
     req.add_header("Authorization", f"Bearer {token}")
     req.add_header("Content-Type", "application/octet-stream")
@@ -192,17 +205,35 @@ def cmd_upload(token):
         print(f"DB_STORE_ERR: 上传异常 {e}")
         return 1
 
-    # 上传成功后再切换：删旧（压缩版+旧版未压缩）→ 改名临时资产为正式名
-    for a in rel.get("assets", []):
-        if a.get("name") in (ASSET_NAME, RAW_ASSET_NAME):
-            _request("DELETE", f"/repos/{OWNER}/{REPO_NAME}/releases/assets/{a['id']}", token)
+    # 2) 把旧正式资产改名 .bak 做保底：即便后续失败，旧好库仍在（不丢数据）
+    if old_gz:
+        _request("PATCH", f"/repos/{OWNER}/{REPO_NAME}/releases/assets/{old_gz['id']}",
+                 token, data={"name": ASSET_NAME + ".bak"})
+    if old_raw:
+        _request("PATCH", f"/repos/{OWNER}/{REPO_NAME}/releases/assets/{old_raw['id']}",
+                 token, data={"name": RAW_ASSET_NAME + ".bak"})
+
+    # 3) 临时资产改名正式名
     st, body = _request("PATCH", f"/repos/{OWNER}/{REPO_NAME}/releases/assets/{new_id}",
                         token, data={"name": ASSET_NAME})
     if st in (200, 201):
+        # 4) 改名成功 → 删除 .bak 旧库，发布完成
+        if old_gz:
+            _request("DELETE", f"/repos/{OWNER}/{REPO_NAME}/releases/assets/{old_gz['id']}", token)
+        if old_raw:
+            _request("DELETE", f"/repos/{OWNER}/{REPO_NAME}/releases/assets/{old_raw['id']}", token)
         print(f"DB_STORE: 已发布 {ASSET_NAME}（{len(blob)/1024/1024:.1f} MB）")
         return 0
     else:
-        print(f"DB_STORE_ERR: 重命名资产失败 {st} {body}")
+        # 改名失败 → 回滚：.bak 旧库改回正式名，清掉孤立临时资产，做到零数据丢失
+        print(f"DB_STORE_ERR: 重命名资产失败 {st} {body}，回滚保留旧库")
+        if old_gz:
+            _request("PATCH", f"/repos/{OWNER}/{REPO_NAME}/releases/assets/{old_gz['id']}",
+                     token, data={"name": ASSET_NAME})
+        if old_raw:
+            _request("PATCH", f"/repos/{OWNER}/{REPO_NAME}/releases/assets/{old_raw['id']}",
+                     token, data={"name": RAW_ASSET_NAME})
+        _request("DELETE", f"/repos/{OWNER}/{REPO_NAME}/releases/assets/{new_id}", token)
         return 1
 
 
