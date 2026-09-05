@@ -451,6 +451,23 @@ def main():
         print("没有可用的采集源")
         return
 
+    # 轮换源顺序（仅在未用 --sources 显式指定时生效）。
+    # 背景（实测确认的严重偏差）：ThreadPoolExecutor 按提交顺序占用 args.workers 个并发
+    # 槽位，而 --time-limit 到点后只有最先跑的那几个源能真正推进进度。源数(26) 远大于
+    # 并发数(5) 时，配置里靠后的源会被永久饿死——实测 config.py 中五个最大源
+    # 量子/茅台/最大/爱奇艺/魔都 位于第 17~21 位，进度长期为 0，全靠 update.yml 每天
+    # 1 页缓慢推进；而排在最前的 7 个小源却反复深翻（索尼已达 5200 页）。
+    # 修法：每轮把起始位置后移 args.workers 位并持久化，使所有源轮换获得完整时间片。
+    if not args.sources:
+        names = list(sources.keys())
+        off = int(progress.get("_rotate_offset", 0) or 0) % len(names)
+        if off:
+            names = names[off:] + names[:off]
+            sources = {k: sources[k] for k in names}
+        progress["_rotate_offset"] = (off + args.workers) % len(names)
+        print(f"源轮换: 本轮起始偏移={off}, 优先源={list(sources)[:args.workers]}, "
+              f"下轮偏移={(off + args.workers) % len(names)}")
+
     print(f"开始并发采集：源数={len(sources)}，源并发={args.workers}，"
           f"type并发={args.type_workers}，请求间隔={REQUEST_DELAY}s")
     t0 = time.time()
