@@ -358,7 +358,9 @@ def run(args):
     builder, builder_src = get_builder()
     print("[sync_delta_kv] builder = %s" % builder_src)
 
-    now_iso = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # 统一用 UTC，与 media.db 的 created_at(UTC) 对齐；
+    # 否则本机/CI 时区不一致会把 marker 写成「未来时间」，导致下一轮 cutoff 比所有 created_at 都大→漏采。
+    now_iso = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     round_id = str(int(time.time() * 1000))   # 毫秒时间戳，杜绝同秒碰撞
 
     # ---- --clear：清空全部增量 ----
