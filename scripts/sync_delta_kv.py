@@ -59,6 +59,8 @@ MANIFEST_KEY = "delta:manifest"
 INDEX_KEY_FMT = "delta:idx:{}"
 ROUND_KEY_FMT = "delta:{}{}"   # delta:{roundId} 或 delta:{roundId}:{part}
 MARKER_KEY = "delta:marker"
+DELTA_NS_TITLE = "m3u-delta"   # KV 命名空间标题；脚本按标题自动解析 ID，无需把 ID 当 Secret 注入
+DEFAULT_ACCOUNT_ID = "62dc1dfbe3b880e9c16017687aac9717"   # 兜底账户 ID（优先用 CLOUDFLARE_ACCOUNT_ID Secret）
 
 
 # ---------- 规范影片记录构建（复用 generate_movies_json，失败回退本地副本）----------
@@ -277,6 +279,24 @@ class KVClient:
             raise
 
 
+# ---------- 命名空间 ID 自动解析（免注入 Secret）----------
+def resolve_ns_id(token, account_id, title=DELTA_NS_TITLE):
+    """按标题查找 KV 命名空间 ID。这样无需把命名空间 ID 当作仓库 Secret 注入，
+    仅依赖已有的 CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID 即可。"""
+    url = "https://api.cloudflare.com/client/v4/accounts/%s/storage/kv/namespaces" % account_id
+    req = urllib.request.Request(url, method="GET")
+    req.add_header("Authorization", "Bearer " + token)
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            data = json.loads(r.read().decode("utf-8", "replace"))
+    except Exception:
+        return None
+    for ns in data.get("result", []):
+        if ns.get("title") == title:
+            return ns.get("id")
+    return None
+
+
 # ---------- 主逻辑 ----------
 def db_path():
     try:
@@ -325,18 +345,21 @@ def split_by_bytes(movies, max_bytes):
 
 def run(args):
     token = args.token or os.environ.get("CLOUDFLARE_API_TOKEN")
-    account_id = args.account_id or os.environ.get("CLOUDFLARE_ACCOUNT_ID")
+    account_id = args.account_id or os.environ.get("CLOUDFLARE_ACCOUNT_ID") or DEFAULT_ACCOUNT_ID
     ns_id = args.kv_id or os.environ.get("KV_DELTA_ID")
     dry = args.dry_run
 
-    if not dry:
-        missing = [n for n, v in (("CLOUDFLARE_API_TOKEN", token),
-                                  ("CLOUDFLARE_ACCOUNT_ID", account_id),
-                                  ("KV_DELTA_ID", ns_id)) if not v]
-        if missing:
-            # 凭证未配置：干净跳过（非错误）。配置 KV_DELTA_ID 等后下一次运行自动启用，
-            # 避免「未配置期」每轮刷 error 触发告警邮件。真实 API 故障仍会报错。
-            print("[sync_delta_kv] KV 凭证未配置(%s)，跳过增量同步（配置后自动启用）" % ", ".join(missing))
+    if not token:
+        msg = "[sync_delta_kv] 缺少 CLOUDFLARE_API_TOKEN，跳过增量同步"
+        print(msg + ("（dry-run）" if dry else ""))
+        return 0
+    if not ns_id:
+        # 未显式给 KV_DELTA_ID 时，按标题 m3u-delta 自动查找（免去把 ID 当 Secret 注入）
+        ns_id = resolve_ns_id(token, account_id)
+        if ns_id:
+            print("[sync_delta_kv] 按标题 '%s' 解析到命名空间 ID=%s" % (DELTA_NS_TITLE, ns_id))
+        else:
+            print("[sync_delta_kv] 未找到 KV 命名空间 '%s'，跳过增量同步（确认 Cloudflare 侧已建）" % DELTA_NS_TITLE)
             return 0
     kv = KVClient(token, account_id, ns_id, dry_run=dry)
     builder, builder_src = get_builder()
