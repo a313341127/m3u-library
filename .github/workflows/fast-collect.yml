@@ -207,7 +207,10 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/fast_collect_progress.json data/live_logos/ data/host_health.json scripts/shadowrocket_direct_rules.list scripts/shadowrocket_direct_module.conf scripts/direct_rules_clash.yaml
+          # 仅提交断点进度等数据小文件；直连规则文件(shadowrocket_*/direct_rules_*)由 do_deploy 轮
+          # 的 gen_direct_rules.py 重新生成、仅用于当轮部署，不在此提交——否则 push 命中 deploy.yml
+          # 的 scripts/** paths 会额外唤醒 deploy.yml 抢占 qinjin-collection 并发组（每次卡最多 90min）。
+          git add data/fast_collect_progress.json data/live_logos/ data/host_health.json
           if git diff --cached --quiet; then
             echo "无小文件变化，跳过提交"
           else

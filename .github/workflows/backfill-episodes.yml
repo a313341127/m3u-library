@@ -12,8 +12,10 @@ concurrency:
   cancel-in-progress: false
 
 on:
-  schedule:
-    - cron: '0 4 * * *'   # UTC 04:00 = 北京时间 12:00（与每日增量的 03:30 错峰）
+  # 全量采集冲刺期已暂停定时触发（2026-09-05）：分集回填是 enrichment（不增新片），
+  # 且占用 qinjin-collection 并发组会拖慢 fast-collect 接力链。全量完成后取消注释恢复。
+  # schedule:
+  #   - cron: '0 4 * * *'   # UTC 04:00 = 北京时间 12:00
   repository_dispatch:
     types: [backfill-episodes]   # 可由 API(PAT 仅需 repo 权限) 立即触发，无需点、不占本机
   workflow_dispatch:
