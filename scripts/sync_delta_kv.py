@@ -334,8 +334,10 @@ def run(args):
                                   ("CLOUDFLARE_ACCOUNT_ID", account_id),
                                   ("KV_DELTA_ID", ns_id)) if not v]
         if missing:
-            print("::error::缺少 KV 凭证：%s（请通过环境变量或参数提供）" % ", ".join(missing))
-            return 2
+            # 凭证未配置：干净跳过（非错误）。配置 KV_DELTA_ID 等后下一次运行自动启用，
+            # 避免「未配置期」每轮刷 error 触发告警邮件。真实 API 故障仍会报错。
+            print("[sync_delta_kv] KV 凭证未配置(%s)，跳过增量同步（配置后自动启用）" % ", ".join(missing))
+            return 0
     kv = KVClient(token, account_id, ns_id, dry_run=dry)
     builder, builder_src = get_builder()
     print("[sync_delta_kv] builder = %s" % builder_src)
