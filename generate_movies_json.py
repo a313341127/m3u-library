@@ -189,7 +189,15 @@ def build_category(cat: str, prefix: str) -> list:
     )
     rows = cur.fetchall()
     con.close()
+    return build_from_rows(rows, cat, prefix)
 
+
+def build_from_rows(rows, cat: str, prefix: str) -> list:
+    """对「已按分类筛好的」资源行做 (名称,年份) 去重 + 合并线路 + 格式化，产出规范影片记录。
+
+    抽出为独立函数，使 sync_delta_kv.py 能对「仅最近新增的行子集」复用同一套
+    去重/格式逻辑（与全量构建保持逐字段一致，避免两处漂移导致增量与静态库不一致）。
+    """
     merged = {}
     order = []
     for row in rows:

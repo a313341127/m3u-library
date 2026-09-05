@@ -16,6 +16,121 @@ const CAT_ORDER = ["movie", "live", "tv", "variety", "anime"];
 // 内存占用与目录总量彻底解耦，突破 Cloudflare Worker 128MiB 内存墙。
 const PAGE_SIZE = 300;
 
+// ---- KV 增量层（热数据：每 30min 采集轮写入，静态基库每 6h 才部署）----
+// 实现「0 部署、数据实时同步」：新片经 KV 即时呈现，无需等 Pages 构建。
+// 无 KV 绑定时(deltaEnabled()=false)自动降级为纯静态，对既有行为零影响。
+let ENV = null;                 // 在 fetch 入口捕获 env（含 KV_DELTA 绑定）
+let DELTA_CACHE = null;         // 模块级缓存：manifest + 已加载轮次(同 isolate 内跨请求复用，摊薄 CPU)
+const DELTA_PREPEND = 900;      // 每分类最多前置多少条增量到列表顶部（内存安全上限，≪128MiB 墙）
+const DELTA_SEARCH_ROUNDS = 16; // 搜索最多扫描多少轮增量（≈8h）
+
+function deltaEnabled() { return !!(ENV && ENV.KV_DELTA); }
+
+async function kvGet(key) {
+  if (!deltaEnabled()) return null;
+  try { return await ENV.KV_DELTA.get(key); } catch (_) { return null; }
+}
+
+async function getDeltaManifest() {
+  if (DELTA_CACHE && DELTA_CACHE.manifest) return DELTA_CACHE.manifest;
+  const txt = await kvGet("delta:manifest");
+  let mf = null;
+  if (txt) { try { mf = JSON.parse(txt); } catch (_) { mf = null; } }
+  if (!mf || !Array.isArray(mf.rounds)) mf = { rounds: [] };
+  DELTA_CACHE = DELTA_CACHE || {};
+  DELTA_CACHE.manifest = mf;
+  return mf;
+}
+
+async function getDeltaRound(roundId) {
+  if (DELTA_CACHE && DELTA_CACHE.rounds && DELTA_CACHE.rounds[roundId]) return DELTA_CACHE.rounds[roundId];
+  const mf = await getDeltaManifest();
+  const entry = (mf.rounds || []).find(r => r.id === roundId);
+  if (!entry) return null;
+  let movies = [];
+  for (const k of (entry.movieKeys || [])) {
+    const t = await kvGet(k);
+    if (t) { try { const o = JSON.parse(t); if (o && o.movies) movies = movies.concat(o.movies); } catch (_) {} }
+  }
+  DELTA_CACHE = DELTA_CACHE || {};
+  DELTA_CACHE.rounds = DELTA_CACHE.rounds || {};
+  DELTA_CACHE.rounds[roundId] = movies;
+  return movies;
+}
+
+async function getDeltaIdx(roundId) {
+  const t = await kvGet("delta:idx:" + roundId);
+  if (!t) return [];
+  try { return JSON.parse(t); } catch (_) { return []; }
+}
+
+// 取某分类最近增量(新→旧)，最多 limit 条；跨轮按 id 去重(保留最新一轮的版本)
+async function getDeltaMoviesForCat(cat, limit) {
+  const mf = await getDeltaManifest();
+  const rounds = (mf.rounds || []).slice().reverse();
+  const out = [];
+  const seen = new Set();
+  for (const r of rounds) {
+    if (out.length >= limit) break;
+    const movies = await getDeltaRound(r.id);
+    if (!movies) continue;
+    for (const m of movies) {
+      if (m.cat !== cat) continue;
+      if (seen.has(m.id)) continue;
+      seen.add(m.id);
+      out.push(m);
+      if (out.length >= limit) break;
+    }
+  }
+  return out;
+}
+
+// 按 id 在增量中查找完整记录(新→旧，命中即返回)——getItem/播放/封面均走此路径
+async function findDeltaById(id) {
+  const mf = await getDeltaManifest();
+  const rounds = (mf.rounds || []).slice().reverse();
+  for (const r of rounds) {
+    const movies = await getDeltaRound(r.id);
+    if (!movies) continue;
+    for (const m of movies) if (m.id === id) return m;
+  }
+  return null;
+}
+
+// 搜索：扫增量轻索引(含 name/sort)，返回 {id,cat,name,sort,year} 命中
+async function searchDelta(cats, q) {
+  const mf = await getDeltaManifest();
+  const rounds = (mf.rounds || []).slice(-DELTA_SEARCH_ROUNDS).reverse();
+  const out = [];
+  const seen = new Set();
+  for (const r of rounds) {
+    const idx = await getDeltaIdx(r.id);
+    for (const e of idx) {
+      if (cats.length && cats.indexOf(e.cat) < 0) continue;
+      const hay = ((e.name || "") + " " + (e.sort || "")).toLowerCase();
+      if (hay.includes(q) && !seen.has(e.id)) { seen.add(e.id); out.push(e); }
+    }
+  }
+  return out;
+}
+
+// 从静态 tp 分页序列中按绝对下标 baseStart 取 need 条
+// （增量前置后，列表窗口需映射到基库下标）
+async function getBaseSlice(data, cat, tpPages, baseStart, need) {
+  if (baseStart < 0) baseStart = 0;
+  const pageIndex = Math.floor(baseStart / PAGE_SIZE);
+  const local = baseStart % PAGE_SIZE;
+  if (pageIndex < 0 || pageIndex >= tpPages.length) return [];
+  let collected = [];
+  let p = pageIndex;
+  while (collected.length < local + need && p < tpPages.length && p - pageIndex < 8) {
+    const movies = await data.getPageFile(cat, tpPages[p]);
+    collected = collected.concat(movies);
+    p++;
+  }
+  return collected.slice(local, local + need);
+}
+
 let MANIFEST = null;
 let IDX = {};          // cat -> { ids:Map, pageSize, pages, count }
 const SEARCH = {};     // cat -> 搜索索引原文（仅缓存最近使用的一个分类）
@@ -115,13 +230,25 @@ async function getPageFile(cat, fname, ctx, origin) {
 
 async function getItem(id, ctx, origin) {
   const cat = catOfId(id);
+  // 基库优先：已存在于静态库的影片用静态版本（含全量线路），
+  // 避免「既有影片被补了新线路」的增量版本只含新增线路、源不全。
   const idx = await getIdx(cat, ctx, origin);
-  if (!idx.ids.has(id)) return null;
-  const pos = idx.ids.get(id);
-  const p = Math.floor(pos / idx.pageSize);
-  const local = pos % idx.pageSize;
-  const movies = await getPage(cat, p, ctx, origin);
-  return (movies && movies[local]) ? movies[local] : null;
+  if (idx.ids.has(id)) {
+    const pos = idx.ids.get(id);
+    const p = Math.floor(pos / idx.pageSize);
+    const local = pos % idx.pageSize;
+    const movies = await getPage(cat, p, ctx, origin);
+    const m = (movies && movies[local]) ? movies[local] : null;
+    if (m) return m;
+  }
+  // 基库没有 → 可能本轮新增(尚未进静态库)，查 KV 增量（详情/播放/封面可用）
+  if (deltaEnabled()) {
+    try {
+      const dm = await findDeltaById(id);
+      if (dm) return dm;
+    } catch (_) {}
+  }
+  return null;
 }
 
 // 对外暴露的惰性数据 API：manifest 常驻，索引/分页按需读取，内存与目录总量解耦。
@@ -312,40 +439,64 @@ async function itemsList(data, url) {
         }
       }
     }
-    if (indexed) {
-      const page = hits.slice(start, start + limit);
-      return { Items: page.map(toDto), TotalRecordCount: hits.length };
-    }
-    // 兜底（索引缺失，如部署尚未更新）：仅扫描前若干热门分页，守住子请求上限。
-    const matches = [];
-    for (let p = 0; p < Math.min(tpPages.length, 6); p++) {
-      const movies = await data.getPageFile(cat, tpPages[p]);
-      for (const m of movies) {
-        if ((m.name || "").toLowerCase().includes(q) ||
-            (m.sort || "").toLowerCase().includes(q)) matches.push(m);
+    if (!indexed) {
+      // 兜底（索引缺失，如部署尚未更新）：仅扫描前若干热门分页，守住子请求上限。
+      for (let p = 0; p < Math.min(tpPages.length, 6); p++) {
+        const movies = await data.getPageFile(cat, tpPages[p]);
+        for (const m of movies) {
+          if ((m.name || "").toLowerCase().includes(q) ||
+              (m.sort || "").toLowerCase().includes(q)) hits.push({ id: m.id, year: m.year, name: m.name, sort: m.sort, cat: m.cat });
+        }
       }
     }
-    const page = matches.slice(start, start + limit);
-    return { Items: page.map(toDto), TotalRecordCount: matches.length };
+    // 增量搜索：扫描 KV 轻索引(含 name/sort)，让「实时新增」也能被搜到
+    if (deltaEnabled()) {
+      try {
+        const dHits = await searchDelta(cats, q);
+        for (const e of dHits) {
+          if (!hits.some(h => h.id === e.id)) hits.push({ id: e.id, year: e.year, name: e.name, sort: e.sort, cat: e.cat });
+        }
+      } catch (_) {}
+    }
+    const page = hits.slice(start, start + limit);
+    return { Items: page.map(toDto), TotalRecordCount: hits.length };
   }
 
-  // 非搜索列表：预分页按需读页。单次调用通常只读 1 个 tp 分页文件；仅当请求窗口跨越
-  // 分页边界（StartIndex 贴近页尾 + Limit 较大）时才顺读下一页，最多 8 页（≤ 2400 条），
-  // 子请求数始终远小于 Cloudflare 上限。
-  const pageIndex = Math.floor(start / PAGE_SIZE);
-  const local = start % PAGE_SIZE;
-  if (pageIndex < 0 || pageIndex >= tpPages.length) {
-    return { Items: [], TotalRecordCount: tpTotal };
+  // 非搜索列表：预分页按需读页 + KV 增量前置。
+  // 增量(每类上限 DELTA_PREPEND)放到列表顶部 → 新片实时可见；
+  // 总数 = 静态_total + 增量数，分页窗口据此在「增量段 + 基库段」间正确映射。
+  let deltaList = [];
+  if (deltaEnabled()) {
+    try {
+      deltaList = await getDeltaMoviesForCat(cat, DELTA_PREPEND);
+      // 过滤掉「已存在于静态库」的增量(多为既有影片被补了新线路)，
+      // 避免列表出现重复；其更全的版本会在下次静态部署后覆盖。
+      if (deltaList.length) {
+        const bidx = await data.getIdx(cat);
+        if (bidx && bidx.ids) deltaList = deltaList.filter(m => !bidx.ids.has(m.id));
+      }
+    } catch (_) { deltaList = []; }
   }
-  let collected = [];
-  let p = pageIndex;
-  while (collected.length < local + limit && p < tpPages.length && p - pageIndex < 8) {
-    const movies = await data.getPageFile(cat, tpPages[p]);
-    collected = collected.concat(movies);
-    p++;
+  const deltaCount = deltaList.length;
+  const total = tpTotal + deltaCount;
+  if (start >= total) return { Items: [], TotalRecordCount: total };
+
+  let items = [];
+  if (start < deltaCount) {
+    const fromDelta = deltaList.slice(start, start + limit);
+    items = fromDelta.map(toDto);
+    const need = limit - items.length;
+    if (need > 0 && (start + items.length) < total) {
+      const baseStart = (start + items.length) - deltaCount;
+      const slice = await getBaseSlice(data, cat, tpPages, baseStart, need);
+      items = items.concat(slice.map(toDto));
+    }
+  } else {
+    const baseStart = start - deltaCount;
+    const slice = await getBaseSlice(data, cat, tpPages, baseStart, limit);
+    items = slice.map(toDto);
   }
-  const page = collected.slice(local, local + limit);
-  return { Items: page.map(toDto), TotalRecordCount: tpTotal };
+  return { Items: items, TotalRecordCount: total };
 }
 
 async function imagePrimary(data, id, origin, request) {
@@ -1038,6 +1189,7 @@ function isJellyfinPath(p) {
 
 export default {
   async fetch(request, env, ctx) {
+    ENV = env;   // 捕获绑定（含 KV_DELTA）；无绑定时 deltaEnabled()=false，自动降级纯静态
     const url = new URL(request.url);
     const p = url.pathname;
 
