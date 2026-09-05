@@ -55,6 +55,45 @@ jobs:
         run: |
           python scripts/backfill_run.py
 
+      - name: 提前落盘分集回填进度 + media.db（防后处理超时丢失断点）
+        # 关键修复：本工作流 timeout-minutes: 90，而库涨到 13 万条后后处理
+        # (generate_movies_json + 封面 + 部署) 已超出预算，run 总在末尾「提交数据库与进度」
+        # 之前被超时杀掉 -> backfill_progress.json 从不更新 -> 下一轮重复同样 6000 页
+        # -> 净进度为零（2026-09-01 起 4 天零进展的根因）。
+        # 故把进度保存提到 backfill_run.py 之后、任何后处理之前。
+        # ⚠️ 必须「进度 JSON + media.db 上传」成对落盘：只提交 JSON 而库没上传, 下一轮
+        # db_store download 会拉回旧库, 本轮新增的分集照样全部丢失。
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          python scripts/db_store.py upload
+          git add data/backfill_progress.json
+          if git diff --cached --quiet; then
+            echo "进度无变化，跳过提交"
+          else
+            git commit -m "chore: 分集回填进度提前落盘 $(date +%F' '%H:%M)"
+            PUSHED=0
+            for i in 1 2 3 4 5; do
+              git fetch origin main || true
+              if git merge origin/main --no-edit; then
+                if git push origin HEAD:main; then
+                  echo "进度已推送（第 $i 次尝试）"
+                  PUSHED=1
+                  break
+                fi
+              else
+                git merge --abort 2>/dev/null || true
+              fi
+              echo "第 $i 次推送遇竞态，2s 后重试..."
+              sleep 2
+            done
+            if [ "$PUSHED" -ne 1 ]; then
+              echo "::warning::进度推送失败（竞态过多），media.db 已存 Release 资产，下轮续跑"
+            fi
+          fi
+
       - name: 生成途播 Jellyfin 后端数据（api/movies.json + 地区分片）
         env:
           WEB_STRICT_HEALTH: 1
@@ -62,7 +101,9 @@ jobs:
           python generate_movies_json.py
 
       - name: 生成电影墙分类封面
-        if: ${{ inputs.SKIP_COVERS != 'true' }}
+        # 定时触发跳过封面（update.yml 每日已生成），仅手动 dispatch 按需生成；
+        # 省下的时间留给 backfill 本体，降低撞 90min 超时的概率。
+        if: ${{ inputs.SKIP_COVERS != 'true' && github.event_name != 'schedule' }}
         run: |
           python -m pip install -q pillow
           python scripts/generate_covers.py
