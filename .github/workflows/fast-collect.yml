@@ -10,8 +10,10 @@ name: 并发采集（云端高频）
 #
 # 串行化：与「每日自动更新」「分集回填」共用 concurrency 组，避免并发推送 media.db 冲突。
 # 仓库已设为 public → GitHub Actions 对公开库无限分钟，可高频轮转。
-# 频率：每小时一轮；单轮 TIME_LIMIT 到点暂停续跑，concurrency 串行避免 media.db 并发冲突。
-# 部署闸门：仅当 media.db 有变化才重新生成+部署，节省 Cloudflare Pages 每月 500 次构建额度。
+# 频率(提速核心)：每轮结束自触发 repository_dispatch 唤起下一轮 → 背靠背约 30 分钟一轮，
+#   免疫 GitHub cron 抖动(实测 cron 每小时触发也会拖到 2-5 小时)；仅当本轮采到新片(changed)才接力，
+#   采完即自动停链。cron '*/30' 仅作安全网(不接力)，链断裂时兜底续采。
+# 部署闸门：仅 03/09/15/21 点且 media.db 有变化才重新生成+部署，节省 Cloudflare Pages 每月 500 次构建额度。
 
 concurrency:
   group: qinjin-collection
@@ -19,7 +21,7 @@ concurrency:
 
 on:
   schedule:
-    - cron: '0 * * * *'   # 每小时一轮; 单轮 ~25min, 留 ~30min 空档给 update/backfill 抢并发组, 防饿死全量采集
+    - cron: '*/30 * * * *'   # 安全网: 每 30 分钟兜底跑一轮(不接力, 防链断裂后无采集); 主力靠 repository_dispatch 自触发接力(见文末)
   repository_dispatch:
     types: [fast-collect]   # 可由 API(PAT 仅需 repo 权限) 立即触发，不占本机
   workflow_dispatch:
@@ -43,7 +45,7 @@ permissions:
 jobs:
   collect:
     runs-on: ubuntu-latest
-    timeout-minutes: 40        # 硬上限 40min(<60min 间隔): 即使卡死也只占组 40min 即释放, 留空档给全量采集
+    timeout-minutes: 45        # 硬上限 45min: 即使卡死也只占组即释放; 接力链串行(同并发组)不会重叠
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
@@ -235,7 +237,7 @@ jobs:
           fi
 
       - name: 上传 media.db 到 Release 资产（绕过 git 100MB 限制）
-        if: always()
+        if: steps.collect.outputs.changed == 'true'   # 仅本轮有新数据才回传, 省带宽; 采完(changed=false)链自动停
         # 把更新后的 media.db 存回 Release 资产（db-store / media.db），供下一轮 CI 拉回续跑。
         # 库 <5MB 时自动跳过，避免「下载失败→空库」误清空好库。
         env:
@@ -259,3 +261,18 @@ jobs:
         run: |
           python share/build.py
           npx --yes wrangler@4 pages deploy share/dist --project-name=qs-agcl2 --branch=main
+
+      - name: 接力下一轮（自触发，背靠背约 30 分钟一轮）
+        # 仅 repository_dispatch 触发的轮才接力(避免 cron/手动 双链倍乘); 且需本轮采到新片(changed)才续跑,
+        # 采完即停链。用 GH_PAT(仓库 secret, 真 PAT)派发 repository_dispatch —— GITHUB_TOKEN 无法自触发(平台防递归)。
+        if: github.event_name == 'repository_dispatch' && steps.collect.outputs.changed == 'true'
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          curl -sS -X POST \
+            -H "Authorization: Bearer $GH_PAT" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Content-Type: application/json" \
+            https://api.github.com/repos/a313341127/m3u-library/dispatches \
+            -d '{"event_type":"fast-collect"}'
+          echo "已派发下一轮 repository_dispatch: fast-collect（约 30 分钟后背靠背接力）"
