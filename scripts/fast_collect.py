@@ -37,6 +37,7 @@ import urllib3
 from requests.adapters import HTTPAdapter
 
 import config
+from core.database import ensure_unique_index, has_unique_index
 from collector.cc0cd import (
     classify_category,
     extract_play_urls,
@@ -232,18 +233,65 @@ def init_sqlite():
     conn.execute("PRAGMA synchronous=NORMAL")
     # 关键：写冲突时等待而非立即报 "database is locked"（默认 busy_timeout=0）。
     conn.execute("PRAGMA busy_timeout=30000")
+    # 查重唯一索引：无它时每条入库都要全表扫描（107 万行实测 ~800ms/条）。
+    ensure_unique_index(conn)
     return conn
+
+
+# 每多少条提交一次。原实现「每条一 commit」，fsync 开销随库增大而变重。
+BATCH_COMMIT = 200
 
 
 def bulk_insert_items(conn, items):
     """批量插入，返回 (新增数, 重复数)。整段持 DB_LOCK 且带 busy_timeout 重试，
-    彻底消除并发写 "database is locked"。"""
+    彻底消除并发写 "database is locked"。
+
+    有查重唯一索引时走 ON CONFLICT DO NOTHING（免 SELECT 全表扫描），
+    并按 BATCH_COMMIT 批量提交；否则回退到「SELECT 查重 + 逐条提交」旧逻辑。
+    """
     if not items:
         return 0, 0
     inserted = 0
     dup = 0
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     cur = conn.cursor()
+
+    if has_unique_index(conn):
+        for start in range(0, len(items), BATCH_COMMIT):
+            chunk = items[start:start + BATCH_COMMIT]
+            for attempt in range(3):
+                try:
+                    with DB_LOCK:
+                        for it in chunk:
+                            cur.execute(
+                                """INSERT INTO resources
+                                   (name, category, media_type, region, year, cover,
+                                    description, url, quality, source, line_name,
+                                    raw_type_name, episodes, hits, score,
+                                    updated_at, created_at)
+                                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                                   ON CONFLICT(category, name, url) DO NOTHING""",
+                                (it["name"], it["category"], it["media_type"],
+                                 it["region"], it["year"], it["cover"],
+                                 it["description"], it["url"], it["quality"],
+                                 it["source"], it["line_name"], it["raw_type_name"],
+                                 it["episodes"], it["hits"], it["score"], now, now),
+                            )
+                            if cur.rowcount:
+                                inserted += 1
+                            else:
+                                dup += 1
+                        conn.commit()
+                    break
+                except sqlite3.OperationalError as e:
+                    if attempt < 2:
+                        time.sleep(0.5 * (attempt + 1))
+                        continue
+                    print(f"[warn] 批量插入失败已跳过 {len(chunk)} 条: {e}")
+                    break
+        return inserted, dup
+
+    # ---- 回退：无唯一索引时保持旧行为 ----
     for it in items:
         for attempt in range(3):
             try:
