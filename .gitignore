@@ -7,6 +7,8 @@ data/*.log
 data/media.db
 data/media.db-wal
 data/media.db-shm
+# 本地核对用的云端库副本（scripts/fetch_remote_db.py 产出，可能上 GB，仅临时分析用）
+data/_remote_media.db*
 output/
 .env
 node_modules/
