@@ -241,6 +241,24 @@ def init_sqlite():
 # 每多少条提交一次。原实现「每条一 commit」，fsync 开销随库增大而变重。
 BATCH_COMMIT = 200
 
+# 冲突时刷新分集：复采拿到的完整 episodes 必须写回，而不能被 DO NOTHING 丢弃。
+# 文本字段用 CASE 守卫——仅当新值非空才覆盖，避免把已有的好分集/好封面清空。
+UPSERT_SQL = """INSERT INTO resources
+   (name, category, media_type, region, year, cover,
+    description, url, quality, source, line_name, raw_type_name,
+    episodes, hits, score, updated_at, created_at)
+   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+   ON CONFLICT(category, name, url) DO UPDATE SET
+      episodes = CASE WHEN excluded.episodes <> '' THEN excluded.episodes
+                      ELSE resources.episodes END,
+      cover    = CASE WHEN excluded.cover <> '' THEN excluded.cover
+                      ELSE resources.cover END,
+      quality  = CASE WHEN excluded.quality <> '' THEN excluded.quality
+                      ELSE resources.quality END,
+      hits     = excluded.hits,
+      score    = excluded.score,
+      updated_at = excluded.updated_at"""
+
 
 def bulk_insert_items(conn, items):
     """批量插入，返回 (新增数, 重复数)。整段持 DB_LOCK 且带 busy_timeout 重试，
@@ -262,26 +280,22 @@ def bulk_insert_items(conn, items):
             for attempt in range(3):
                 try:
                     with DB_LOCK:
+                        before = conn.total_changes
                         for it in chunk:
                             cur.execute(
-                                """INSERT INTO resources
-                                   (name, category, media_type, region, year, cover,
-                                    description, url, quality, source, line_name,
-                                    raw_type_name, episodes, hits, score,
-                                    updated_at, created_at)
-                                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                                   ON CONFLICT(category, name, url) DO NOTHING""",
+                                UPSERT_SQL,
                                 (it["name"], it["category"], it["media_type"],
                                  it["region"], it["year"], it["cover"],
                                  it["description"], it["url"], it["quality"],
                                  it["source"], it["line_name"], it["raw_type_name"],
                                  it["episodes"], it["hits"], it["score"], now, now),
                             )
-                            if cur.rowcount:
-                                inserted += 1
-                            else:
-                                dup += 1
                         conn.commit()
+                        # upsert 下「冲突」也会被写成 UPDATE，故用 total_changes 区分数：
+                        # 实际写入(新增或刷新)的行数 vs 真正无变化的行数。
+                        written = conn.total_changes - before
+                        inserted += written
+                        dup += len(chunk) - written
                     break
                 except sqlite3.OperationalError as e:
                     if attempt < 2:

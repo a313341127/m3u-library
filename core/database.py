@@ -170,13 +170,25 @@ class Database:
                         description, url, quality, source, line_name, raw_type_name,
                         episodes, hits, score, updated_at, created_at)
                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                       ON CONFLICT(category, name, url) DO NOTHING""",
+                       ON CONFLICT(category, name, url) DO UPDATE SET
+                          episodes = CASE WHEN excluded.episodes <> ''
+                                          THEN excluded.episodes
+                                          ELSE resources.episodes END,
+                          cover    = CASE WHEN excluded.cover <> ''
+                                          THEN excluded.cover
+                                          ELSE resources.cover END,
+                          quality  = CASE WHEN excluded.quality <> ''
+                                          THEN excluded.quality
+                                          ELSE resources.quality END,
+                          hits     = excluded.hits,
+                          score    = excluded.score,
+                          updated_at = excluded.updated_at""",
                     (name, category, media_type, region, year, cover, description,
                      url, quality, source, line_name, raw_type_name,
                      episodes or '', hits, score, now, now),
                 )
-                # rowcount==1 表示真的插入；0 表示与已有行冲突，按重复处理
-                return cur.lastrowid if cur.rowcount else None
+                # 新增返回新 id；冲突更新返回 None（视作重复，但 episodes 已被刷新）
+                return cur.lastrowid or None
 
             dup = conn.execute(
                 "SELECT id FROM resources WHERE category=? AND name=? AND url=?",
