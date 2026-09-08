@@ -252,12 +252,15 @@ def _join_entries(entries: List[str], header: str = "#EXTM3U") -> str:
 
 
 def _write_shards(entries: List[str], out: Path, max_bytes: int,
-                  header: str = "#EXTM3U", tag: str = "full") -> List[Path]:
+                  header: str = "#EXTM3U", tag: str = "full",
+                  base: Optional[str] = None) -> List[Path]:
     """把条目切成多个 <= max_bytes 的分片，命名 <stem>_{tag}_part{N}<suffix>。
 
     按条目边界切分（M3U 每条 2 行不会被截断），每个分片自带表头，可独立使用。
+    base 可覆盖分片名前缀（默认用 out.stem），便于 best 分片命名为 <cat>_best_partN。
     """
     enc = config.M3U_ENCODING
+    stem = base if base is not None else out.stem
     head_cost = _size_of(header) + 1 if header else 0
     chunks: List[List[str]] = []
     cur: List[str] = []
@@ -274,7 +277,7 @@ def _write_shards(entries: List[str], out: Path, max_bytes: int,
 
     paths: List[Path] = []
     for i, ch in enumerate(chunks, 1):
-        p = out.with_name(f"{out.stem}_{tag}_part{i}{out.suffix}")
+        p = out.with_name(f"{stem}_{tag}_part{i}{out.suffix}")
         p.write_text(_join_entries(ch, header), encoding=enc)
         paths.append(p)
     return paths
@@ -417,7 +420,11 @@ def _flat_best_items(items: List[dict]) -> List[dict]:
 
 
 def generate_best_m3u(category: str, output_dir: Path = None) -> Path:
-    """生成单条最优版 M3U：每部影片只保留一条线路（国内源优先），且只出现一次"""
+    """生成单条最优版 M3U：每部影片只保留一条线路（国内源优先），且只出现一次。
+
+    体积保护：超过 Pages 25MiB 上限时按条目边界分片，主文件改用「分片第1片（兜底）」，
+    完整最优版另存 <cat>_best_partN.m3u，保证数据不丢（与 generate_txt 同级兜底一致）。
+    """
     items, stats = prepare_items(category)
     best_items_list = _flat_best_items(items)
     out = (output_dir or config.OUTPUT_DIR) / config.BEST_M3U_OUTPUT[category]
@@ -425,11 +432,20 @@ def generate_best_m3u(category: str, output_dir: Path = None) -> Path:
 
     # 平面列表：统一归到一个 group-title，避免多维分组导致同一影片反复出现
     group = config.CATEGORIES[category]["label"]
+    entries = [build_entry(it, group) for it in best_items_list]
+    text = _join_entries(entries, header="#EXTM3U")
 
-    lines = ["#EXTM3U"]
-    for it in best_items_list:
-        lines.append(build_entry(it, group))
-    out.write_text("\n".join(lines) + "\n", encoding=config.M3U_ENCODING)
+    if _size_of(text) > PAGES_MAX_FILE_BYTES:
+        shards = _write_shards(entries, out, PAGES_MAX_FILE_BYTES,
+                               header="#EXTM3U", tag="best", base=category)
+        # 主文件降级为第 1 片（兜底），完整最优版在 <cat>_best_partN.m3u
+        out.write_text(shards[0].read_text(encoding=config.M3U_ENCODING),
+                       encoding=config.M3U_ENCODING)
+        print(f"[体积保护] {out.name}: 最优版 {_size_of(text) / 1048576:.1f} MiB 超过 Pages "
+              f"25MiB 上限 -> 主文件改用「分片第1片（兜底）」，完整最优版另存 "
+              f"{len(shards)} 个分片（{category}_best_partN.m3u）")
+    else:
+        out.write_text(text, encoding=config.M3U_ENCODING)
 
     problems = verify_m3u(out)
     if problems:
@@ -442,14 +458,25 @@ def generate_best_m3u(category: str, output_dir: Path = None) -> Path:
 
 
 def generate_best_txt(category: str, output_dir: Path = None) -> Path:
-    """生成单条最优版 TXT 文本源，返回文件路径"""
+    """生成单条最优版 TXT 文本源，返回文件路径。含体积保护（同 generate_best_m3u）。"""
     items, stats = prepare_items(category)
     best_items_list = _flat_best_items(items)
     out = (output_dir or config.OUTPUT_DIR) / config.BEST_TXT_OUTPUT[category]
     out.parent.mkdir(parents=True, exist_ok=True)
-    lines = [config.TXT_LINE_FORMAT.format(
+    entries = [config.TXT_LINE_FORMAT.format(
         name=it["_clean_name"] or it["name"], url=it["url"]) for it in best_items_list]
-    out.write_text("\n".join(lines) + "\n", encoding=config.M3U_ENCODING)
+    text = _join_entries(entries, header="")
+
+    if _size_of(text) > PAGES_MAX_FILE_BYTES:
+        shards = _write_shards(entries, out, PAGES_MAX_FILE_BYTES,
+                               header="", tag="best", base=category)
+        out.write_text(shards[0].read_text(encoding=config.M3U_ENCODING),
+                       encoding=config.M3U_ENCODING)
+        print(f"[体积保护] {out.name}: 最优版 {_size_of(text) / 1048576:.1f} MiB 超过 Pages "
+              f"25MiB 上限 -> 主文件改用「分片第1片（兜底）」，完整最优版另存 "
+              f"{len(shards)} 个分片（{category}_best_partN.txt）")
+    else:
+        out.write_text(text, encoding=config.M3U_ENCODING)
     return out
 
 
