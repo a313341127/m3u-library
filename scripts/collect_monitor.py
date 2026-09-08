@@ -25,6 +25,11 @@ from datetime import datetime, timezone
 
 REPO = "a313341127/m3u-library"
 TOKEN = os.environ["GITHUB_TOKEN"]
+# 真 PAT: GitHub 规定 GITHUB_TOKEN 无法在同仓库触发新的 workflow run
+# (正是 fast-collect.yml 用 GH_PAT 自触发接力的原因)。监控要能真正拉起采集,
+# 必须用 GH_PAT 发 repository_dispatch / workflow_dispatch, 否则 API 返回 204 但 run 不创建 -> 自愈假成功。
+GH_PAT = os.environ.get("GH_PAT")
+
 API = "https://api.github.com"
 
 WATCH_WF = ["fast-collect.yml", "update.yml", "backfill-episodes.yml"]
@@ -32,7 +37,9 @@ PRIMARY = "fast-collect.yml"          # 兜底安全网工作流
 
 COOLDOWN_HOURS = 2                     # 同一工作流两次自动重投最小间隔 (防烧 Actions 额度)
 MAX_FAILS = 4                          # 单工作流连续失败次数上限 -> 开 Issue
-STALL_HOURS = 3                        # 全局无任何成功采集的停滞判定阈值
+STALL_HOURS = 3                        # 全局无任何成功采集的停滞判定阈值(严重判定)
+GAP_MIN = 50                           # 采集空档判定: 距最近一次采集 run(任意状态)超过该分钟数即视为空档型停摆
+                                        #   (健康系统每 ~30min 必有一轮, 50min 无 run = 链断/cron 失效)
 STALE_MIN = 120                        # run 卡死判定: in_progress 且 updated_at 超过 120min 无进展(健康 run 步骤会持续推进 updated_at, 不会命中)
 
 PROGRESS_FILE = "data/fast_collect_progress.json"
@@ -40,12 +47,13 @@ STATUS_FILE = "data/collect_status.json"
 STATE_FILE = "data/collect_monitor_state.json"
 
 
-def api(path, method="GET", data=None):
+def api(path, method="GET", data=None, token=None):
+    tok = token or TOKEN
     req = urllib.request.Request(
         API + path, method=method,
         data=(json.dumps(data).encode() if data is not None else None),
     )
-    req.add_header("Authorization", "Bearer " + TOKEN)
+    req.add_header("Authorization", "Bearer " + tok)
     req.add_header("Accept", "application/vnd.github+json")
     req.add_header("X-GitHub-Api-Version", "2022-11-28")
     req.add_header("User-Agent", "collect-monitor")
@@ -153,12 +161,43 @@ def latest_success_ts():
     return best
 
 
-def redispatch(wf, inputs=None):
+def latest_run_ts(wf):
+    """指定工作流最近一次 run(任意状态)的 (created_at_iso, status)。用于空档型停摆判定。"""
+    d = api("/repos/%s/actions/workflows/%s/runs?per_page=5" % (REPO, wf))
+    if not d:
+        return None, None
+    runs = d.get("workflow_runs", [])
+    if not runs:
+        return None, None
+    r = runs[0]   # 列表按 created_at 降序
+    return r["created_at"], r.get("status")
+
+
+def trigger_run(wf, via_chain=False):
+    """真正触发一次采集 run (优先用 GH_PAT, 否则 GITHUB_TOKEN 大概率不生效)。
+
+    - via_chain=True (主工作流 fast-collect): 发 repository_dispatch(event_type=fast-collect),
+      被触发轮若采到新片会自行 repository_dispatch 接力, 恢复高频链。
+    - via_chain=False (update/backfill): 发 workflow_dispatch, 跑一轮单次。
+    缺失 GH_PAT 时退化用 GITHUB_TOKEN 并告警(此时 run 很可能不被创建)。
+    """
+    tok = GH_PAT or TOKEN
     t0 = datetime.now(timezone.utc)
-    api("/repos/%s/actions/workflows/%s/dispatches" % (REPO, wf),
-        method="POST", data={"ref": "main", "inputs": inputs or {}})
-    time.sleep(4)
-    d = api("/repos/%s/actions/workflows/%s/runs?per_page=10" % (REPO, wf))
+    try:
+        if via_chain:
+            api("/repos/%s/dispatches" % REPO, method="POST",
+                data={"event_type": "fast-collect"}, token=tok)
+        else:
+            api("/repos/%s/actions/workflows/%s/dispatches" % (REPO, wf),
+                method="POST", data={"ref": "main", "inputs": {}}, token=tok)
+    except Exception as e:
+        print("  -> 触发失败:", str(e)[:200])
+        return None
+    if not GH_PAT:
+        print("  -> 警告: 未配置 GH_PAT, GITHUB_TOKEN 可能无法真正触发 run(平台防递归)")
+    time.sleep(5)
+    # 验证新 run 是否真的被创建
+    d = api("/repos/%s/actions/workflows/%s/runs?per_page=10" % (REPO, wf), token=tok)
     if d:
         for r in d.get("workflow_runs", []):
             if datetime.fromisoformat(r["created_at"].replace("Z", "+00:00")) > t0:
@@ -188,7 +227,14 @@ def age_hours(iso):
     return (datetime.now(timezone.utc) - t).total_seconds() / 3600.0
 
 
-def maybe_redispatch(state, wf, now_iso, actions, force_cooldown=None):
+def age_minutes(iso):
+    if not iso:
+        return 1e9
+    t = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+    return (datetime.now(timezone.utc) - t).total_seconds() / 60.0
+
+
+def maybe_redispatch(state, wf, now_iso, actions, force_cooldown=None, via_chain=False):
     last = state["last_dispatch"].get(wf)
     cd = force_cooldown if force_cooldown is not None else COOLDOWN_HOURS
     if last:
@@ -197,9 +243,9 @@ def maybe_redispatch(state, wf, now_iso, actions, force_cooldown=None):
         if delta < cd:
             actions.append("  -> 冷却中(距上次重投 %.1fh < %.1fh), 跳过" % (delta, cd))
             return
-    new_id = redispatch(wf)
+    new_id = trigger_run(wf, via_chain=via_chain)
     state["last_dispatch"][wf] = now_iso
-    actions.append("  -> 已重投 %s -> run %s" % (wf, new_id))
+    actions.append("  -> 已重投 %s (via_chain=%s) -> run %s" % (wf, via_chain, new_id))
 
 
 def read_progress():
@@ -230,7 +276,7 @@ def main():
                            % (wf, blocked["id"], blocked.get("created_at"),
                               blocked.get("updated_at"), STALE_MIN))
             cancel(blocked["id"])
-            maybe_redispatch(state, wf, now_iso, actions)
+            maybe_redispatch(state, wf, now_iso, actions, via_chain=(wf == PRIMARY))
             continue
         run = latest_run(wf)
         if not run:
@@ -243,7 +289,7 @@ def main():
             if status == "in_progress" and is_stale(run):
                 actions.append("  -> 卡死(>%smin) 取消+重投" % STALE_MIN)
                 cancel(rid)
-                maybe_redispatch(state, wf, now_iso, actions)
+                maybe_redispatch(state, wf, now_iso, actions, via_chain=(wf == PRIMARY))
             else:
                 actions.append("  -> 运行中, 观察")
             continue
@@ -263,18 +309,30 @@ def main():
             )
             continue
         actions.append("  -> 失败(%d/%d) 尝试自动重投" % (state["fails"][wf], MAX_FAILS))
-        maybe_redispatch(state, wf, now_iso, actions)
+        maybe_redispatch(state, wf, now_iso, actions, via_chain=(wf == PRIMARY))
 
-    # 2) 全局停滞安全网
+    # 2) 全局停滞安全网 —— 双重判定
+    # (a) 空档型停摆: 距最近一次采集 run(任意状态)超过 GAP_MIN 分钟即视为断链/cron 失效。
+    #     这是本次修复的核心: 旧逻辑只看「最近成功 run >3h」, 导致链断+无成功时最长 3h 不被发现。
+    last_run_iso, last_run_status = latest_run_ts(PRIMARY)
+    gap_min = age_minutes(last_run_iso)
+    gap_stalled = gap_min > GAP_MIN
+    if last_run_iso:
+        actions.append("最近采集 run(%s): %s (%.0f 分钟前)" % (last_run_status, last_run_iso, gap_min))
+    else:
+        actions.append("!! 无任何采集 run 记录")
+    # (b) 严重停滞: 超过 STALL_HOURS 无任何成功采集
     last_ok = latest_success_ts()
-    stalled = (last_ok is None) or (age_hours(last_ok) > STALL_HOURS)
+    success_stalled = (last_ok is None) or (age_hours(last_ok) > STALL_HOURS)
     if last_ok:
         actions.append("最近成功采集: %s (%.1fh 前)" % (last_ok, age_hours(last_ok)))
     else:
         actions.append("!! 无任何成功采集记录")
+    stalled = gap_stalled or success_stalled
     if stalled:
-        actions.append("!! 全局停滞 >%sh, 兜底重投 %s" % (STALL_HOURS, PRIMARY))
-        maybe_redispatch(state, PRIMARY, now_iso, actions, force_cooldown=0.5)
+        reason = ("空档>%smin" % GAP_MIN) if gap_stalled else ("无成功>%sh" % STALL_HOURS)
+        actions.append("!! 采集停滞(%s), 兜底重投 %s (repository_dispatch 接力)" % (reason, PRIMARY))
+        maybe_redispatch(state, PRIMARY, now_iso, actions, force_cooldown=0.5, via_chain=True)
 
     # 3) 健康判定 + 进度快照
     healthy = (not stalled) and all(

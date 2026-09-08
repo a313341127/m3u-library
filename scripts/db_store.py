@@ -9,11 +9,12 @@ GH001 大文件钩子拒绝（pre-receive hook declined），导致所有包含�
 改为：media.db 不再进 git，而是作为 Release 资产（tag=db-store）托管。
 GitHub Release 资产单文件上限 2GB、无带宽配额，契合「无限制」诉求。
 
-★ 压缩存储（2026-09-05 起）：资产以 gzip 形式存为 `media.db.gz`。
-  SQLite 文本字段（分集 JSON 等）压缩比高，688MB → 约 150-200MB：
-  1) 延缓 2GB 资产上限（约 8-10 天倒计时 → 数月）；
+★ 压缩存储（2026-09-05 起 gzip；2026-09-08 起升级 zstd）：资产以 zstd 形式存为 `media.db.zst`。
+  SQLite 文本字段（分集 JSON 等）压缩比高，zstd 比 gzip 再省 20-40%，
+  1) 延缓 2GB 资产上限（1218MB → 约 800-900MB，倒计时从 ~1 天拉回数月）；
   2) 缩短每轮 download/upload 传输耗时，间接提升 30 分钟采集轮的有效产能。
-  旧版未压缩 `media.db` 资产在首次 download 时自动回退迁移，无需手工处理。
+  旧版 gzip `media.db.gz` 资产在首次 download 时自动回退迁移，无需手工处理。
+★ 体积闸门（2026-09-08 起）：压缩包超 1800MB 拒绝上传并开 Issue，避免触碰 GitHub 2GB 资产硬上限。
 
 ★ 原子上传：先传临时名 `media.db.gz.tmp`，成功后再「删旧 → 改名 → 清旧版」，
   避免「先删旧的、新的又上传失败」导致整库丢失（2026-09-02 空库覆盖事故的前车之鉴）。
@@ -31,6 +32,7 @@ import os
 import sys
 import time
 import gzip
+import subprocess
 import urllib.request
 import urllib.error
 
@@ -39,16 +41,40 @@ DB_PATH = os.path.join(REPO, "data", "media.db")
 OWNER = "a313341127"
 REPO_NAME = "m3u-library"
 TAG = "db-store"
-ASSET_NAME = "media.db.gz"        # 压缩资产名（2026-09-05 起）
-RAW_ASSET_NAME = "media.db"       # 旧版未压缩资产名（兼容迁移）
+ASSET_NAME = "media.db.zst"       # 压缩资产名（2026-09-08 起改用 zstd, 比 gzip 再省 20-40% 体积）
+RAW_ASSET_NAME = "media.db.gz"    # 旧版 gzip 资产名（兼容迁移）
 TMP_NAME = ASSET_NAME + ".tmp"    # 原子上传用的临时名
-GZIP_LEVEL = 6                    # 压缩级别：6 在体积/速度间较平衡
+ZSTD_LEVEL = 12                   # zstd 压缩级别：12 在体积/速度间较平衡
+GUARD_BYTES = 1800 * 1024 * 1024 # 体积闸门: 压缩后超过该值(1.8GB)拒绝上传, 避免触碰 GitHub 2GB 资产上限导致上传失败/资产损坏
 
 # 安全阈值：库小于此值不上传，避免「下载失败→空库→误覆盖好库」导致数据清空。
 # 正常库 90MB+，空库仅几十 KB，5MB 阈值足够区分。
 MIN_UPLOAD_BYTES = 5 * 1024 * 1024
 
 API = "https://api.github.com"
+
+
+def _get_zstd():
+    """惰性加载 zstandard（CI/本地缺失时自动 pip 安装一次）。"""
+    try:
+        import zstandard
+        return zstandard
+    except ImportError:
+        subprocess.run([sys.executable, "-m", "pip", "install", "-q", "zstandard"], check=False)
+        import zstandard
+        return zstandard
+
+
+def open_2gb_issue(size_bytes):
+    """压缩包逼近 2GB 上限时开 Issue 告警（不阻塞主流程之外的动作）。"""
+    tok = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    if not tok:
+        return
+    _request("POST", f"/repos/{OWNER}/{REPO_NAME}/issues", tok,
+             {"title": "[db-store] 资产逼近 2GB 上限, 上传已中止",
+              "body": f"media.db 压缩后已达 {size_bytes/1024/1024:.0f} MB, 超过 1800MB 闸门。\n"
+                      "请执行分卷(shard)或裁剪(去重/压缩 episodes)后再上传, 否则将触碰 GitHub 2GB 资产硬上限。",
+              "labels": ["db-store", "alert"]})
 
 
 def _request(method, path, token, data=None, accept="application/vnd.github+json",
@@ -122,15 +148,15 @@ def cmd_download(token):
         return 2  # 网络/API 异常 → 让工作流失败，避免误清空
 
     assets = rel.get("assets", [])
-    # 优先压缩资产；缺失时回退旧版未压缩 media.db（一次性迁移）
+    # 优先 zstd 资产；缺失时回退旧版 gzip media.db.gz（一次性迁移）
     asset = next((a for a in assets if a.get("name") == ASSET_NAME), None)
-    is_gz = True
+    comp = "zst"
     if not asset:
         legacy = next((a for a in assets if a.get("name") == RAW_ASSET_NAME), None)
         if legacy:
-            print("DB_STORE: 未找到压缩资产，回退下载旧版未压缩 media.db（下次上传将迁移为 gz）")
+            print("DB_STORE: 未找到 zstd 资产，回退下载旧版 gzip media.db.gz（下次上传将迁移为 zst）")
             asset = legacy
-            is_gz = False
+            comp = "gz"
 
     if not asset:
         print("DB_STORE: Release 存在但无 media.db 资产，从空库开始")
@@ -140,19 +166,21 @@ def cmd_download(token):
     if data is None:
         return 2
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    if is_gz:
-        try:
+    try:
+        if comp == "zst":
+            raw = _get_zstd().ZstdDecompressor().decompress(data)
+            print(f"DB_STORE: 已恢复 media.db（zstd 包 {len(data)/1024/1024:.1f} MB → 解压 {len(raw)/1024/1024:.1f} MB）")
+        elif comp == "gz":
             raw = gzip.decompress(data)
-        except Exception as e:
-            print(f"DB_STORE_ERR: 解压 {ASSET_NAME} 失败: {e}")
-            return 2
-        with open(DB_PATH, "wb") as f:
-            f.write(raw)
-        print(f"DB_STORE: 已恢复 media.db（压缩包 {len(data)/1024/1024:.1f} MB → 解压 {len(raw)/1024/1024:.1f} MB）")
-    else:
-        with open(DB_PATH, "wb") as f:
-            f.write(data)
-        print(f"DB_STORE: 已恢复 media.db（{len(data)/1024/1024:.1f} MB，未压缩/迁移）")
+            print(f"DB_STORE: 已恢复 media.db（gzip 包 {len(data)/1024/1024:.1f} MB → 解压 {len(raw)/1024/1024:.1f} MB）")
+        else:
+            raw = data
+            print(f"DB_STORE: 已恢复 media.db（{len(data)/1024/1024:.1f} MB，未压缩/迁移）")
+    except Exception as e:
+        print(f"DB_STORE_ERR: 解压 {asset.get('name')} 失败: {e}")
+        return 2
+    with open(DB_PATH, "wb") as f:
+        f.write(raw)
     return 0
 
 
@@ -169,12 +197,23 @@ def cmd_upload(token):
     upload_base = rel["upload_url"].split("{")[0]
     assets = rel.get("assets", [])
 
-    # 压缩后再上传：SQLite 文本字段（分集 JSON）压缩比高，688MB→约 150-200MB，
+    # 压缩后再上传：SQLite 文本字段（分集 JSON）压缩比高，zstd 比 gzip 再省 20-40%，
     # 既延缓 2GB Release 资产上限，又缩短每轮传输耗时。
     with open(DB_PATH, "rb") as f:
         raw = f.read()
-    blob = gzip.compress(raw, GZIP_LEVEL)
-    print(f"DB_STORE: 压缩 media.db {size/1024/1024:.1f} MB → {len(blob)/1024/1024:.1f} MB (gzip-{GZIP_LEVEL})")
+    blob = _get_zstd().ZstdCompressor(level=ZSTD_LEVEL).compress(raw)
+    print(f"DB_STORE: 压缩 media.db {size/1024/1024:.1f} MB → {len(blob)/1024/1024:.1f} MB (zstd-{ZSTD_LEVEL})")
+
+    # 体积闸门: 压缩后逼近 GitHub 2GB 资产硬上限时拒绝上传, 避免上传失败/资产损坏,
+    # 并开 Issue 告警。旧好库仍保留在 Release, 不会丢数据。
+    if len(blob) > GUARD_BYTES:
+        print(f"DB_STORE_ERR: 压缩包 {len(blob)/1024/1024:.0f} MB 超过闸门 {GUARD_BYTES/1024/1024:.0f} MB, "
+              f"疑似逼近 2GB 上限, 中止上传以防资产损坏。请先分卷/裁剪。")
+        try:
+            open_2gb_issue(len(blob))
+        except Exception as e:
+            print("  -> 开 Issue 失败:", str(e)[:120])
+        return 1
 
     # 定位现有资产（快照）
     old_gz  = next((a for a in assets if a.get("name") == ASSET_NAME), None)

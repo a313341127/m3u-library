@@ -27,4 +27,5 @@ jobs:
       - name: 云端监控 + 异常自动修复
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_PAT: ${{ secrets.GH_PAT }}
         run: python3 scripts/collect_monitor.py

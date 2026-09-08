@@ -1,24 +1,36 @@
-"""并行分片下载 GitHub Release 资产（media.db.gz），用于本地核对权威库。
+"""并行分片下载 GitHub Release 资产（media.db.zst / 兼容旧 media.db.gz），用于本地核对权威库。
 
 用法: python scripts/fetch_remote_db.py
-说明: 仅本地核对用，不参与 CI；下载到 data/_remote_media.db(.gz)。
+说明: 仅本地核对用，不参与 CI；下载解压到 data/_remote_media.db。
 """
 import os
 import sys
 import time
 import gzip
 import shutil
+import subprocess
 import urllib.request
 import threading
 
 TOKEN = os.environ.get("GITHUB_TOKEN", "")
 REPO = "a313341127/m3u-library"
 TAG = "db-store"
-ASSET = "media.db.gz"
+ASSET = "media.db.zst"          # 2026-09-08 起 zstd; 旧资产名 media.db.gz 自动回退
+LEGACY_ASSET = "media.db.gz"
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT_GZ = os.path.join(REPO_ROOT, "data", "_remote_media.db.gz")
 OUT_DB = os.path.join(REPO_ROOT, "data", "_remote_media.db")
+
+
+def _get_zstd():
+    try:
+        import zstandard
+        return zstandard
+    except ImportError:
+        subprocess.run([sys.executable, "-m", "pip", "install", "-q", "zstandard"], check=False)
+        import zstandard
+        return zstandard
 
 WORKERS = 12
 RETRY = 3
@@ -93,11 +105,15 @@ def main():
     rel = __import__("json").loads(
         api().open(f"https://api.github.com/repos/{REPO}/releases/tags/{TAG}", timeout=40).read().decode())
     asset = next((a for a in rel.get("assets", []) if a["name"] == ASSET), None)
+    comp = "zst"
     if not asset:
-        print("未找到资产", ASSET)
+        asset = next((a for a in rel.get("assets", []) if a["name"] == LEGACY_ASSET), None)
+        comp = "gz"
+    if not asset:
+        print("未找到资产", ASSET, "/", LEGACY_ASSET)
         return 1
     size = asset["size"]
-    print(f"资产 {ASSET}: {size/1024/1024:.1f} MB  updated={asset['updated_at']}", flush=True)
+    print(f"资产 {asset['name']}: {size/1024/1024:.1f} MB  updated={asset['updated_at']}", flush=True)
 
     real = resolve_real_url(asset["url"])
     if not real:
@@ -157,8 +173,12 @@ def main():
         print(f"!! 大小不符: 期望 {size} 实际 {got}")
         return 1
 
-    with gzip.open(OUT_GZ, "rb") as fi, open(OUT_DB, "wb") as fo:
-        shutil.copyfileobj(fi, fo, 1 << 20)
+    if comp == "zst":
+        raw = _get_zstd().ZstdDecompressor().decompress(open(OUT_GZ, "rb").read())
+        open(OUT_DB, "wb").write(raw)
+    else:
+        with gzip.open(OUT_GZ, "rb") as fi, open(OUT_DB, "wb") as fo:
+            shutil.copyfileobj(fi, fo, 1 << 20)
     print(f"解压完成 {os.path.getsize(OUT_DB)/1024/1024:.1f} MB -> {OUT_DB}", flush=True)
     return 0
 
