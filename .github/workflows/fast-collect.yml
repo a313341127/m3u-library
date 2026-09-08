@@ -82,11 +82,12 @@ jobs:
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
-          # 部署时间闸门：Cloudflare Pages 免费仅 500 次构建/月。若每轮(30分钟)有新数据就部署，
-          # 约 48 轮/天 × 3 项目 = 144 次/天，远超额度会触发新的限额邮件。
-          # 故仅在 03/09/15/21 点的整点(:00)那一轮才真正部署（约 4 次/天 × 3 = 12 次/天，< 500/月）。
+          # 部署频率：每天固定 1 次，保持前端(qinjin.pages.dev)最新。
+          # Cloudflare Pages 免费 500 次构建/月；每天 1 次 × 3 项目 = 3 次/天 ≪ 500/月，不会触发限额邮件。
+          # 不再要求「采到新片(NEW>0)」才部署——近期增长多为 episodes 回填/URL 刷新(不产生新片)，
+          # 若仍卡 NEW>0 会导致前端长期冻结。故固定在 UTC 03:00(北京 11:00)那一轮强制部署。
           HOUR=$(date +%H); MIN=$(date +%M)
-          if [ "$NEW" -gt 0 ] && { [ "$HOUR" = "3" ] || [ "$HOUR" = "9" ] || [ "$HOUR" = "15" ] || [ "$HOUR" = "21" ]; } && [ "$MIN" -lt 30 ]; then
+          if [ "$HOUR" = "3" ] && [ "$MIN" -lt 30 ]; then
             echo "do_deploy=true" >> "$GITHUB_OUTPUT"
           else
             echo "do_deploy=false" >> "$GITHUB_OUTPUT"
