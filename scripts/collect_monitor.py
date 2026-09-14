@@ -35,6 +35,13 @@ API = "https://api.github.com"
 WATCH_WF = ["fast-collect.yml", "update.yml", "backfill-episodes.yml"]
 PRIMARY = "fast-collect.yml"          # 兜底安全网工作流
 
+# 被主动暂停（on.schedule 被注释、等待全量见底后恢复）的工作流白名单。
+# 这些工作流最新 run 长期为 cancelled，若按常规「失败」处理会让 fails 无限累加（曾涨到 71+）、
+# 开出陈旧 Issue，并让 last_health 永久 false → 误报。
+# 在它们对应的 schedule 被取消注释恢复后，应从本列表移除。
+# 2026-09-14：update.yml 与 backfill-episodes.yml 的 schedule 已恢复，可从此处移除。
+PAUSED_WORKFLOWS: set[str] = set()
+
 COOLDOWN_HOURS = 2                     # 同一工作流两次自动重投最小间隔 (防烧 Actions 额度)
 MAX_FAILS = 4                          # 单工作流连续失败次数上限 -> 开 Issue
 STALL_HOURS = 3                        # 全局无任何成功采集的停滞判定阈值(严重判定)
@@ -269,6 +276,13 @@ def main():
 
     # 1) 逐工作流检查最新 run
     for wf in WATCH_WF:
+        # 0) 被主动暂停的工作流：不累加 fails、不开 Issue、不触发兜底重投
+        #    这些工作流因 on.schedule 被注释而长期 cancelled 是设计使然，不是故障。
+        #    恢复定时后把对应条目从 PAUSED_WORKFLOWS 移除即可重新监控。
+        if wf in PAUSED_WORKFLOWS:
+            actions.append("[%s] 被主动暂停（schedule 注释中），跳过监控（不计 fails、不报警）" % wf)
+            state["fails"][wf] = 0   # 归零，避免遗留计数影响未来恢复后的判断
+            continue
         # 1a) 卡死检测: 扫描近期 run, 找占用并发组、updated_at 长期不前进的 in_progress run
         blocked = find_stuck_run(wf)
         if blocked:
@@ -281,6 +295,7 @@ def main():
         run = latest_run(wf)
         if not run:
             actions.append("[%s] 无历史 run" % wf)
+            state["fails"][wf] = 0   # 没有 run 也不算故障，归零避免误报
             continue
         rid = run["id"]; status = run["status"]; concl = run.get("conclusion")
         actions.append("[%s] 最新 run %s: %s/%s (updated %s)"
@@ -335,8 +350,9 @@ def main():
         maybe_redispatch(state, PRIMARY, now_iso, actions, force_cooldown=0.5, via_chain=True)
 
     # 3) 健康判定 + 进度快照
+    # 被主动暂停的工作流不计入 fails 判定（其最新 run 长期 cancelled 是设计使然，非故障）
     healthy = (not stalled) and all(
-        state["fails"].get(w, 0) < MAX_FAILS for w in WATCH_WF)
+        state["fails"].get(w, 0) < MAX_FAILS for w in WATCH_WF if w not in PAUSED_WORKFLOWS)
     prog = read_progress()
     status_out = {
         "checked_at": now_iso,
