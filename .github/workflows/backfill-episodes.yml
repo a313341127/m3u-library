@@ -8,7 +8,11 @@ name: 分集回填（自动）
 # 串行化：与「每日自动更新」共用 concurrency 组，避免并发推送 media.db 冲突。
 
 concurrency:
-  group: qinjin-collection
+  # 独立并发组：分集回填现在多进程并发、单次 run 最长 6h，若共用 qinjin-collection 会把
+  # fast-collect/部署全堵死。独立组后与其他工作流并行不阻塞。
+  # media.db 整库替换的潜在覆盖由两点吸收：① 进度在 git 的 backfill_progress.json（不依赖
+  # media.db），不被覆盖；② episodes 刷新是幂等的（重采即得），被覆盖只让回填多跑几轮。
+  group: qinjin-backfill
   cancel-in-progress: false
 
 on:
@@ -37,7 +41,9 @@ jobs:
     runs-on: ubuntu-latest
     # 防卡死：分集重采若挂住会长期占用 qinjin-collection 并发锁，把「每日自动更新/
     # 部署」一并堵死（2026-09-02 曾卡 1h+，导致线上修复被阻塞、无法自动恢复）。
-    timeout-minutes: 90
+    # 改为 360（6h，GitHub 单 job 上限）：多进程并发回填要在一次 run 内尽量多推进，
+    # 时间预算由 backfill_run.py 的 TIME_BUDGET_MIN 控制（默认 330，留 30min 后处理）。
+    timeout-minutes: 360
     steps:
       - name: 检出代码
         uses: actions/checkout@v4

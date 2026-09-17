@@ -120,6 +120,9 @@ class Database:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
+        # 并发写安全：多进程/多线程同时写时排队等待而非立即报 "database is locked"
+        # （默认 busy_timeout=0）。与 fast_collect 一致，避免 backfill 并发 collect 崩溃。
+        conn.execute("PRAGMA busy_timeout=30000")
         return conn
 
     def _init_schema(self):
