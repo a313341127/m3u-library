@@ -4,34 +4,23 @@ name: 分集回填（自动）
 # 之前全量回填的大批老数据没采分集。本工作流每天自动分批全量重采 tv/anime/variety，
 # 进度存 data/backfill_progress.json 断点续跑，跑完自动停止，全程无需人工介入。
 #
-# 触发：schedule（GitHub 自己定时跑，不依赖 PAT 权限、不需手动点）+ 可选手动 dispatch。
-# 串行化：与「每日自动更新」共用 concurrency 组，避免并发推送 media.db 冲突。
+# ⚠️ 2026-09-18 精简：本工作流**只负责「回填 episodes + 落盘进度/库」**。
+#    前端的生成(movies.json)/封面/_headers/DATA_VERSION/部署 Cloudflare/分享站等重活
+#    由 deploy.yml 每日 03:00 UTC 统一重生成并部署，会自动吃掉本轮新增的 episodes，
+#    无需本工作流重复做（重复做既烧时间又增加撞超时/推送竞态的概率）。
+#    这样 backfill_run.py 一返回，立刻「上传 media.db + 提交进度」收尾，整体稳稳低于
+#    360min 超时，根除「超时取消→进度全丢→看门狗计失败→重投→又超时」的死循环。
 
 concurrency:
-  # 独立并发组：分集回填现在多进程并发、单次 run 最长 6h，若共用 qinjin-collection 会把
-  # fast-collect/部署全堵死。独立组后与其他工作流并行不阻塞。
-  # media.db 整库替换的潜在覆盖由两点吸收：① 进度在 git 的 backfill_progress.json（不依赖
-  # media.db），不被覆盖；② episodes 刷新是幂等的（重采即得），被覆盖只让回填多跑几轮。
   group: qinjin-backfill
   cancel-in-progress: false
 
 on:
-  # 2026-09-14 恢复：源片源全量已见底（库体积 5 天持平），分集回填可以重新调度。
-  # 取消 2026-09-05 的注释恢复定时，断点续跑（backfill_progress.json 从 idx=2 继续）。
   schedule:
     - cron: '0 4 * * *'   # UTC 04:00 = 北京时间 12:00
   repository_dispatch:
     types: [backfill-episodes]   # 可由 API(PAT 仅需 repo 权限) 立即触发，无需点、不占本机
   workflow_dispatch:
-    inputs:
-      SKIP_COVERS:
-        description: '跳过封面生成（加速；默认生成）'
-        required: false
-        default: 'false'
-        type: choice
-        options:
-          - 'true'
-          - 'false'
 
 permissions:
   contents: write
@@ -39,10 +28,9 @@ permissions:
 jobs:
   backfill:
     runs-on: ubuntu-latest
-    # 防卡死：分集重采若挂住会长期占用 qinjin-collection 并发锁，把「每日自动更新/
-    # 部署」一并堵死（2026-09-02 曾卡 1h+，导致线上修复被阻塞、无法自动恢复）。
-    # 改为 360（6h，GitHub 单 job 上限）：多进程并发回填要在一次 run 内尽量多推进，
-    # 时间预算由 backfill_run.py 的 TIME_BUDGET_MIN 控制（默认 330，留 30min 后处理）。
+    # 360（6h，GitHub 单 job 上限）：时间预算由 backfill_run.py 的 TIME_BUDGET_MIN 控制
+    # （默认 240，单源 SRC_BUDGET_MIN 默认 120）。脚本到点会 kill 子进程并立即返回，
+    # 留足余量给下方「上传 media.db + 提交进度」。
     timeout-minutes: 360
     steps:
       - name: 检出代码
@@ -59,18 +47,14 @@ jobs:
         run: python scripts/db_store.py download
 
       - name: 分集回填（分批全量重采 tv/anime/variety，断点续跑）
-        # 脚本自管进度(data/backfill_progress.json)，每 run 消耗 ~6000 页预算后保存断点。
+        # 脚本自管进度(data/backfill_progress.json)，到点强杀在跑子进程并立即返回。
         run: |
           python scripts/backfill_run.py
 
-      - name: 提前落盘分集回填进度 + media.db（防后处理超时丢失断点）
-        # 关键修复：本工作流 timeout-minutes: 90，而库涨到 13 万条后后处理
-        # (generate_movies_json + 封面 + 部署) 已超出预算，run 总在末尾「提交数据库与进度」
-        # 之前被超时杀掉 -> backfill_progress.json 从不更新 -> 下一轮重复同样 6000 页
-        # -> 净进度为零（2026-09-01 起 4 天零进展的根因）。
-        # 故把进度保存提到 backfill_run.py 之后、任何后处理之前。
-        # ⚠️ 必须「进度 JSON + media.db 上传」成对落盘：只提交 JSON 而库没上传, 下一轮
-        # db_store download 会拉回旧库, 本轮新增的分集照样全部丢失。
+      - name: 落盘分集回填进度 + media.db（防超时丢失断点）
+        # 关键：backfill_run.py 一返回立刻上传 media.db 并提交流度，不做任何后处理。
+        # ⚠️ 必须「进度 JSON + media.db 上传」成对落盘：只提交 JSON 而库没上传，下一轮
+        # db_store download 会拉回旧库，本轮新增的分集照样全部丢失。
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -81,7 +65,7 @@ jobs:
           if git diff --cached --quiet; then
             echo "进度无变化，跳过提交"
           else
-            git commit -m "chore: 分集回填进度提前落盘 $(date +%F' '%H:%M)"
+            git commit -m "chore: 分集回填进度落盘 $(date +%F' '%H:%M)"
             PUSHED=0
             for i in 1 2 3 4 5; do
               git fetch origin main || true
@@ -101,166 +85,3 @@ jobs:
               echo "::warning::进度推送失败（竞态过多），media.db 已存 Release 资产，下轮续跑"
             fi
           fi
-
-      - name: 生成途播 Jellyfin 后端数据（api/movies.json + 地区分片）
-        env:
-          WEB_STRICT_HEALTH: 1
-        run: |
-          python generate_movies_json.py
-
-      - name: 生成电影墙分类封面
-        # 定时触发跳过封面（update.yml 每日已生成），仅手动 dispatch 按需生成；
-        # 省下的时间留给 backfill 本体，降低撞 90min 超时的概率。
-        if: ${{ inputs.SKIP_COVERS != 'true' && github.event_name != 'schedule' }}
-        run: |
-          python -m pip install -q pillow
-          python scripts/generate_covers.py
-
-      - name: 生成直连分流规则（来自 media.db，订阅自动更新）
-        run: |
-          python scripts/gen_direct_rules.py
-
-      - name: 复制直连规则到站点（供 Shadowrocket/Clash 订阅，经 VPN 可达）
-        run: |
-          cp scripts/shadowrocket_direct_rules.list output/
-          cp scripts/shadowrocket_direct_module.conf output/
-          cp scripts/direct_rules_clash.yaml output/
-
-      - name: 递增 DATA_VERSION（避免客户端/途播缓存旧数据）
-        run: |
-          VER="$(date +%Y%m%d%H)"
-          sed -i "s/const DATA_VERSION = \".*\";/const DATA_VERSION = \"$VER\";/" output/_worker.js
-          echo "DATA_VERSION -> $VER"
-          grep "DATA_VERSION =" output/_worker.js
-
-      - name: 生成 _headers（M3U Content-Type 修正 + 禁止缓存）
-        run: |
-          cat > output/_headers <<'EOF'
-          /movie.m3u
-            Content-Type: application/vnd.apple.mpegurl
-            Cache-Control: max-age=0, must-revalidate
-          /tv.m3u
-            Content-Type: application/vnd.apple.mpegurl
-            Cache-Control: max-age=0, must-revalidate
-          /anime.m3u
-            Content-Type: application/vnd.apple.mpegurl
-            Cache-Control: max-age=0, must-revalidate
-          /variety.m3u
-            Content-Type: application/vnd.apple.mpegurl
-            Cache-Control: max-age=0, must-revalidate
-          /movie.txt
-            Content-Type: text/plain; charset=utf-8
-            Cache-Control: max-age=0, must-revalidate
-          /tv.txt
-            Content-Type: text/plain; charset=utf-8
-            Cache-Control: max-age=0, must-revalidate
-          /anime.txt
-            Content-Type: text/plain; charset=utf-8
-            Cache-Control: max-age=0, must-revalidate
-          /variety.txt
-            Content-Type: text/plain; charset=utf-8
-            Cache-Control: max-age=0, must-revalidate
-          /movie.best.m3u
-            Content-Type: application/vnd.apple.mpegurl
-            Cache-Control: max-age=0, must-revalidate
-          /tv.best.m3u
-            Content-Type: application/vnd.apple.mpegurl
-            Cache-Control: max-age=0, must-revalidate
-          /anime.best.m3u
-            Content-Type: application/vnd.apple.mpegurl
-            Cache-Control: max-age=0, must-revalidate
-          /variety.best.m3u
-            Content-Type: application/vnd.apple.mpegurl
-            Cache-Control: max-age=0, must-revalidate
-          /movie.best.txt
-            Content-Type: text/plain; charset=utf-8
-            Cache-Control: max-age=0, must-revalidate
-          /tv.best.txt
-            Content-Type: text/plain; charset=utf-8
-            Cache-Control: max-age=0, must-revalidate
-          /anime.best.txt
-            Content-Type: text/plain; charset=utf-8
-            Cache-Control: max-age=0, must-revalidate
-          /variety.best.txt
-            Content-Type: text/plain; charset=utf-8
-            Cache-Control: max-age=0, must-revalidate
-          /live.m3u
-            Content-Type: application/vnd.apple.mpegurl
-            Cache-Control: max-age=0, must-revalidate
-          /live.txt
-            Content-Type: text/plain; charset=utf-8
-            Cache-Control: max-age=0, must-revalidate
-          /shadowrocket_direct_module.conf
-            Content-Type: text/plain; charset=utf-8
-            Cache-Control: max-age=0, must-revalidate
-          /shadowrocket_direct_rules.list
-            Content-Type: text/plain; charset=utf-8
-            Cache-Control: max-age=0, must-revalidate
-          /direct_rules_clash.yaml
-            Content-Type: text/plain; charset=utf-8
-            Cache-Control: max-age=0, must-revalidate
-          /web/*
-            Cache-Control: public, max-age=86400, stale-while-revalidate=604800
-          /covers/*
-            Cache-Control: public, max-age=86400, stale-while-revalidate=604800
-          /index.html
-            Cache-Control: max-age=0, must-revalidate
-          EOF
-
-      - name: 提交数据库与进度（供下次续跑 + 增量去重）
-        # 顺序同 update.yml：先提交数据，最后才部署；即便部署失败数据也已落库 main。
-        # 额外提交 data/backfill_progress.json（断点续跑状态）。
-        # media.db 已移出 git，改由下方「上传 media.db」步骤存 Release 资产。
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/live_logos/ data/host_health.json data/backfill_progress.json scripts/shadowrocket_direct_rules.list scripts/shadowrocket_direct_module.conf scripts/direct_rules_clash.yaml
-          if git diff --cached --quiet; then
-            echo "数据库无变化，跳过提交"
-          else
-            git commit -m "chore: 分集回填进度更新 $(date +%F)"
-            # 并发推送保护：3 套工作流共用 qinjin-collection 串行组，但 CI 偶发竞态
-            # （同一窗口内其他工作流/手动触发先推了 main），单次 push 会被 non-fast-forward 拒绝。
-            # 用「拉取->合并->推送」重试环：每次推送前都重新同步远端，消除竞态窗口。
-            PUSHED=0
-            for i in 1 2 3 4 5; do
-              git fetch origin main || true
-              if git merge origin/main --no-edit; then
-                if git push origin HEAD:main; then
-                  echo "进度已推送（第 $i 次尝试）"
-                  PUSHED=1
-                  break
-                fi
-              else
-                git merge --abort 2>/dev/null || true
-              fi
-              echo "第 $i 次推送遇竞态，2s 后重试..."
-              sleep 2
-            done
-            if [ "$PUSHED" -ne 1 ]; then
-              echo "::warning::进度文件推送失败（竞态次数过多），但 media.db 已存 Release 资产，不影响采集"
-            fi
-          fi
-
-      - name: 上传 media.db 到 Release 资产（绕过 git 100MB 限制）
-        # 把更新后的 media.db 存回 Release 资产（db-store / media.db），供下一轮 CI 拉回续跑。
-        # 库 <5MB 时自动跳过，避免「下载失败→空库」误清空好库。
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python scripts/db_store.py upload
-
-      - name: 部署到 Cloudflare Pages（裸域名 qinjin.pages.dev = 途播入口）
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          npx --yes wrangler@4 pages deploy output --project-name=qinjin --branch=main
-          npx --yes wrangler@4 pages deploy output --project-name=qinjin --branch=production
-
-      - name: 构建并部署分享站（带访问口令，独立项目 qs-agcl2）
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          python share/build.py
-          npx --yes wrangler@4 pages deploy share/dist --project-name=qs-agcl2 --branch=main
