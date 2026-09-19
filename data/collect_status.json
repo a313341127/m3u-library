@@ -1,15 +1,15 @@
 {
-  "checked_at": "2026-09-19T06:29:52.669079+00:00",
-  "healthy": false,
-  "stalled": true,
-  "last_success_collect": "2026-09-19T01:26:16Z",
+  "checked_at": "2026-09-19T11:26:56.557041+00:00",
+  "healthy": true,
+  "stalled": false,
+  "last_success_collect": "2026-09-19T11:22:52Z",
   "fails": {
     "fast-collect.yml": 0,
     "update.yml": 0,
     "backfill-episodes.yml": 0
   },
   "progress_pages": {
-    "索尼|all": 7169,
+    "索尼|all": 7170,
     "红牛|1": 2,
     "金鹰|all": 5658,
     "樱花|all": 5148,
@@ -49,7 +49,7 @@
     "光速|12": 34,
     "光速|13": 343,
     "光速|14": 204,
-    "_rotate_offset": 18,
+    "_rotate_offset": 2,
     "量子|3": 2,
     "量子|1": 2,
     "量子|4": 2,
@@ -93,13 +93,13 @@
     "无尽|all": 5918,
     "速播|2": 2,
     "速播|1": 2,
-    "极速|all": 5571,
+    "极速|all": 5572,
     "速播|3": 2,
     "火狐|all": 5610,
     "速播|5": 123,
     "速播|6": 267,
     "速播|7": 134,
-    "西瓜|all": 4389,
+    "西瓜|all": 4390,
     "豆瓣|1": 2,
     "暴风|20": 2,
     "星球|2": 2,
@@ -154,7 +154,7 @@
     "魔都|14": 69,
     "爱奇艺|19": 5,
     "爱奇艺|20": 5,
-    "新浪|10": 765,
+    "新浪|10": 766,
     "爱奇艺|21": 24,
     "豆瓣|8": 433,
     "魔都|15": 475,
@@ -391,15 +391,13 @@
     "爱奇艺|all": 63
   },
   "actions": [
-    "[fast-collect.yml] 最新 run 35426587933: in_progress/None (updated 2026-09-19T06:26:11Z)",
-    "  -> 运行中, 观察",
+    "[fast-collect.yml] 最新 run 35439951998: completed/success (updated 2026-09-19T11:26:43Z)",
+    "  -> 成功, 重置失败计数",
     "[update.yml] 最新 run 35398275923: completed/success (updated 2026-09-18T22:39:32Z)",
     "  -> 成功, 重置失败计数",
-    "[backfill-episodes.yml] 最新 run 35355874736: completed/success (updated 2026-09-18T15:56:47Z)",
+    "[backfill-episodes.yml] 最新 run 35431797647: completed/success (updated 2026-09-19T08:25:29Z)",
     "  -> 成功, 重置失败计数",
-    "最近采集 run(in_progress): 2026-09-19T06:26:08Z (4 分钟前)",
-    "最近成功采集: 2026-09-19T01:26:16Z (5.1h 前)",
-    "!! 采集停滞(无成功>3h), 兜底重投 fast-collect.yml (repository_dispatch 接力)",
-    "  -> 已重投 fast-collect.yml (via_chain=True) -> run 35426753815"
+    "最近采集 run(completed): 2026-09-19T11:22:52Z (4 分钟前)",
+    "最近成功采集: 2026-09-19T11:22:52Z (0.1h 前)"
   ]
 }
