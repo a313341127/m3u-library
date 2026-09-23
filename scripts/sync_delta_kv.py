@@ -70,8 +70,15 @@ def _local_build_from_rows(rows, cat, prefix):
     import hashlib
     import re
 
+    # 音轨/字幕标记的剥离规则须与 generate_movies_json.clean_sort 保持一致
+    # （本函数是不依赖外部 import 的副本，故此处内联同一套正则）
+    _AUDIO = r"(?:(?:国语|粤语|普通话|中字|双语|原声|方言|台配|港配|译制|配音)\s*版?)"
+    _audio_br = re.compile(r"[（(\[【]\s*" + _AUDIO + r"\s*[)）\]】]")
+    _audio_tail = re.compile(r"\s*" + _AUDIO + r"\s*$")
+
     def clean_sort(name):
-        n = (name or "").strip()
+        n = _audio_br.sub(" ", name or "")
+        n = _audio_tail.sub("", n).strip()
         n = re.sub(r"[\（\(]\d{4}[\）\)]", "", n)
         n = re.sub(r"\s*[第][\d一二三四五六七八九十百千]+[季部集话]", "", n)
         return n.strip() or (name or "")

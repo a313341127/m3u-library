@@ -23,6 +23,7 @@ M3U 条目格式（途播可导入）:
 TXT 文本源格式（config.TXT_LINE_FORMAT 可配）:
     流浪地球2,http://example.com/play.m3u8
 """
+import hashlib
 import re
 from collections import defaultdict
 from pathlib import Path
@@ -39,11 +40,66 @@ _TITLE_CLEAN_RE = re.compile(
     r"|高清|超清|全集|蓝光|连载中|更新至|大结局"
 )
 
+# 音轨 / 字幕 / 版本标记。采集站惯用「国语 / 粤语 / 普通话 / 中字」等后缀区分同一部片
+# 的不同音轨，此前完全未清洗 —— 去重键 (片名, 年份) 因此把同一部片拆成多张卡片
+# （线上实测：1983 年的「A计划」出现 4 次：A计划 / A计划国语 / A计划普通话 / A计划粤语）。
+# 仅在「括号内」或「结尾后缀」位置剥离，不动片名本体（含这些字的片名不受影响）。
+_AUDIO_CORE = r"(?:国语|粤语|普通话|中字|双语|原声|方言|台配|港配|译制|配音)"
+# 允许「国语版 / 国语 版 / 粤语版」等写法（各采集站空格不统一，实测有「xxx 国语 版」）
+_AUDIO_TAG = r"(?:" + _AUDIO_CORE + r"\s*版?)"
+_AUDIO_BRACKET_RE = re.compile(r"[（(\[【]\s*" + _AUDIO_TAG + r"\s*[)）\]】]")
+_AUDIO_TAIL_RE = re.compile(r"\s*" + _AUDIO_TAG + r"\s*$")
+
+
+def strip_audio_tags(name: str) -> str:
+    """剥离片名尾部 / 括号内的音轨·字幕·版本标记（国语、粤语、普通话、中字…）。
+
+    供 m3u/web、generate_movies_json、jellyfin_data 共用，避免多处清洗逻辑各自漂移。
+    """
+    n = _AUDIO_BRACKET_RE.sub(" ", name or "")
+    n = _AUDIO_TAIL_RE.sub("", n)
+    return re.sub(r"\s+", " ", n).strip()
+
+
+# 「同片不同年」合并用的简介指纹。采集站对同一部片常标错/缺失年份，只按 (片名, 年份)
+# 去重会把同片拆成多张卡；但直接忽略年份又会误并同名不同片（《回魂夜》1962/1995、
+# 《三个火枪手》2005/2011/2012/2017/2025）。折中：只合并「简介指纹一致」的条目。
+_PLACEHOLDER_DESC = {"暂无简介", "暂无剧情简介", "暂无介绍", "暂无", "无", "简介", "暂无剧情", "无简介"}
+_DESC_NOISE_RE = re.compile(r"[\s\-_.,，。、！？!?：:；;‘’“”\"'（）()\[\]【】《》/\\|~`·]")
+_FP_MIN_CHARS = 12
+
+
+def film_fingerprint(description: str) -> str:
+    """影片指纹 = 「去掉空白/标点后的简介正文」的 MD5。
+
+    简介过短或是「暂无简介」这类占位文本时返回 ""（无法判定），调用方必须保守处理：
+    宁可不合并，也不要误并同名不同片。
+    """
+    d = _DESC_NOISE_RE.sub("", description or "")
+    if len(d) < _FP_MIN_CHARS or d in _PLACEHOLDER_DESC:
+        return ""
+    return hashlib.md5(d.encode("utf-8")).hexdigest()
+
+
+def film_merge_key(it: dict) -> tuple:
+    """跨年份合并键 = 片名 + 简介指纹；无指纹时退化为「片名 + 年份」（即不跨年合并）。
+
+    供 _flat_best_items 与 web.generate_index 的线路聚合共用同一把键 —— 否则合并后的
+    卡片沿用旧键去取换源线路会取不到，导致其它年份的线路丢失。
+    """
+    name = it.get("_clean_name") or clean_title(it.get("name") or "")
+    fp = film_fingerprint(it.get("description") or "")
+    if fp:
+        return (name, fp)
+    return (name, "\x00y:%s" % (it.get("year") if it.get("year") is not None else ""))
+
 
 def clean_title(name: str) -> str:
-    """去掉名称里的清晰度/状态标记（1080p/720p/HD/全集/高清...），
-    这些信息由 quality 字段单独保存，避免标题出现『xxx 1080p高清全集』噪音"""
+    """去掉名称里的清晰度/状态标记（1080p/720p/HD/全集/高清...）与音轨后缀
+    （国语/粤语/普通话...）。前者由 quality 字段保存，后者由 line_name 保存；
+    归一后同一部片的多种写法才能合并成一张卡片，避免墙上「一部电影出现多次」。"""
     n = _TITLE_CLEAN_RE.sub(" ", name or "")
+    n = strip_audio_tags(n)
     # 清理残留括号/分隔符与多余空格
     n = re.sub(r"[\[\]【】()（）・·…]", " ", n)
     n = re.sub(r"\s+", " ", n).strip()
@@ -405,18 +461,45 @@ def generate_txt(category: str, output_dir: Path = None) -> Path:
 def _flat_best_items(items: List[dict]) -> List[dict]:
     """从已排序的多线路条目中，每部影片只保留一条最优线路。
 
-    聚合键为（名称, 年份），忽略不同来源对地区/类型的不一致标注，
-    从而实现搜索列表里「一部影片只出现一次」。
+    两段式去重，目标都是「一部影片只出现一次」：
+    1. 精确键 (片名, 年份)：消除同一部片的多条播放线路；
+    2. 同片名跨年份合并：采集站对同一部片常标错/缺失年份，仅当**简介指纹一致**
+       才判定为同片（避免误并《回魂夜》1962/1995 这类同名不同片）。
+    合并后年份取组内「多数源站一致」的那个（并列取最早），避免显示被标错的那个年份。
     由于 prepare_items 已经把国内可直连源排最前，这里保留的第一条就是最优线路。
     """
     seen: dict = {}
     for it in items:
         key = (it["_clean_name"], it.get("year") or "")
-        if key in seen:
+        if key not in seen:
+            seen[key] = it
+
+    groups: dict = {}
+    for it in seen.values():
+        groups.setdefault(film_merge_key(it), []).append(it)
+
+    out: List[dict] = []
+    for g in groups.values():
+        if len(g) == 1:
+            out.append(g[0])
             continue
-        seen[key] = it
+        cnt: Dict[str, int] = {}
+        for x in g:
+            y = x.get("year")
+            if y:
+                cnt[str(y)] = cnt.get(str(y), 0) + 1
+        if not cnt:
+            out.append(g[0])
+            continue
+        top = max(cnt.values())
+        best = sorted(int(y) for y, c in cnt.items() if c == top and y.isdigit())
+        # 输出浅拷贝：items 仍被 web 的线路聚合复用，不能就地改年份
+        keep = dict(g[0])
+        keep["year"] = best[0] if best else g[0].get("year")
+        out.append(keep)
+
     # 按名称+年份排序，输出稳定
-    return sorted(seen.values(), key=lambda it: (it["_clean_name"], it.get("year") or 0))
+    return sorted(out, key=lambda it: (it["_clean_name"], it.get("year") or 0))
 
 
 def generate_best_m3u(category: str, output_dir: Path = None) -> Path:

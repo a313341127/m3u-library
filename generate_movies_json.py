@@ -45,7 +45,9 @@ sys.path.insert(0, ROOT)
 # 途播优先引用这里的真实台标，彻底摆脱易失效的外链 CDN。
 _LIVE_LOGO_ROOT = os.path.join(ROOT, "data", "live_logos")
 import config  # noqa: E402
-from generator.m3u import _region_bucket, _is_domestic  # noqa: E402
+from generator.m3u import (  # noqa: E402
+    _region_bucket, _is_domestic, strip_audio_tags, film_fingerprint,
+)
 from generator import health as _health  # noqa: E402
 
 DB = os.path.join(ROOT, "data", "media.db")
@@ -64,15 +66,18 @@ JELLYFIN_CATS = [
 
 
 def clean_sort(name: str) -> str:
-    """去掉常见后缀/年份括号，保留核心用于排序"""
-    n = (name or "").strip()
+    """去掉常见后缀/年份括号/音轨标记（国语/粤语/普通话…），保留核心用于排序与去重。
+
+    音轨标记必须一并剥离，否则「A计划」与「A计划国语」会被当成两部片各占一张卡片。
+    """
+    n = strip_audio_tags(name or "").strip()
     n = re.sub(r"[\（\(]\d{4}[\）\)]", "", n)
     n = re.sub(r"\s*[第][\d一二三四五六七八九十百千]+[季部集话]", "", n)
     return n.strip() or (name or "")
 
 
 def norm_key(name: str, year) -> tuple:
-    """去重主键：名称(去年份/去季集后缀, 小写去空白) + 年份"""
+    """去重主键：名称(去年份/去季集后缀/去音轨标记, 小写去空白) + 年份"""
     n = clean_sort(name).lower()
     n = re.sub(r"\s+", "", n)
     return (n, year)
@@ -254,9 +259,49 @@ def build_from_rows(rows, cat: str, prefix: str) -> list:
                 rec["hits"] = row["hits"] or rec["hits"]
                 rec["pop"] = popularity(rec["hits"], rec["score"], len(rec["sources"]), rec["year"])
 
+    # ---- 第二道去重：同片名跨年份合并 ----
+    # 采集站对同一部片常标错/缺失年份，只按 (名称, 年份) 去重会把同片拆成多张卡；
+    # 但直接忽略年份又会误并同名不同片（《回魂夜》1962/1995、《三个火枪手》多版本）。
+    # 因此只合并「简介指纹一致」的条目（同一份简介 → 基本可判定为同一部片）。
+    _g2: dict = {}
+    _order2: list = []
+    for key in order:
+        rec = merged[key]
+        fp = film_fingerprint(rec.get("overview") or "")
+        k2 = (key[0], fp) if fp else (key[0], "\x00y:%s" % ("" if key[1] is None else key[1]))
+        hit = _g2.get(k2)
+        if hit is None:
+            rec["_years"] = [rec["year"]] if rec["year"] is not None else []
+            _g2[k2] = rec
+            _order2.append(k2)
+            continue
+        # 线路合并（同 URL 只保留首次出现的线路名）
+        for p in rec["sources"]:
+            if p[1] not in (x[1] for x in hit["sources"]):
+                hit["sources"].append(p)
+        if rec["year"] is not None:
+            hit["_years"].append(rec["year"])
+        if not hit["cover"] and rec["cover"]:
+            hit["cover"] = rec["cover"]
+        if (rec.get("_best_score") or 0) > (hit.get("_best_score") or 0):
+            hit["_best_score"] = rec["_best_score"]
+            hit["score"] = rec["score"]
+            hit["quality"] = rec["quality"] or hit["quality"]
+            hit["hits"] = rec["hits"] or hit["hits"]
+            hit["overview"] = rec["overview"] or hit["overview"]
+    merged, order = _g2, _order2
+
     movies = []
     for key in order:
         rec = merged[key]
+        # 年份：同一部片各源站标的年份常不一致，取「多数源站一致」的那个（并列取最早）
+        years = rec.pop("_years", None)
+        if years:
+            _cnt: dict = {}
+            for y in years:
+                _cnt[y] = _cnt.get(y, 0) + 1
+            _top = max(_cnt.values())
+            rec["year"] = sorted(y for y, c in _cnt.items() if c == _top)[0]
         # 最终人气分：用最终 hits/score/线路数/年份重新计算，确保新增线路也被计入兜底热度。
         rec["pop"] = popularity(rec["hits"], rec["score"], len(rec["sources"]), rec["year"])
         paired = rec.pop("sources")
@@ -270,8 +315,9 @@ def build_from_rows(rows, cat: str, prefix: str) -> list:
         if not urls:
             continue
         movies.append({
+            # id 仍由「规范片名 + 最终年份」决定；key[1] 第二道去重后已变为指纹/占位串，不能再用
             "id": prefix + hashlib.md5(
-                ("%s|%s" % (key[0], key[1])).encode("utf-8")
+                ("%s|%s" % (key[0], rec["year"])).encode("utf-8")
             ).hexdigest()[:14],
             "cat": cat,
             "name": rec["name"],

@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Dict, List
 
 import config
-from generator.m3u import clean_title, prepare_items, _flat_best_items
+from generator.m3u import clean_title, prepare_items, _flat_best_items, film_merge_key
 from generator import health as _health
 
 # 固定的本地台标目录（data/live_logos/，已进 git；部署时同步到 output/covers/live/）。
@@ -2355,7 +2355,7 @@ def generate_index(output_dir: Path = None) -> Path:
         # 截断到 8 条避免 JSON 过大；单线路影片 sources 为空列表。
         src_map: Dict[tuple, list] = {}
         for it in items:
-            key = (it["_clean_name"], it.get("year") or "")
+            key = film_merge_key(it)
             url = it.get("url") or ""
             if not url:
                 continue
@@ -2397,7 +2397,7 @@ def generate_index(output_dir: Path = None) -> Path:
         # 并聚合所有线路中最大的人气/评分（保留的线路可能来自无人气数据的源）
         agg: Dict[tuple, dict] = {}
         for it in items:
-            key = (it["_clean_name"], it.get("year") or "")
+            key = film_merge_key(it)
             a = agg.setdefault(key, {"lines": 0, "hits": 0, "score": 0.0})
             a["lines"] += 1
             a["hits"] = max(a["hits"], int(it.get("hits") or 0))
@@ -2406,14 +2406,14 @@ def generate_index(output_dir: Path = None) -> Path:
             except (TypeError, ValueError):
                 pass
         for it in items:
-            a = agg[(it["_clean_name"], it.get("year") or "")]
+            a = agg[film_merge_key(it)]
             it["_lines"] = a["lines"]
             it["_best_hits"] = a["hits"]
             it["_best_score"] = a["score"]
         # Web 首页同样去重：每部影片只展示一条最优线路，避免搜索时满屏重复；
         # 同时把聚合到的全部线路（换源）一并带出。
         flat = _flat_best_items(items)
-        resources[cat] = [_item_to_json(it, src_map.get((it["_clean_name"], it.get("year") or "")))
+        resources[cat] = [_item_to_json(it, src_map.get(film_merge_key(it)))
                          for it in flat]
         # 简介单独收集：主分片不放简介（全量简介 11.98 MiB，会让首屏从 13 MiB 涨到
         # 25 MiB，手机端体验很差），改为按分类生成独立分片，打开详情页时按需加载。
