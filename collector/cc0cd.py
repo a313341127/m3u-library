@@ -33,6 +33,7 @@ from typing import Dict, List, Optional, Tuple
 import config
 from collector.base import BaseCollector, ResourceItem
 from collector.registry import register
+from generator.m3u import is_tv_gala
 
 _CTX = ssl.create_default_context()
 _UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
@@ -477,6 +478,18 @@ class CC0CDCollector(BaseCollector):
         """
         raw_type_name = source_type_name or (v.get("type_name") or "").strip()
         desc = re.sub(r"<[^>]+>", "", v.get("vod_content") or "").strip()
+        name = (v.get("vod_name") or "").strip()
+
+        # 片名强修正：电视晚会（春节联欢晚会/跨年晚会/元宵喜乐会…）一律归综艺。
+        # 采集站常把这些挂在电影类目下（type_name 就是「动作片」之类），
+        # 只看 type_name 判不出来；必须在下面 want_category 校验之前改，
+        # 否则「只采电影」时这些晚会仍会被当成电影收进来。
+        if is_tv_gala(name):
+            # 走 forced 分支会跳过下方的 want_category 校验，这里补一次：
+            # 本次采集目标不是综艺时，这条晚会直接丢弃。
+            if want_category and want_category != "variety":
+                return []
+            forced_category, forced_media_type = "variety", ""
 
         if forced_category:
             category = forced_category
@@ -493,7 +506,6 @@ class CC0CDCollector(BaseCollector):
         if "纪录片" in desc or "documentary" in desc.lower():
             media_type = "纪录片"
 
-        name = (v.get("vod_name") or "").strip()
         line_eps = extract_play_urls(
             v.get("vod_play_url") or "", v.get("vod_play_from") or ""
         )

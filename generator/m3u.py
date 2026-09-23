@@ -250,6 +250,63 @@ def match_name(name: str) -> str:
     return n.casefold()
 
 
+# ---------------------------------------------------------------- 分类归属纠正
+# 电视晚会（春节联欢晚会 / 跨年 / 元宵喜乐会…）本质是综艺节目，但采集站常把它们
+# 挂在「电影」类目下（源站 type_name 就是电影类型），导致电影墙前排混进大量晚会卡
+# （线上实测：2026 春节晚会、北京卫视跨年、湖南卫视元宵喜乐会 全部出现在「电影」Tab）。
+#
+# 判定必须严格，几条反例都是真影视剧：
+#   - 不能用裸「晚会」——《睡衣晚会大屠杀》《五年圣诞晚会》是电影；
+#   - 不能只认「跨年」——《跨年惊魂夜》《我的跨年之婚》是电影；
+#   - 「春晚」是缩写，既可能是晚会名也可能是剧名 —— 见 _NIANWAN_TAIL_RE 的额外约束；
+#   - 《孤独的美食家除夕特别篇》是日剧 SP，不含下列词，不受影响。
+_TV_GALA_RE = re.compile(
+    r"("
+    r"春节联欢晚会|春节晚会|新春晚会|新年晚会|联欢晚会|跨年晚会|跨年演唱会|跨年盛典|"
+    r"元宵晚会|元宵喜乐会|中秋晚会|中秋喜乐会|迎新晚会|文艺晚会|"
+    r"春节大联欢|新春喜乐会|春节联欢"
+    r")"
+)
+# 「跨年」单独出现时，需要电视台/直播特征兜底（如「2026北京卫视跨年」）
+_CROSS_YEAR_RE = re.compile(r"跨年")
+_TV_HINT_RE = re.compile(
+    r"(卫视|电视台|央视|CCTV|中央广播电视总台|总台|广播电视台|芒果TV|直播)"
+)
+# 「春晚」单独判定：必须在片名**结尾**，且带 4 位年份或电视台/地区特征。
+# 这样「2024网络春晚 / 2026黄河民歌春晚 / 北京春晚」命中，而
+# 「我在92年办春晚」「五旬老太上春晚」「一场很没有必要的春晚」「繁花照春晚」
+# 这些影视剧名不会被误判。
+_NIANWAN_TAIL_RE = re.compile(r"春晚\s*[）\)】]?\s*$")
+_YEAR_RE = re.compile(r"(?:19|20)\d{2}")
+_GALA_LOC_RE = re.compile(
+    r"(北京|上海|天津|重庆|河北|山西|辽宁|吉林|黑龙江|江苏|浙江|安徽|福建|江西|山东|"
+    r"河南|湖北|湖南|广东|广西|海南|四川|川渝|贵州|云南|陕西|甘肃|青海|宁夏|新疆|"
+    r"西藏|内蒙古|深圳|东方|全球|国际|网络|中央|总台|华人|华侨|大湾区)"
+)
+
+
+def is_tv_gala(name: str) -> bool:
+    """片名是否为「电视晚会」类（春节联欢晚会 / 跨年晚会 / 元宵喜乐会…）。"""
+    n = name or ""
+    if _TV_GALA_RE.search(n):
+        return True
+    if _NIANWAN_TAIL_RE.search(n) and (
+        _YEAR_RE.search(n) or _TV_HINT_RE.search(n) or _GALA_LOC_RE.search(n)
+    ):
+        return True
+    return bool(_CROSS_YEAR_RE.search(n) and _TV_HINT_RE.search(n))
+
+
+def reclassify(name: str, category: str) -> str:
+    """按片名强特征纠正分类（源站错标）。命中电视晚会一律归综艺，否则原样返回。
+
+    采集侧与生成侧共用，避免两处判定漂移。
+    """
+    if category != "variety" and is_tv_gala(name):
+        return "variety"
+    return category
+
+
 def clean_title(name: str) -> str:
     """去掉名称里的清晰度/状态标记（1080p/720p/HD/全集/高清...）与音轨后缀
     （国语/粤语/普通话...）。前者由 quality 字段保存，后者由 line_name 保存；

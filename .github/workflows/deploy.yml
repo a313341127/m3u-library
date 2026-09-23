@@ -67,6 +67,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python scripts/db_store.py download
 
+      - name: 修正被采集站误标为电影的电视晚会（改判为综艺，幂等）
+        # 源站常把春节联欢晚会 / 跨年晚会 / 元宵喜乐会挂在电影类目下，导致电影墙前排
+        # 混进大量晚会卡片。改 DB 而不是改生成代码 —— 这样 web / 途播 JSON / Jellyfin /
+        # M3U / 增量 KV 全部下游自动一致。判定统一走 generator.m3u.is_tv_gala。
+        run: python scripts/fix_gala_categories.py --apply
+
       - name: 生成 M3U / Web / 途播 Jellyfin 分片数据
         env:
           WEB_STRICT_HEALTH: 1
