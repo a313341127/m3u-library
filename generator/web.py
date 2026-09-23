@@ -950,7 +950,14 @@ __DATA_SCRIPTS__
         const btn = document.createElement('button');
         btn.className = 'sort-btn' + (currentSort === key ? ' active' : '');
         btn.textContent = label;
-        btn.onclick = () => { currentSort = key; displayLimit = PAGE_SIZE; renderGridOnly(); };
+        // 排序 / 筛选都只作用于「已加载的分片」；首屏只有第 0 片，
+        // 此时排出来的「人气 TOP」是残缺的。所以本地先渲染一次给出反馈，
+        // 再 ensureCat 把该分类剩余分片补齐后重排一次（幂等，已加载完则立即返回）。
+        btn.onclick = () => {
+          currentSort = key; displayLimit = PAGE_SIZE;
+          renderGridOnly();
+          ensureCat(currentCat, renderGridOnly);
+        };
         bar.appendChild(btn);
       });
     }
@@ -992,13 +999,23 @@ __DATA_SCRIPTS__
       const all = document.createElement('span');
       all.className = 'tag' + (!activeFilters[dim] ? ' active' : '');
       all.textContent = '全部';
-      all.onclick = () => { activeFilters[dim] = ''; displayLimit = PAGE_SIZE; render(); };
+      // 说明见 initSortGroup：筛选同样必须先补齐分片，否则「按地区/类型筛不到」会被
+      // 误判成片库没有这类片（首屏只加载了第 0 片）。
+      all.onclick = () => {
+        activeFilters[dim] = ''; displayLimit = PAGE_SIZE;
+        render();
+        ensureCat(currentCat, render);
+      };
       c.appendChild(all);
       values.forEach(v => {
         const span = document.createElement('span');
         span.className = 'tag' + (activeFilters[dim] === v ? ' active' : '');
         span.textContent = v;
-        span.onclick = () => { activeFilters[dim] = v; displayLimit = PAGE_SIZE; render(); };
+        span.onclick = () => {
+          activeFilters[dim] = v; displayLimit = PAGE_SIZE;
+          render();
+          ensureCat(currentCat, render);
+        };
         c.appendChild(span);
       });
     }
@@ -1903,49 +1920,76 @@ __DATA_SCRIPTS__
       copyToClipboard((s[0] && s[0].url) || d.item.url || '');
     };
 
-    // 网页数据分片按需加载：首屏只同步加载每分类第 0 片，切分类或点「加载更多」时
-    // 若还有未加载分片则动态注入后续片（__DATAMANIFEST__ 清单 + __LOADED_PARTS__ 计数）。
-    // 关键：拉取是异步逐片进行的，期间若再次调用（切换分类 / 点「加载更多」/ 重复点同一 Tab）
-    // 必须排队等待，绝不能按 __LOADED_PARTS__ 再拉一遍 —— 否则同一片被注入多次，
-    // 而 __RES__ 是追加语义，会让整个分类的数据翻倍（表现为每部片出现 2 张卡）。
+    // 网页数据分片按需加载：首屏只同步加载每分类第 0 片，切分类 / 点「加载更多」/ 搜索时
+    // 再按需注入其余分片（__DATAMANIFEST__ 清单 + __LOADED_PARTS__ 首屏偏移）。
+    // 三条硬约束：
+    //   1) 同一分片只能注入一次（__INJECTED__）—— __RES__ 是追加语义，重复注入会让数据翻倍；
+    //   2) 加载中重复调用只排队、不新开加载链（__LOADING__ 门闩 + __PENDING__ 回调）；
+    //   3) 必须并发而非串行 —— movie 19 片约 120MB，串行下载会让「加载更多/搜索」久到不可用。
+    //      （旧版靠重复注入 bug 形成的多条并发链"意外"变快；修掉重复后必须显式并发。）
+    const PART_CONC = 6;     // 同时在途的分片数
+    const PART_RETRY = 2;    // 单片失败重试次数（失败分片是静默丢数据的隐患，必须重试）
     function ensureCat(cat, done) {
       if (cat === 'live') { if (done) done(); return; }
-      // 懒初始化（幂等）：不依赖这三行与函数定义的先后顺序，任何时机调用都安全
+      // 懒初始化（幂等）：不依赖这些行与函数定义的先后顺序，任何时机调用都安全
       window.__LOADING__ = window.__LOADING__ || {};
       window.__INJECTED__ = window.__INJECTED__ || {};
       window.__PENDING__ = window.__PENDING__ || {};
+      window.__READY__ = window.__READY__ || {};
+      window.__QUEUE__ = window.__QUEUE__ || {};
+      window.__RETRY__ = window.__RETRY__ || {};
       const parts = (window.__DATAMANIFEST__ || {})[cat] || [];
-      const loaded = (window.__LOADED_PARTS__ || {})[cat] || 0;
-      if (loaded >= parts.length) { if (done) done(); return; }
+      if (!parts.length) { if (done) done(); return; }
+      if (window.__READY__[cat]) { if (done) done(); return; }
       if (done) (window.__PENDING__[cat] = window.__PENDING__[cat] || []).push(done);
       if (window.__LOADING__[cat]) return;   // 已在加载中：仅排队回调，不重复注入
       window.__LOADING__[cat] = true;
-      let i = loaded;
+      const loaded = (window.__LOADED_PARTS__ || {})[cat] || 0;
+      if (!window.__QUEUE__[cat]) window.__QUEUE__[cat] = parts.slice(loaded);
+      const q = window.__QUEUE__[cat];
+      let inflight = 0;
       const finish = function () {
         window.__LOADING__[cat] = false;
+        window.__READY__[cat] = true;
         const cbs = window.__PENDING__[cat] || [];
         window.__PENDING__[cat] = [];
         for (let n = 0; n < cbs.length; n++) { try { cbs[n](); } catch (e) {} }
       };
-      const next = function () {
-        if (i >= parts.length) {
-          window.__LOADED_PARTS__[cat] = parts.length;
-          finish();
-          return;
+      const pump = function () {
+        while (inflight < PART_CONC && q.length) {
+          const name = q.shift();
+          if (window.__INJECTED__[name]) continue;   // 兜底：同一分片只注入一次
+          window.__INJECTED__[name] = true;
+          inflight++;
+          const s = document.createElement('script');
+          s.src = '/web/' + name + (window.__DVER__ ? '?v=' + window.__DVER__ : '');
+          s.onload = function () { inflight--; pump(); };
+          s.onerror = function () {
+            inflight--;
+            const tries = window.__RETRY__[name] = (window.__RETRY__[name] || 0) + 1;
+            if (tries <= PART_RETRY) {
+              window.__INJECTED__[name] = false;   // 放行重试
+              q.push(name);                        // 退回队尾
+            } else {
+              window.__FAILED__ = window.__FAILED__ || {};
+              window.__FAILED__[name] = true;
+              console.warn('[data] 分片多次加载失败，本次会话缺少这部分数据:', name);
+            }
+            pump();
+          };
+          document.head.appendChild(s);
         }
-        const name = parts[i++];
-        if (window.__INJECTED__[name]) { next(); return; }   // 兜底：同一分片只注入一次
-        window.__INJECTED__[name] = true;
-        const s = document.createElement('script');
-        s.src = '/web/' + name + (window.__DVER__ ? '?v=' + window.__DVER__ : '');
-        s.onload = function () {
-          window.__LOADED_PARTS__[cat] = Math.max(window.__LOADED_PARTS__[cat] || 0, i);
-          next();
-        };
-        s.onerror = next;
-        document.head.appendChild(s);
+        if (inflight === 0 && !q.length) finish();
       };
-      next();
+      pump();
+    }
+
+    // 该分类是否还有未加载完的分片（用于「搜索会自动补全」提示）
+    function hasPendingParts(cat) {
+      if (cat === 'live') return false;
+      if ((window.__READY__ || {})[cat]) return false;
+      const parts = (window.__DATAMANIFEST__ || {})[cat] || [];
+      return parts.length > 1;
     }
 
     function copyToClipboard(text) {
@@ -2122,6 +2166,14 @@ __DATA_SCRIPTS__
         renderLiveGrid(sortLive(filterLive()));
       } else {
         renderGrid(sortItems(filterItems(RESOURCES[currentCat])));
+        // 搜索时若该分类尚未加载完，明确提示结果会自动补全 ——
+        // 否则用户看到"没搜到"会以为片库没有这部片（实际只是没加载到那一片）。
+        if (searchQuery && hasPendingParts(currentCat)) {
+          const tip = document.createElement('div');
+          tip.style.cssText = 'grid-column:1/-1;text-align:center;font-size:13px;color:#999;padding:10px 0;';
+          tip.textContent = '正在加载全部片库，搜索结果会自动补全…';
+          $('grid').appendChild(tip);
+        }
       }
     }
 
@@ -2260,7 +2312,11 @@ __DATA_SCRIPTS__
       if (searchTimer) clearTimeout(searchTimer);
       searchTimer = setTimeout(() => {
         displayLimit = PAGE_SIZE;
+        // 搜索语义必须覆盖整个分类：先立即渲染已加载部分（马上有反馈），
+        // 再把剩余分片拉齐后自动重渲染补全。否则排在后面的分片永远搜不到 ——
+        // 曾表现为「搜『功夫女足』搜不到」：它在 movie 第 4 片，而首屏只同步加载第 1 片。
         renderGridOnly();
+        if (searchQuery) ensureCat(currentCat, () => renderGridOnly());
       }, 300);
     });
 
