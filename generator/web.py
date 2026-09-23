@@ -1905,22 +1905,43 @@ __DATA_SCRIPTS__
 
     // 网页数据分片按需加载：首屏只同步加载每分类第 0 片，切分类或点「加载更多」时
     // 若还有未加载分片则动态注入后续片（__DATAMANIFEST__ 清单 + __LOADED_PARTS__ 计数）。
+    // 关键：拉取是异步逐片进行的，期间若再次调用（切换分类 / 点「加载更多」/ 重复点同一 Tab）
+    // 必须排队等待，绝不能按 __LOADED_PARTS__ 再拉一遍 —— 否则同一片被注入多次，
+    // 而 __RES__ 是追加语义，会让整个分类的数据翻倍（表现为每部片出现 2 张卡）。
     function ensureCat(cat, done) {
       if (cat === 'live') { if (done) done(); return; }
+      // 懒初始化（幂等）：不依赖这三行与函数定义的先后顺序，任何时机调用都安全
+      window.__LOADING__ = window.__LOADING__ || {};
+      window.__INJECTED__ = window.__INJECTED__ || {};
+      window.__PENDING__ = window.__PENDING__ || {};
       const parts = (window.__DATAMANIFEST__ || {})[cat] || [];
       const loaded = (window.__LOADED_PARTS__ || {})[cat] || 0;
       if (loaded >= parts.length) { if (done) done(); return; }
+      if (done) (window.__PENDING__[cat] = window.__PENDING__[cat] || []).push(done);
+      if (window.__LOADING__[cat]) return;   // 已在加载中：仅排队回调，不重复注入
+      window.__LOADING__[cat] = true;
       let i = loaded;
+      const finish = function () {
+        window.__LOADING__[cat] = false;
+        const cbs = window.__PENDING__[cat] || [];
+        window.__PENDING__[cat] = [];
+        for (let n = 0; n < cbs.length; n++) { try { cbs[n](); } catch (e) {} }
+      };
       const next = function () {
         if (i >= parts.length) {
           window.__LOADED_PARTS__[cat] = parts.length;
-          if (done) done();
+          finish();
           return;
         }
         const name = parts[i++];
+        if (window.__INJECTED__[name]) { next(); return; }   // 兜底：同一分片只注入一次
+        window.__INJECTED__[name] = true;
         const s = document.createElement('script');
         s.src = '/web/' + name + (window.__DVER__ ? '?v=' + window.__DVER__ : '');
-        s.onload = next;
+        s.onload = function () {
+          window.__LOADED_PARTS__[cat] = Math.max(window.__LOADED_PARTS__[cat] || 0, i);
+          next();
+        };
         s.onerror = next;
         document.head.appendChild(s);
       };
@@ -2541,10 +2562,27 @@ def _write_data_shards(resources: Dict[str, list], live_data: List[dict], out_di
         "  <script>\n"
         f"    window.__DVER__ = \"{WEB_DATA_VERSION}\";\n"
         "    window.__RESOURCES__ = {};\n"
+        "    window.__RESSEEN__ = {};\n"
         "    window.__LIVE_DATA__ = [];\n"
+        "    // 幂等入库：同一部片的同一条主线路只保留一条。\n"
+        "    // 分片脚本一旦被重复注入（旧版 ensureCat 在加载期间被再次调用就会这样），\n"
+        "    // 直接 push 会让该分类整片数据翻倍、每部片出现多张卡，这里做最后一道拦截。\n"
+        "    // 注意幂等键不能用 year：1970 年前的老片 year 统一显示为「更早」，\n"
+        "    // 拿它做键会把不同影片误判成重复、删掉真实线路。\n"
         "    window.__RES__ = function (c, a) {\n"
         "      var r = window.__RESOURCES__[c] = window.__RESOURCES__[c] || [];\n"
-        "      for (var i = 0; i < a.length; i++) r.push(a[i]);\n"
+        "      var S = window.__RESSEEN__ = window.__RESSEEN__ || {};\n"
+        "      var seen = S[c] || (S[c] = new Set());\n"
+        "      for (var i = 0; i < a.length; i++) {\n"
+        "        var it = a[i];\n"
+        "        var u = it.url || '';\n"
+        "        var k = u ? ((it.name || '') + '\\u0001' + u) : '';\n"
+        "        if (k) {\n"
+        "          if (seen.has(k)) continue;\n"
+        "          seen.add(k);\n"
+        "        }\n"
+        "        r.push(it);\n"
+        "      }\n"
         "    };\n"
         "    window.__LIVESET__ = function (a) { window.__LIVE_DATA__ = a; };\n"
         "    window.__DESCS__ = {};\n"
