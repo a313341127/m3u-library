@@ -89,16 +89,35 @@ def film_fingerprint(description: str) -> str:
 
 
 def film_merge_key(it: dict) -> tuple:
-    """跨年份合并键 = 片名 + 简介指纹；无指纹时退化为「片名 + 年份」（即不跨年合并）。
+    """跨年份合并键 = 归一片名 + 简介指纹；无指纹时退化为「归一片名 + 年份」（即不跨年合并）。
 
     供 _flat_best_items 与 web.generate_index 的线路聚合共用同一把键 —— 否则合并后的
     卡片沿用旧键去取换源线路会取不到，导致其它年份的线路丢失。
     """
-    name = it.get("_clean_name") or clean_title(it.get("name") or "")
+    name = it.get("_match_name") or match_name(it.get("name") or "")
     fp = film_fingerprint(it.get("description") or "")
     if fp:
         return (name, fp)
     return (name, "\x00y:%s" % (it.get("year") if it.get("year") is not None else ""))
+
+
+# 「归一片名」专用：在 clean_title 之上再抹掉标点与空白差异，**仅用于判定是否同一部片**，
+# 不用于显示 —— 否则《宇宙巨人：希曼崛起》会显示成《宇宙巨人希曼崛起》，丢掉副标题分隔。
+# 采集站对同一部片的标点极不统一（实测 7,003 组只差标点：`前浪 第二季` vs `前浪第二季`、
+# `宇宙巨人，希曼崛起` vs `宇宙巨人：希曼崛起`、`战 争` vs `战争`）。
+_MATCH_PUNCT_RE = re.compile(
+    r"[\s:：;；·・\-–—_、,，.。!！?？'\"“”‘’()（）\[\]【】{}<>《》/\\|~`*#@&+=]+"
+)
+
+
+def match_name(name: str) -> str:
+    """判定用归一片名：clean_title + 去标点/空白 + 折叠大小写。
+
+    只做「是否同一部片」的判定；显示名一律走 clean_title（保留标点）。
+    """
+    n = clean_title(name or "")
+    n = _MATCH_PUNCT_RE.sub("", n)
+    return n.casefold()
 
 
 def clean_title(name: str) -> str:
@@ -236,7 +255,8 @@ def prepare_items(category: str) -> Tuple[List[dict], Dict[str, int]]:
     groups: Dict[tuple, List[dict]] = defaultdict(list)
     for it in items:
         clean = clean_title(it["name"]) or it["name"]
-        it["_clean_name"] = clean
+        it["_clean_name"] = clean          # 显示用：保留标点
+        it["_match_name"] = match_name(it["name"]) or clean   # 判定用：去标点/空白
         key = (clean, it.get("year") or "", it.get("region") or "")
         groups[key].append(it)
 
@@ -473,11 +493,13 @@ def _flat_best_items(items: List[dict]) -> List[dict]:
     2. 同片名跨年份合并：采集站对同一部片常标错/缺失年份，仅当**简介指纹一致**
        才判定为同片（避免误并《回魂夜》1962/1995 这类同名不同片）。
     合并后年份取组内「多数源站一致」的那个（并列取最早），避免显示被标错的那个年份。
+    归一片名必须用 match_name()（去标点），否则《前浪 第二季》与《前浪第二季》这类
+    只差标点/空格的同一部片仍会各占一张卡（实测 movie 1,434 组）。
     由于 prepare_items 已经把国内可直连源排最前，这里保留的第一条就是最优线路。
     """
     seen: dict = {}
     for it in items:
-        key = (it["_clean_name"], it.get("year") or "")
+        key = (it.get("_match_name") or match_name(it.get("name") or ""), it.get("year") or "")
         if key not in seen:
             seen[key] = it
 

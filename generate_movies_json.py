@@ -46,7 +46,8 @@ sys.path.insert(0, ROOT)
 _LIVE_LOGO_ROOT = os.path.join(ROOT, "data", "live_logos")
 import config  # noqa: E402
 from generator.m3u import (  # noqa: E402
-    _region_bucket, _is_domestic, strip_audio_tags, clean_title, film_fingerprint,
+    _region_bucket, _is_domestic, strip_audio_tags, clean_title, match_name,
+    film_fingerprint,
 )
 from generator import health as _health  # noqa: E402
 
@@ -80,9 +81,15 @@ def clean_sort(name: str) -> str:
 
 
 def norm_key(name: str, year) -> tuple:
-    """去重主键：名称(去年份/去季集后缀/去音轨标记, 小写去空白) + 年份"""
-    n = clean_sort(name).lower()
-    n = re.sub(r"\s+", "", n)
+    """去重主键：归一片名 + 年份。
+
+    归一片名走 generator.m3u.match_name()（clean_title + 去标点/空白 + 折叠大小写），
+    与网页端 film_merge_key 用同一把判定键；此前只做 `.lower()+去空白`，
+    导致《前浪 第二季》与《前浪第二季》这类只差标点的同一部片在途播端各占一张卡。
+    """
+    n = re.sub(r"[\（\(]\d{4}[\）\)]", "", name or "")          # 先去掉年份括号
+    n = re.sub(r"\s*[第][\d一二三四五六七八九十百千]+[季部集话]", "", n)  # 去季集后缀
+    n = match_name(n) or (name or "").strip().casefold()
     return (n, year)
 
 

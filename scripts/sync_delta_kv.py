@@ -81,6 +81,11 @@ def _local_build_from_rows(rows, cat, prefix):
     _qual = re.compile(r"(?i)(?<![" + _ALNUM + r"])(1080p|720p|2160p|4k|hd|bd)(?![" + _ALNUM + r"])"
                        r"|高清|超清|全集|蓝光|连载中|更新至|大结局")
 
+    # 标点/空白差异也须抹掉（判定专用）：采集站对同一部片的标点极不统一，
+    # 实测 7,003 组只差标点（`前浪 第二季` vs `前浪第二季`、`战 争` vs `战争`）。
+    _match_punct = re.compile(
+        r"[\s:：;；·・\-–—_、,，.。!！?？'\"“”‘’()（）\[\]【】{}<>《》/\\|~`*#@&+=]+")
+
     def clean_sort(name):
         n = _qual.sub(" ", name or "")
         n = _audio_br.sub(" ", n)
@@ -91,9 +96,10 @@ def _local_build_from_rows(rows, cat, prefix):
         return re.sub(r"\s+", " ", n).strip() or (name or "")
 
     def norm_key(name, year):
-        n = clean_sort(name).lower()
-        n = re.sub(r"\s+", "", n)
-        return (n, year)
+        n = re.sub(r"[\（\(]\d{4}[\）\)]", "", name or "")
+        n = re.sub(r"\s*[第][\d一二三四五六七八九十百千]+[季部集话]", "", n)
+        n = _match_punct.sub("", clean_sort(n)).casefold()
+        return (n or (name or "").strip().casefold(), year)
 
     def popularity(hits, score, lines=1, year=None):
         import math
