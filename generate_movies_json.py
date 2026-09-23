@@ -46,7 +46,7 @@ sys.path.insert(0, ROOT)
 _LIVE_LOGO_ROOT = os.path.join(ROOT, "data", "live_logos")
 import config  # noqa: E402
 from generator.m3u import (  # noqa: E402
-    _region_bucket, _is_domestic, strip_audio_tags, film_fingerprint,
+    _region_bucket, _is_domestic, strip_audio_tags, clean_title, film_fingerprint,
 )
 from generator import health as _health  # noqa: E402
 
@@ -66,11 +66,14 @@ JELLYFIN_CATS = [
 
 
 def clean_sort(name: str) -> str:
-    """去掉常见后缀/年份括号/音轨标记（国语/粤语/普通话…），保留核心用于排序与去重。
+    """去掉清晰度标记（4K/1080P/高清…）、音轨标记（国语/粤语…）、年份括号与季集后缀，
+    保留核心用于排序与去重。
 
-    音轨标记必须一并剥离，否则「A计划」与「A计划国语」会被当成两部片各占一张卡片。
+    必须与网页端 generator.m3u.clean_title 用同一套剥离规则，否则同一部片
+    在途播端与网页端的卡片数会对不上（实测途播端此前只去音轨、不去清晰度，
+    漏掉 748 组「美国往事 / 美国往事高清 / 美国往事4K」这类重复）。
     """
-    n = strip_audio_tags(name or "").strip()
+    n = clean_title(name or "").strip()
     n = re.sub(r"[\（\(]\d{4}[\）\)]", "", n)
     n = re.sub(r"\s*[第][\d一二三四五六七八九十百千]+[季部集话]", "", n)
     return n.strip() or (name or "")

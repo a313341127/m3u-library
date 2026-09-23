@@ -14,7 +14,7 @@ DB = ROOT / "data" / "media.db"
 OUT_DIR = ROOT / "output" / "api"
 
 import config  # noqa: E402
-from generator.m3u import strip_audio_tags  # noqa: E402
+from generator.m3u import strip_audio_tags, clean_title  # noqa: E402
 
 
 def region_bucket(region: str) -> str:
@@ -34,8 +34,11 @@ def region_bucket(region: str) -> str:
 
 
 def clean_sort(name: str) -> str:
-    """去掉年份括号/季集后缀/音轨标记（国语/粤语/普通话…），保留核心用于排序与去重"""
-    n = strip_audio_tags(name or "").strip()
+    """去掉清晰度/音轨标记、年份括号、季集后缀，保留核心用于排序与去重。
+
+    与 generator.m3u.clean_title 保持同一套规则（见 generate_movies_json.clean_sort 注释）。
+    """
+    n = clean_title(name or "").strip()
     n = re.sub(r"[\（\(]\d{4}[\）\)]", "", n)
     n = re.sub(r"\s*[第][\d一二三四五六七八九十百千]+[季部集话]", "", n)
     return n.strip() or (name or "")

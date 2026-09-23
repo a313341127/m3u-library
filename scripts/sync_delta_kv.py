@@ -70,18 +70,25 @@ def _local_build_from_rows(rows, cat, prefix):
     import hashlib
     import re
 
-    # 音轨/字幕标记的剥离规则须与 generate_movies_json.clean_sort 保持一致
-    # （本函数是不依赖外部 import 的副本，故此处内联同一套正则）
+    # 片名清洗规则须与 generate_movies_json.clean_sort / generator.m3u.clean_title 一致：
+    # 音轨标记（国语/粤语/普通话…）与清晰度标记（4K/1080P/HD/高清…）都要剥离，
+    # 否则同一部片会因后缀差异裂成多张卡片（本函数是不依赖外部 import 的副本，故内联）。
     _AUDIO = r"(?:(?:国语|粤语|普通话|中字|双语|原声|方言|台配|港配|译制|配音)\s*版?)"
     _audio_br = re.compile(r"[（(\[【]\s*" + _AUDIO + r"\s*[)）\]】]")
     _audio_tail = re.compile(r"\s*" + _AUDIO + r"\s*$")
+    # 守卫覆盖拉丁扩展字母（U+00C0–U+024F），避免误删 nähdä 这类词里的 hd
+    _ALNUM = r"A-Za-z0-9\u00c0-\u024f"
+    _qual = re.compile(r"(?i)(?<![" + _ALNUM + r"])(1080p|720p|2160p|4k|hd|bd)(?![" + _ALNUM + r"])"
+                       r"|高清|超清|全集|蓝光|连载中|更新至|大结局")
 
     def clean_sort(name):
-        n = _audio_br.sub(" ", name or "")
+        n = _qual.sub(" ", name or "")
+        n = _audio_br.sub(" ", n)
         n = _audio_tail.sub("", n).strip()
+        n = re.sub(r"[\[\]【】()（）・·…_]", " ", n)
         n = re.sub(r"[\（\(]\d{4}[\）\)]", "", n)
         n = re.sub(r"\s*[第][\d一二三四五六七八九十百千]+[季部集话]", "", n)
-        return n.strip() or (name or "")
+        return re.sub(r"\s+", " ", n).strip() or (name or "")
 
     def norm_key(name, year):
         n = clean_sort(name).lower()
