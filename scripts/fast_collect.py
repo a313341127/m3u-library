@@ -37,7 +37,7 @@ import urllib3
 from requests.adapters import HTTPAdapter
 
 import config
-from core.database import ensure_unique_index, has_unique_index
+from core.database import ensure_unique_index, has_unique_index, ensure_schema
 from collector.cc0cd import (
     classify_category,
     extract_play_urls,
@@ -236,8 +236,11 @@ def init_sqlite():
     conn.execute("PRAGMA synchronous=NORMAL")
     # 关键：写冲突时等待而非立即报 "database is locked"（默认 busy_timeout=0）。
     conn.execute("PRAGMA busy_timeout=30000")
-    # 查重唯一索引：无它时每条入库都要全表扫描（107 万行实测 ~800ms/条）。
-    ensure_unique_index(conn)
+    # 关键：先用同样的 schema 迁移补齐新列（douban_id 等）。本脚本用裸 sqlite3
+    # 直写 resources 表、不走 Database()，漏了这步会在老库上报 no such column。
+    # ensure_schema 内部已包含 ensure_unique_index（查重唯一索引：无它时每条入库
+    # 都要全表扫描，107 万行实测 ~800ms/条）。
+    ensure_schema(conn)
     return conn
 
 

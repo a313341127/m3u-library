@@ -108,6 +108,34 @@ def ensure_unique_index(conn: sqlite3.Connection, verbose: bool = True) -> bool:
         return False
 
 
+def ensure_schema(conn: sqlite3.Connection, verbose: bool = True) -> None:
+    """补列 + 建唯一索引。**任何直接用裸 sqlite3 写 resources 表的入口都必须先调用它**
+    （如 scripts/fast_collect.py、scripts/backfill_run.py）—— 否则新加的
+    douban_id 等列在老库上不存在，UPSERT 会直接报 no such column。
+    """
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(resources)")}
+    added = []
+    for name, ddl in (
+        ("raw_type_name", "ALTER TABLE resources ADD COLUMN raw_type_name TEXT DEFAULT ''"),
+        ("hits", "ALTER TABLE resources ADD COLUMN hits INTEGER DEFAULT 0"),
+        ("score", "ALTER TABLE resources ADD COLUMN score REAL DEFAULT 0"),
+        ("line_name", "ALTER TABLE resources ADD COLUMN line_name TEXT DEFAULT ''"),
+        ("episodes", "ALTER TABLE resources ADD COLUMN episodes TEXT DEFAULT ''"),
+        # 跨源统一 ID（MacCMS 详情 API 的 vod_douban_id）。老行为 0，
+        # 靠后续采集 UPSERT 命中同 (category,name,url) 时自然回填，无需全量重采。
+        ("douban_id", "ALTER TABLE resources ADD COLUMN douban_id INTEGER DEFAULT 0"),
+    ):
+        if name not in cols:
+            conn.execute(ddl)
+            added.append(name)
+    if added:
+        conn.commit()
+        if verbose:
+            print("[db] 已追加列: %s" % ", ".join(added))
+    # 查重唯一索引：让 add_resource 能用 ON CONFLICT 取代「先 SELECT 全表扫描」
+    ensure_unique_index(conn, verbose=verbose)
+
+
 class Database:
     """资源库操作封装"""
 
@@ -134,26 +162,8 @@ class Database:
 
     @staticmethod
     def _migrate(conn: sqlite3.Connection):
-        """兼容升级：老表缺列时自动追加"""
-        cols = {r[1] for r in conn.execute("PRAGMA table_info(resources)")}
-        if "raw_type_name" not in cols:
-            conn.execute("ALTER TABLE resources ADD COLUMN raw_type_name TEXT DEFAULT ''")
-        if "hits" not in cols:
-            conn.execute("ALTER TABLE resources ADD COLUMN hits INTEGER DEFAULT 0")
-        if "score" not in cols:
-            conn.execute("ALTER TABLE resources ADD COLUMN score REAL DEFAULT 0")
-        if "line_name" not in cols:
-            conn.execute("ALTER TABLE resources ADD COLUMN line_name TEXT DEFAULT ''")
-        if "episodes" not in cols:
-            conn.execute("ALTER TABLE resources ADD COLUMN episodes TEXT DEFAULT ''")
-        if "douban_id" not in cols:
-            # 跨源统一 ID（MacCMS 详情 API 的 vod_douban_id）。老行为 0，
-            # 靠后续采集 UPSERT 命中同 (category,name,url) 时自然回填，无需全量重采。
-            conn.execute("ALTER TABLE resources ADD COLUMN douban_id INTEGER DEFAULT 0")
-            conn.commit()
-            print("[db] 已追加 douban_id 列（历史行先为 0，后续采集自动回填）")
-        # 查重唯一索引：让 add_resource 能用 ON CONFLICT 取代「先 SELECT 全表扫描」
-        ensure_unique_index(conn)
+        """兼容升级：老表缺列时自动追加。"""
+        ensure_schema(conn)
 
     @staticmethod
     def _now() -> str:
