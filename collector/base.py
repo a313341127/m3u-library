@@ -29,6 +29,7 @@ class ResourceItem:
     line_name: str = ""             # 播放线路名（如 文采/暴风/最大）
     hits: int = 0                   # 人气（源站播放量，用于排序）
     score: float = 0.0              # 评分（豆瓣等，0-10，0 表示无评分）
+    douban_id: int = 0              # 豆瓣 ID（MacCMS 详情 API 的 vod_douban_id，跨源统一；0=无）
     episodes: List[Dict[str, str]] = field(default_factory=list)  # 多集选集 [{label, url}]
 
     def to_dict(self) -> dict:

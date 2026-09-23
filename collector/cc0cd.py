@@ -105,6 +105,21 @@ def extract_quality(text: str) -> str:
     return ""
 
 
+def parse_douban_id(value) -> int:
+    """解析 MacCMS 详情里的 vod_douban_id，返回 int（无效/缺失一律 0）。
+
+    这是**跨采集站统一的影片 ID**（实测同片在不同源站完全一致，且不受
+    「国语/粤语」「[电影解说]」等片名后缀影响），用于按 ID 精确合并同片线路。
+    注意：字段存在但值为 0 的源占相当比例（各源覆盖率 0%~100%），
+    0 必须当作「未知」而非有效 ID，否则会把所有无 ID 的片子并成一部。
+    """
+    try:
+        d = int(str(value or "0").strip() or 0)
+    except (TypeError, ValueError):
+        return 0
+    return d if d > 0 else 0
+
+
 def extract_play_urls(play_url: str, play_from: str) -> List[Tuple[str, List[Dict[str, str]]]]:
     """解析 AppleCMS 多线路播放地址，保留全部选集。
 
@@ -510,6 +525,7 @@ class CC0CDCollector(BaseCollector):
 
         region = norm_region(v.get("vod_area") or "")
         cover = (v.get("vod_pic") or "").strip()
+        douban_id = parse_douban_id(v.get("vod_douban_id"))
         items = []
         for line_name, episodes in line_eps:
             if not episodes:
@@ -529,6 +545,7 @@ class CC0CDCollector(BaseCollector):
                 line_name=line_name,
                 hits=hits,
                 score=score,
+                douban_id=douban_id,
                 episodes=episodes,
             ))
         return items

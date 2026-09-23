@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS resources (
     line_name     TEXT DEFAULT '',            -- 播放线路名（文采/暴风/最大/量子...）
     raw_type_name TEXT DEFAULT '',            -- 采集站原始分类名（用于排查分类错误）
     episodes      TEXT DEFAULT '',            -- 多集选集 JSON [{label, url}]
+    douban_id     INTEGER DEFAULT 0,          -- 豆瓣 ID（跨源统一，用于按 ID 合并同片；0=源站未提供）
     updated_at    TEXT NOT NULL,              -- 更新时间
     created_at    TEXT NOT NULL               -- 创建时间
 );
@@ -44,7 +45,8 @@ CREATE INDEX IF NOT EXISTS idx_resources_year       ON resources(year);
 # update_resource 允许更新的字段白名单
 UPDATEABLE_FIELDS = {"name", "category", "media_type", "region", "year",
                      "cover", "description", "url", "quality", "source",
-                     "line_name", "raw_type_name", "hits", "score", "episodes"}
+                     "line_name", "raw_type_name", "hits", "score", "episodes",
+                     "douban_id"}
 
 # 查重唯一索引：与 add_resource / bulk_insert_items 的去重键 (category,name,url) 一致。
 # 实测（107 万行）：无此索引时每条查重需全表扫描 ~800ms；有索引后 ~0.01ms（约 5 万倍提速）。
@@ -144,6 +146,12 @@ class Database:
             conn.execute("ALTER TABLE resources ADD COLUMN line_name TEXT DEFAULT ''")
         if "episodes" not in cols:
             conn.execute("ALTER TABLE resources ADD COLUMN episodes TEXT DEFAULT ''")
+        if "douban_id" not in cols:
+            # 跨源统一 ID（MacCMS 详情 API 的 vod_douban_id）。老行为 0，
+            # 靠后续采集 UPSERT 命中同 (category,name,url) 时自然回填，无需全量重采。
+            conn.execute("ALTER TABLE resources ADD COLUMN douban_id INTEGER DEFAULT 0")
+            conn.commit()
+            print("[db] 已追加 douban_id 列（历史行先为 0，后续采集自动回填）")
         # 查重唯一索引：让 add_resource 能用 ON CONFLICT 取代「先 SELECT 全表扫描」
         ensure_unique_index(conn)
 
@@ -158,7 +166,8 @@ class Database:
                      cover: str = "", description: str = "", url: str = "",
                      quality: str = "", source: str = "manual",
                      line_name: str = "", raw_type_name: str = "", hits: int = 0,
-                     score: float = 0.0, episodes: Optional[str] = None) -> Optional[int]:
+                     score: float = 0.0, episodes: Optional[str] = None,
+                     douban_id: int = 0) -> Optional[int]:
         """新增资源，返回新 id；重复（同分类+同名+同地址）返回 None。
 
         有查重唯一索引时走 ON CONFLICT（无需先 SELECT，快 ~5 万倍）；
@@ -171,8 +180,8 @@ class Database:
                     """INSERT INTO resources
                        (name, category, media_type, region, year, cover,
                         description, url, quality, source, line_name, raw_type_name,
-                        episodes, hits, score, updated_at, created_at)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                        episodes, hits, score, douban_id, updated_at, created_at)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                        ON CONFLICT(category, name, url) DO UPDATE SET
                           episodes = CASE WHEN excluded.episodes <> ''
                                           THEN excluded.episodes
@@ -183,12 +192,15 @@ class Database:
                           quality  = CASE WHEN excluded.quality <> ''
                                           THEN excluded.quality
                                           ELSE resources.quality END,
+                          douban_id = CASE WHEN excluded.douban_id > 0
+                                           THEN excluded.douban_id
+                                           ELSE resources.douban_id END,
                           hits     = excluded.hits,
                           score    = excluded.score,
                           updated_at = excluded.updated_at""",
                     (name, category, media_type, region, year, cover, description,
                      url, quality, source, line_name, raw_type_name,
-                     episodes or '', hits, score, now, now),
+                     episodes or '', hits, score, int(douban_id or 0), now, now),
                 )
                 # 新增返回新 id；冲突更新返回 None（视作重复，但 episodes 已被刷新）
                 return cur.lastrowid or None
@@ -203,11 +215,11 @@ class Database:
                 """INSERT INTO resources
                    (name, category, media_type, region, year, cover,
                     description, url, quality, source, line_name, raw_type_name,
-                    episodes, hits, score, updated_at, created_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    episodes, hits, score, douban_id, updated_at, created_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (name, category, media_type, region, year, cover, description,
                  url, quality, source, line_name, raw_type_name,
-                 episodes or '', hits, score, now, now),
+                 episodes or '', hits, score, int(douban_id or 0), now, now),
             )
             return cur.lastrowid
 

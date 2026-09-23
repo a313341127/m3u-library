@@ -44,6 +44,7 @@ from collector.cc0cd import (
     extract_quality,
     join_params,
     norm_region,
+    parse_douban_id,
 )
 
 urllib3.disable_warnings()
@@ -170,6 +171,7 @@ def parse_vod_to_items(v, source_name, source_type_name="",
     cover = (v.get("vod_pic") or "").strip()
     if is_default_cover(cover):
         cover = ""
+    douban_id = parse_douban_id(v.get("vod_douban_id"))
 
     items = []
     for line_name, episodes in line_eps:
@@ -192,6 +194,7 @@ def parse_vod_to_items(v, source_name, source_type_name="",
             "line_name": line_name,
             "hits": hits,
             "score": score,
+            "douban_id": douban_id,
             "episodes": eps_json,
         })
     return items
@@ -246,8 +249,8 @@ BATCH_COMMIT = 200
 UPSERT_SQL = """INSERT INTO resources
    (name, category, media_type, region, year, cover,
     description, url, quality, source, line_name, raw_type_name,
-    episodes, hits, score, updated_at, created_at)
-   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    episodes, hits, score, douban_id, updated_at, created_at)
+   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
    ON CONFLICT(category, name, url) DO UPDATE SET
       episodes = CASE WHEN excluded.episodes <> '' THEN excluded.episodes
                       ELSE resources.episodes END,
@@ -255,6 +258,8 @@ UPSERT_SQL = """INSERT INTO resources
                       ELSE resources.cover END,
       quality  = CASE WHEN excluded.quality <> '' THEN excluded.quality
                       ELSE resources.quality END,
+      douban_id = CASE WHEN excluded.douban_id > 0 THEN excluded.douban_id
+                       ELSE resources.douban_id END,
       hits     = excluded.hits,
       score    = excluded.score,
       updated_at = excluded.updated_at"""
@@ -288,7 +293,8 @@ def bulk_insert_items(conn, items):
                                  it["region"], it["year"], it["cover"],
                                  it["description"], it["url"], it["quality"],
                                  it["source"], it["line_name"], it["raw_type_name"],
-                                 it["episodes"], it["hits"], it["score"], now, now),
+                                 it["episodes"], it["hits"], it["score"],
+                                 int(it.get("douban_id") or 0), now, now),
                             )
                         conn.commit()
                         # upsert 下「冲突」也会被写成 UPDATE，故用 total_changes 区分数：
@@ -321,12 +327,13 @@ def bulk_insert_items(conn, items):
                         """INSERT INTO resources
                            (name, category, media_type, region, year, cover,
                             description, url, quality, source, line_name, raw_type_name,
-                            episodes, hits, score, updated_at, created_at)
-                           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                            episodes, hits, score, douban_id, updated_at, created_at)
+                           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                         (it["name"], it["category"], it["media_type"], it["region"],
                          it["year"], it["cover"], it["description"], it["url"],
                          it["quality"], it["source"], it["line_name"], it["raw_type_name"],
-                         it["episodes"], it["hits"], it["score"], now, now),
+                         it["episodes"], it["hits"], it["score"],
+                         int(it.get("douban_id") or 0), now, now),
                     )
                     conn.commit()
                 inserted += 1

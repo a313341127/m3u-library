@@ -89,16 +89,146 @@ def film_fingerprint(description: str) -> str:
 
 
 def film_merge_key(it: dict) -> tuple:
-    """跨年份合并键 = 归一片名 + 简介指纹；无指纹时退化为「归一片名 + 年份」（即不跨年合并）。
-
-    供 _flat_best_items 与 web.generate_index 的线路聚合共用同一把键 —— 否则合并后的
-    卡片沿用旧键去取换源线路会取不到，导致其它年份的线路丢失。
+    """合并键。prepare_items / _flat_best_items 会先跑聚类并把组号挂到 _ckey，
+    此时直接返回组号（这样「豆瓣 ID 跨源合并」的连通分量结果才能被 web 的线路聚合
+    与卡片输出共用同一把键）；未聚类时退化为「归一片名 + 简介指纹」的局部键。
     """
+    ck = it.get("_ckey") if hasattr(it, "get") else None
+    if ck is not None:
+        return ("\x00c", ck)
     name = it.get("_match_name") or match_name(it.get("name") or "")
     fp = film_fingerprint(it.get("description") or "")
     if fp:
         return (name, fp)
     return (name, "\x00y:%s" % (it.get("year") if it.get("year") is not None else ""))
+
+
+def entry_field(entry, key, default=None):
+    """兼容 dict 与 sqlite3.Row 的字段读取（rows 来自 SQL 查询时没有 .get）"""
+    try:
+        v = entry.get(key, default)
+    except AttributeError:
+        try:
+            v = entry[key]
+        except (KeyError, IndexError, TypeError):
+            return default
+    return default if v is None else v
+
+
+def entry_douban_id(entry) -> int:
+    """取条目的豆瓣 ID；缺失/非数字/≤0 一律返回 0（0 表示「未知」而非有效 ID）。
+
+    必须把 0 当未知：各源对 vod_douban_id 的覆盖率从 0% 到 100% 不等，
+    若把 0 当有效 ID，会把所有无 ID 的片子并成同一部。
+    """
+    try:
+        d = int(str(entry_field(entry, "douban_id", 0) or 0).strip() or 0)
+    except (TypeError, ValueError):
+        return 0
+    return d if d > 0 else 0
+
+
+def _default_name_key(entry) -> str:
+    m = entry_field(entry, "_match_name")
+    if m:
+        return m
+    return match_name(entry_field(entry, "name", "") or "")
+
+
+def cluster_ids(entries, name_key=None) -> List[int]:
+    """把条目按「同一部影片」做连通分量聚类，返回每个条目的组代表下标。
+
+    三档键，由强到弱：
+      ① **豆瓣 ID**（跨源统一，最可靠）——实测同片在不同源站完全一致，
+         且不受「国语/粤语」「[电影解说]」等片名后缀影响；
+      ② 归一片名 + 年份；
+      ③ 归一片名 + 简介指纹（用于跨年份合并「源站把年份标错」的同片）。
+
+    ⚠️ 关键约束：两条记录若都带**非零且不同**的豆瓣 ID，则判定为不同影片，
+    **禁止合并**（即使片名与简介相同）—— 否则《无间道》与《无间道2》这类
+    源站标错、或同名不同片会被误并成一部。
+
+    用连通分量而非「逐档贪心」的原因：某条记录可能只有弱键能连上，
+    却与另一条记录共享强键，必须让它们落进同一组。
+    """
+    n = len(entries)
+    if n == 0:
+        return []
+    parent = list(range(n))
+    dbset: List[set] = [set() for _ in range(n)]
+
+    def find(x: int) -> int:
+        root = x
+        while parent[root] != root:
+            root = parent[root]
+        while parent[x] != root:
+            parent[x], x = root, parent[x]
+        return root
+
+    def union(a: int, b: int) -> None:
+        ra, rb = find(a), find(b)
+        if ra == rb:
+            return
+        da, db = dbset[ra], dbset[rb]
+        if da and db and da != db:
+            return                       # 非零且不同 -> 确定为不同影片
+        parent[rb] = ra
+        if db:
+            dbset[ra] = da | db
+            dbset[rb] = dbset[ra]
+
+    dbs = [entry_douban_id(e) for e in entries]
+    for i, d in enumerate(dbs):
+        if d:
+            dbset[i].add(d)
+
+    nk = name_key or _default_name_key
+    names = [nk(e) for e in entries]
+    years = [entry_field(e, "year", "") or "" for e in entries]
+    fps = [film_fingerprint(entry_field(e, "description", "") or "") for e in entries]
+
+    # ① 豆瓣 ID（强键，先建立可靠分组）
+    seen: dict = {}
+    for i, d in enumerate(dbs):
+        if not d:
+            continue
+        j = seen.get(d)
+        if j is None:
+            seen[d] = i
+        else:
+            union(j, i)
+    # ② 归一片名 + 年份
+    seen = {}
+    for i in range(n):
+        k = (names[i], years[i])
+        j = seen.get(k)
+        if j is None:
+            seen[k] = i
+        else:
+            union(j, i)
+    # ③ 归一片名 + 简介指纹（跑在②之后，兼容「源站年份标错」的同片）
+    seen = {}
+    for i in range(n):
+        if not fps[i]:
+            continue
+        k = (names[i], fps[i])
+        j = seen.get(k)
+        if j is None:
+            seen[k] = i
+        else:
+            union(j, i)
+
+    return [find(i) for i in range(n)]
+
+
+def attach_clusters(items: List[dict]) -> List[int]:
+    """给条目列表挂上 _ckey（聚类组号），返回组号列表。已挂过则直接复用。"""
+    if items and all("_ckey" in it for it in items):
+        return [it["_ckey"] for it in items]
+    cids = cluster_ids(items)
+    for it, c in zip(items, cids):
+        it["_ckey"] = c
+    return cids
 
 
 # 「归一片名」专用：在 clean_title 之上再抹掉标点与空白差异，**仅用于判定是否同一部片**，
@@ -281,6 +411,10 @@ def prepare_items(category: str) -> Tuple[List[dict], Dict[str, int]]:
                                   0 if _is_domestic(it.get("url")) else 1))
         result.extend(uniq)
         stats["lines"] += len(uniq)
+
+    # 合并判定统一在此处一次性完成（含豆瓣 ID 连通分量），并挂到每个条目上，
+    # 保证「卡片去重」与「换源线路聚合」用的是同一组归属。
+    attach_clusters(result)
     return result, stats
 
 
@@ -495,16 +629,12 @@ def _flat_best_items(items: List[dict]) -> List[dict]:
     合并后年份取组内「多数源站一致」的那个（并列取最早），避免显示被标错的那个年份。
     归一片名必须用 match_name()（去标点），否则《前浪 第二季》与《前浪第二季》这类
     只差标点/空格的同一部片仍会各占一张卡（实测 movie 1,434 组）。
+    分组键改由 cluster_ids() 统一给出（含豆瓣 ID 强键），因此这里先确保 _ckey 已挂上。
     由于 prepare_items 已经把国内可直连源排最前，这里保留的第一条就是最优线路。
     """
-    seen: dict = {}
-    for it in items:
-        key = (it.get("_match_name") or match_name(it.get("name") or ""), it.get("year") or "")
-        if key not in seen:
-            seen[key] = it
-
+    attach_clusters(items)
     groups: dict = {}
-    for it in seen.values():
+    for it in items:
         groups.setdefault(film_merge_key(it), []).append(it)
 
     out: List[dict] = []

@@ -143,12 +143,27 @@ def _local_build_from_rows(rows, cat, prefix):
             pass
         return out
 
+    # 同片判定优先复用 generator.m3u.cluster_ids（含豆瓣 ID 强键的连通分量聚类），
+    # 与全量构建完全一致；万一该模块不可用（本副本的存在意义就是极简依赖），
+    # 退回「归一片名 + 年份」的局部键并明确告警，避免无声漂移。
+    try:
+        from generator.m3u import cluster_ids as _cluster_ids
+    except Exception:
+        _cluster_ids = None
+        print("[warn] 无法导入 generator.m3u.cluster_ids，本次增量按「片名+年份」去重"
+              "（未启用豆瓣 ID 合并）")
+
+    if _cluster_ids is not None:
+        cids = _cluster_ids(rows, name_key=lambda r: norm_key(r["name"], None)[0])
+    else:
+        cids = None
+
     merged = {}
     order = []
-    for row in rows:
+    for idx, row in enumerate(rows):
         yi = row["year"]
         year = yi if (isinstance(yi, int) and 1900 <= yi <= 2026) else None
-        key = norm_key(row["name"], year)
+        key = cids[idx] if cids is not None else norm_key(row["name"], year)
         u = (row["url"] or "").strip()
         _ln = (row["line_name"] or "").strip()
         _src = (row["source"] or "").strip()
@@ -327,9 +342,16 @@ def fetch_recent_rows(cutoff):
     out = {}
     total = 0
     for cat, _, _ in DELTA_CATS:
-        cur = con.execute(
-            "SELECT id,name,region,year,cover,description,url,line_name,quality,score,hits,source "
-            "FROM resources WHERE category=? AND created_at > ?", (cat, cutoff))
+        # douban_id 是后加的列，老库尚未迁移时回退（增量同步不应因此中断）
+        try:
+            cur = con.execute(
+                "SELECT id,name,region,year,cover,description,url,line_name,quality,score,hits,"
+                "source,douban_id "
+                "FROM resources WHERE category=? AND created_at > ?", (cat, cutoff))
+        except sqlite3.OperationalError:
+            cur = con.execute(
+                "SELECT id,name,region,year,cover,description,url,line_name,quality,score,hits,source "
+                "FROM resources WHERE category=? AND created_at > ?", (cat, cutoff))
         rows = cur.fetchall()
         out[cat] = rows
         total += len(rows)

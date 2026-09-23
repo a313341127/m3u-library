@@ -47,7 +47,7 @@ _LIVE_LOGO_ROOT = os.path.join(ROOT, "data", "live_logos")
 import config  # noqa: E402
 from generator.m3u import (  # noqa: E402
     _region_bucket, _is_domestic, strip_audio_tags, clean_title, match_name,
-    film_fingerprint,
+    film_fingerprint, cluster_ids,
 )
 from generator import health as _health  # noqa: E402
 
@@ -80,17 +80,29 @@ def clean_sort(name: str) -> str:
     return n.strip() or (name or "")
 
 
-def norm_key(name: str, year) -> tuple:
-    """去重主键：归一片名 + 年份。
+def match_sort(name: str) -> str:
+    """途播端**判定用**片名（显示不用它）：一年份括号 + 去季集后缀 + match_name。
 
-    归一片名走 generator.m3u.match_name()（clean_title + 去标点/空白 + 折叠大小写），
-    与网页端 film_merge_key 用同一把判定键；此前只做 `.lower()+去空白`，
-    导致《前浪 第二季》与《前浪第二季》这类只差标点的同一部片在途播端各占一张卡。
+    norm_key 的名称部分与 cluster_ids 的 name_key 都走这里，保证
+    「(片名,年份) 去重」与「豆瓣 ID 连通分量聚类」用的是同一套片名归一。
     """
-    n = re.sub(r"[\（\(]\d{4}[\）\)]", "", name or "")          # 先去掉年份括号
-    n = re.sub(r"\s*[第][\d一二三四五六七八九十百千]+[季部集话]", "", n)  # 去季集后缀
-    n = match_name(n) or (name or "").strip().casefold()
-    return (n, year)
+    n = re.sub(r"[\（\(]\d{4}[\）\)]", "", name or "")
+    n = re.sub(r"\s*[第][\d一二三四五六七八九十百千]+[季部集话]", "", n)
+    return match_name(n) or (name or "").strip().casefold()
+
+
+def norm_key(name: str, year) -> tuple:
+    """去重主键：归一片名 + 年份（归一片名见 match_sort）。"""
+    return (match_sort(name), year)
+
+
+def id_sort(name: str) -> str:
+    """**仅用于生成稳定 id** 的片名归一：保持历史行为（clean_sort + 小写 + 去空白）。
+
+    ⚠️ 不要改这个函数 —— id 由「id_sort(片名) + 年份」派生，改动会让大量影片 id 变化，
+    途播端这些片的播放历史/收藏会全部重置。去重判定另走 match_sort / cluster_ids。
+    """
+    return re.sub(r"\s+", "", clean_sort(name).lower())
 
 
 def popularity(hits, score, lines: int = 1, year: int = None) -> float:
@@ -198,27 +210,40 @@ def build_category(cat: str, prefix: str) -> list:
     """构建单个分类的影片列表（分类内按 名称|年份 去重，合并线路）。"""
     con = sqlite3.connect(DB)
     con.row_factory = sqlite3.Row
-    cur = con.execute(
-        "SELECT id,name,region,year,cover,description,url,line_name,quality,score,hits,source "
-        "FROM resources WHERE category=?", (cat,)
-    )
+    # douban_id 是后加的列：老库（尚未跑过迁移）没有该列时回退，避免部署直接崩。
+    try:
+        cur = con.execute(
+            "SELECT id,name,region,year,cover,description,url,line_name,quality,score,hits,source,"
+            "douban_id "
+            "FROM resources WHERE category=?", (cat,)
+        )
+    except sqlite3.OperationalError:
+        cur = con.execute(
+            "SELECT id,name,region,year,cover,description,url,line_name,quality,score,hits,source "
+            "FROM resources WHERE category=?", (cat,)
+        )
     rows = cur.fetchall()
     con.close()
     return build_from_rows(rows, cat, prefix)
 
 
 def build_from_rows(rows, cat: str, prefix: str) -> list:
-    """对「已按分类筛好的」资源行做 (名称,年份) 去重 + 合并线路 + 格式化，产出规范影片记录。
+    """对「已按分类筛好的」资源行做同片合并 + 合并线路 + 格式化，产出规范影片记录。
+
+    同片判定走 generator.m3u.cluster_ids（豆瓣 ID 强键 → 片名+年份 → 片名+简介指纹），
+    与网页端共用同一套连通分量逻辑；name_key 用途播自己的 match_sort，
+    以保留「去季集后缀」等既有语义。
 
     抽出为独立函数，使 sync_delta_kv.py 能对「仅最近新增的行子集」复用同一套
     去重/格式逻辑（与全量构建保持逐字段一致，避免两处漂移导致增量与静态库不一致）。
     """
+    cids = cluster_ids(rows, name_key=lambda r: match_sort(r["name"]))
     merged = {}
     order = []
-    for row in rows:
+    for idx, row in enumerate(rows):
         yi = row["year"]
         year = yi if (isinstance(yi, int) and 1900 <= yi <= 2026) else None
-        key = norm_key(row["name"], year)
+        key = cids[idx]
         u = (row["url"] or "").strip()
         # 线路名优先；缺失时回退到采集源名（总比显示「未知线路」有用）
         _ln = (row["line_name"] or "").strip()
@@ -246,6 +271,8 @@ def build_from_rows(rows, cat: str, prefix: str) -> list:
                 "pop": popularity(row["hits"], row["score"], 1, year),
                 "sources": [(line_name, u)],
                 "_best_score": sc,
+                "_years": [year] if year is not None else [],
+                "_ik": id_sort(row["name"]),   # id 专用归一（保持历史行为，见 id_sort 注释）
             }
             merged[key] = rec
             order.append(key)
@@ -254,6 +281,9 @@ def build_from_rows(rows, cat: str, prefix: str) -> list:
             # 按 URL 去重，同一 URL 只保留第一次出现的线路名
             if u not in (p[1] for p in rec["sources"]):
                 rec["sources"].append((line_name, u))
+            # 同片各源站标的年份常不一致，收集起来供「多数表决」
+            if year is not None:
+                rec["_years"].append(year)
             # 升级元数据：取封面更全、评分更高的那一行
             if not rec["cover"] and row["cover"]:
                 rec["cover"] = row["cover"]
@@ -269,37 +299,23 @@ def build_from_rows(rows, cat: str, prefix: str) -> list:
                 rec["hits"] = row["hits"] or rec["hits"]
                 rec["pop"] = popularity(rec["hits"], rec["score"], len(rec["sources"]), rec["year"])
 
-    # ---- 第二道去重：同片名跨年份合并 ----
-    # 采集站对同一部片常标错/缺失年份，只按 (名称, 年份) 去重会把同片拆成多张卡；
-    # 但直接忽略年份又会误并同名不同片（《回魂夜》1962/1995、《三个火枪手》多版本）。
-    # 因此只合并「简介指纹一致」的条目（同一份简介 → 基本可判定为同一部片）。
-    _g2: dict = {}
-    _order2: list = []
-    for key in order:
-        rec = merged[key]
-        fp = film_fingerprint(rec.get("overview") or "")
-        k2 = (key[0], fp) if fp else (key[0], "\x00y:%s" % ("" if key[1] is None else key[1]))
-        hit = _g2.get(k2)
-        if hit is None:
-            rec["_years"] = [rec["year"]] if rec["year"] is not None else []
-            _g2[k2] = rec
-            _order2.append(k2)
-            continue
-        # 线路合并（同 URL 只保留首次出现的线路名）
-        for p in rec["sources"]:
-            if p[1] not in (x[1] for x in hit["sources"]):
-                hit["sources"].append(p)
-        if rec["year"] is not None:
-            hit["_years"].append(rec["year"])
-        if not hit["cover"] and rec["cover"]:
-            hit["cover"] = rec["cover"]
-        if (rec.get("_best_score") or 0) > (hit.get("_best_score") or 0):
-            hit["_best_score"] = rec["_best_score"]
-            hit["score"] = rec["score"]
-            hit["quality"] = rec["quality"] or hit["quality"]
-            hit["hits"] = rec["hits"] or hit["hits"]
-            hit["overview"] = rec["overview"] or hit["overview"]
-    merged, order = _g2, _order2
+    # 跨年合并已由 cluster_ids() 在上游完成 ----
+    # 同片判定（豆瓣 ID 强键 → 归一片名+年份 → 归一片名+简介指纹）统一在
+    # generator.m3u.cluster_ids 里做连通分量聚类，merged 的 key 就是聚类组号，
+    # 因此这里不再需要「第二道按指纹合并」的旧逻辑（年份列表已在上面按组收集）。
+
+    _used_ids: dict = {}
+
+    def _unique_id(name_key: str, year) -> str:
+        """id = prefix + md5(id_sort(片名)|年份)[:14]；同基准 id 冲突时追加序号。
+
+        冲突只会在「同一 (片名,年份) 被豆瓣 ID 判定为两部不同影片」时出现（源站标错），
+        正常情况不追加任何后缀，保证历史 id 逐字节不变。
+        """
+        base = prefix + hashlib.md5(("%s|%s" % (name_key, year)).encode("utf-8")).hexdigest()[:14]
+        n = _used_ids.get(base, 0)
+        _used_ids[base] = n + 1
+        return base if n == 0 else "%s_%d" % (base, n)
 
     movies = []
     for key in order:
@@ -325,10 +341,10 @@ def build_from_rows(rows, cat: str, prefix: str) -> list:
         if not urls:
             continue
         movies.append({
-            # id 仍由「规范片名 + 最终年份」决定；key[1] 第二道去重后已变为指纹/占位串，不能再用
-            "id": prefix + hashlib.md5(
-                ("%s|%s" % (key[0], rec["year"])).encode("utf-8")
-            ).hexdigest()[:14],
+            # id 由「id_sort(规范片名) + 最终年份」派生：保持历史 id 不变，避免途播端
+            # 播放历史/收藏重置。同一 (片名,年份) 若因「豆瓣 ID 不同」被判为两部片
+            # （源站标错），两组的基准 id 会相同，此时按出现顺序追加后缀去重。
+            "id": _unique_id(rec.pop("_ik", "") or id_sort(rec["name"]), rec["year"]),
             "cat": cat,
             "name": rec["name"],
             "sort": rec["sort"],
