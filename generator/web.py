@@ -71,6 +71,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       margin: 0 auto;
       padding: 12px 16px;
     }
+    /* 分类 Tab 与搜索框同一行：Tab 可横向滚动占据剩余宽度，搜索框固定在右侧 */
+    .header-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
     .title {
       font-size: 20px;
       font-weight: 700;
@@ -89,6 +95,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       gap: 8px;
       overflow-x: auto;
       scrollbar-width: none;
+      flex: 1 1 auto;
+      min-width: 0;
     }
     .tabs::-webkit-scrollbar { display: none; }
     .tab {
@@ -114,28 +122,37 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     }
     .search-wrap {
       position: relative;
-      margin-bottom: 16px;
+      flex: 0 0 auto;
+      width: 230px;
     }
     .search-wrap svg {
       position: absolute;
-      left: 14px; top: 50%;
+      left: 12px; top: 50%;
       transform: translateY(-50%);
-      width: 18px; height: 18px;
+      width: 16px; height: 16px;
       fill: var(--text-secondary);
+      pointer-events: none;
     }
     .search {
       width: 100%;
-      padding: 12px 16px 12px 42px;
-      border-radius: 14px;
+      padding: 9px 14px 9px 34px;
+      border-radius: 999px;
       border: none;
       background: var(--card);
-      font-size: 15px;
+      font-size: 13.5px;
       color: var(--text);
       caret-color: var(--accent);
       outline: none;
       box-shadow: var(--shadow);
     }
     .search::placeholder { color: var(--text-secondary); opacity: 1; }
+    /* 窄屏：搜索框换行独占一行（与 Tab 同宽），避免挤压 Tab */
+    @media (max-width: 640px) {
+      .header-row { flex-wrap: wrap; }
+      .tabs { flex: 1 1 100%; }
+      .search-wrap { flex: 1 1 100%; width: auto; }
+      .search { padding: 10px 14px 10px 36px; font-size: 14px; }
+    }
     .filter-section {
       margin-bottom: 16px;
     }
@@ -687,6 +704,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     .pv-src.dead .dot, .pv-src.dead .dot.ok, .pv-src.dead .dot.bad { background: #6c757d !important; box-shadow: none; }
     .pv-src.failed .dot, .pv-src.failed .dot.ok, .pv-src.failed .dot.bad { background: #ff4757 !important; box-shadow: 0 0 6px rgba(255,71,87,0.55); }
     .pv-src.failed .label::after { content: ' · 已失效'; font-size: 11px; color: var(--text-secondary); }
+    /* 默认隐藏「不能播」的线路，只留一个虚线入口把它们收起来 */
+    .pv-src.more {
+      background: transparent; border-style: dashed;
+      color: var(--text-secondary); font-size: 12px; padding: 8px 12px;
+    }
+    .pv-src.more:hover { color: var(--accent); border-color: var(--accent); }
     @media (max-width: 640px) {
       .pv-src { padding: 9px 12px; font-size: 12.5px; }
       .pv-stage { max-height: 56vw; }
@@ -790,14 +813,16 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   <header>
     <div class="header-inner">
       <h1 class="title"><span class="title-dot"></span>秦哥影视资源</h1>
-      <nav class="tabs" id="tabs"></nav>
+      <div class="header-row">
+        <nav class="tabs" id="tabs"></nav>
+        <div class="search-wrap">
+          <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zM9.5 14A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"/></svg>
+          <input class="search" id="search" type="text" placeholder="搜索片名...">
+        </div>
+      </div>
     </div>
   </header>
   <main class="main">
-    <div class="search-wrap">
-      <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zM9.5 14A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"/></svg>
-      <input class="search" id="search" type="text" placeholder="搜索片名...">
-    </div>
     <div class="filter-section" id="mediaFilters">
       <div class="filter-label">类型</div>
       <div class="filter-tags" id="typeTags"></div>
@@ -1078,6 +1103,7 @@ __DATA_SCRIPTS__
     let currentSources = [];
     let currentSourceIdx = 0;
     let currentBaseIdx = 0;    // 当前选中的原始源索引（解析线路基于此源）
+    let showAllSources = false; // 是否展开被隐藏的「疑似不可用」线路（每次开播重置）
     let currentItemKey = '';   // 进度记忆 key: cat|name|year
     let currentUrl = '';
     let pvProgressTimer = null;
@@ -1153,6 +1179,86 @@ __DATA_SCRIPTS__
           if (v.currentTime > 5 && v.currentTime < v.duration - 5) saveProgress();
         }
       }, 4000);
+    }
+
+    // ===== 画面冻结自愈 =====
+    // HLS 弱源上常见「声音照走、画面停在某一帧」：视频轨解码卡死，可 <video> 既不报错、
+    // 时间轴也仍在推进，用户只能自己拖进度条。这里主动检测并分级自愈：
+    //   ① 微跳 0.5 秒绕过坏帧 → ② 重建解码器 → ③ 换线路
+    // 判据是「时间在推进，但已解码画面帧数不再增长」。静止镜头/黑屏本身不影响该计数
+    // （解码器仍在持续出帧），所以不会误判；浏览器不提供帧统计时直接不启用。
+    let stallWatch = null;
+    let stallFixing = false;
+    // 采样状态（对象而非散变量，便于 stallEvaluate 做纯函数式判定/被测试脚本复用）
+    let stallState = { lastT: 0, frames: null, hits: 0, fixStep: 0 };
+
+    function videoFrameCount(v) {
+      try {
+        if (typeof v.getVideoPlaybackQuality === 'function') {
+          const q = v.getVideoPlaybackQuality();
+          if (q && typeof q.totalVideoFrames === 'number') return q.totalVideoFrames;
+        }
+        if (typeof v.webkitDecodedFrameCount === 'number') return v.webkitDecodedFrameCount;
+      } catch (e) {}
+      return null;
+    }
+
+    function stopStallWatch() {
+      if (stallWatch) { clearInterval(stallWatch); stallWatch = null; }
+      stallState = { lastT: 0, frames: null, hits: 0, fixStep: 0 };
+      stallFixing = false;
+    }
+
+    // 单次采样判定（不改 DOM，方便单测）：'' = 正常；fix1/fix2/fix3 = 该执行第几级自愈
+    function stallEvaluate(v, st) {
+      if (!v || document.hidden || v.paused || v.seeking || v.ended || v.readyState < 2) {
+        st.lastT = 0; st.frames = null; st.hits = 0;
+        return '';
+      }
+      const t = v.currentTime;
+      const f = videoFrameCount(v);
+      if (t - st.lastT >= 1.2) {          // 时间确实推进了，比对才有意义
+        if (f !== null && st.frames !== null && f <= st.frames) {
+          st.hits++;
+        } else {
+          st.hits = 0;
+          if (f !== null && st.frames !== null && f > st.frames) st.fixStep = 0;  // 恢复正常 → 自愈级别归零
+        }
+        st.lastT = t; st.frames = f;
+      }
+      if (st.hits < 2) return '';         // 连续两次（约 6 秒）才判定为画面冻结
+      st.hits = 0;
+      st.fixStep++;
+      return st.fixStep === 1 ? 'fix1' : (st.fixStep === 2 ? 'fix2' : 'fix3');
+    }
+
+    function startStallWatch() {
+      stopStallWatch();
+      const probe = $('pvVideo');
+      if (probe && videoFrameCount(probe) === null) return;   // 无帧统计能力 → 不启用
+      stallWatch = setInterval(function () {
+        const v = $('pvVideo');
+        let act = stallEvaluate(v, stallState);
+        if (!act) return;
+        // 直播不能往前跳（会越过 live edge 造成更多卡顿）→ 直接升级为重建解码器
+        if (act === 'fix1' && currentIsLive) act = 'fix2';
+        stallFixing = true;
+        setTimeout(() => { stallFixing = false; }, 2500);
+        if (act === 'fix1') {
+          showLoading('画面卡住，正在自动修复…');
+          try { v.currentTime = v.currentTime + 0.5; } catch (e) {}
+        } else if (act === 'fix2') {
+          if (hlsPlayer) {
+            showLoading('画面卡住，正在重建解码器…');
+            try { hlsPlayer.recoverMediaError(); } catch (e) { handleSourceFail(currentSourceIdx); }
+          } else {
+            try { v.currentTime = v.currentTime + 1; } catch (e) {}
+          }
+        } else {
+          showLoading('画面持续卡住，正在切换线路…');
+          handleSourceFail(currentSourceIdx);
+        }
+      }, 3000);
     }
 
     // 打开沉浸式播放视图（item 含 name/url/sources；live 由调用方包装）
@@ -1401,6 +1507,7 @@ __DATA_SCRIPTS__
       currentIsLive = (cat === 'live');
       const myToken = ++playerToken;
       currentItemKey = cat + '|' + (item.name || '') + '|' + (item.year || '');
+      showAllSources = false;   // 每部影片都从「隐藏不可用线路」的默认态开始
       currentSources = (item.sources && item.sources.length)
         ? item.sources.slice() : [{ src: '默认线路', url: item.url }];
       // 默认首选服务端中转线路：可自定义 Referer/UA 绕过源站反盗链；
@@ -1511,16 +1618,32 @@ __DATA_SCRIPTS__
       });
     }
 
+    // 「不能播」的线路默认不列出来（用户要求：别让死链占着位置）。
+    //   _failed       = 本条真实点播失败过
+    //   _probe === false = 开播前 /probe 体检判定取不到流
+    // 两个护栏：① 正在播的那条永远保留；② 若隐去后一条不剩就全部显示 ——
+    // worker 是海外出口，探测国内 CDN 会误判，绝不能让用户面对空面板。
+    function isDeadSource(s) {
+      return !!s && (!!s._failed || s._probe === false);
+    }
+
     function renderSources() {
       const box = $('pvSources');
       box.innerHTML = '';
       const resolverList = (window.RESOLVER_LINES || []).filter(r => r && r.url);
-      const total = currentSources.length + resolverList.length;
+      const deadIdx = [];
+      currentSources.forEach((s, i) => {
+        if (i !== currentSourceIdx && isDeadSource(s)) deadIdx.push(i);
+      });
+      const canHide = currentSources.length - deadIdx.length >= 1;
+      const hiddenSet = new Set((canHide && !showAllSources) ? deadIdx : []);
+      const total = (currentSources.length - hiddenSet.size) + resolverList.length;
       $('pvSrcTitle').textContent = total > 1 ? '播放源（' + total + '）' : '播放源';
 
       // 原始源：圆点按后端健康度/探测结果染色（绿=可用 红=真实播放失败 灰=探测未知）
       // 预检失败不再直接显示“已失效”，因为 worker 海外出口对国内 CDN 的探测经常误判。
       currentSources.forEach((s, i) => {
+        if (hiddenSet.has(i)) return;
         const isFailed = !!s._failed;
         const isDead = s._probe === false && !isFailed;
         const isOk = s._probe === true || (!isFailed && !isDead && s.url);
@@ -1553,6 +1676,17 @@ __DATA_SCRIPTS__
         };
         box.appendChild(btn);
       });
+
+      // 被隐去的线路留一个虚线入口，否则用户只会觉得「线路变少了」而不知为何
+      if (deadIdx.length) {
+        const more = document.createElement('button');
+        more.className = 'pv-src more';
+        more.textContent = showAllSources
+          ? '收起不可用线路'
+          : '显示全部（另有 ' + deadIdx.length + ' 条疑似不可用）';
+        more.onclick = () => { showAllSources = !showAllSources; renderSources(); };
+        box.appendChild(more);
+      }
       updatePvLine();
       renderEpisodes();
     }
@@ -1690,7 +1824,7 @@ __DATA_SCRIPTS__
     function playUrl(url, idx, resume) {
       const video = $('pvVideo');
       // 缓冲/可播事件：缓冲时显示遮罩，开始播放即隐藏（断流/拖动 seek 也会触发）
-      video.onwaiting = () => { if (!loadTimer) showLoading('视频缓冲中…'); };
+      video.onwaiting = () => { if (!loadTimer && !stallFixing) showLoading('视频缓冲中…'); };
       video.onplaying = () => { hlsStarted = true; hlsFatalStreak = 0; stopLoadTimer(); hideLoading(); clearLoadTimeout(); };
       video.oncanplay = () => { hlsStarted = true; stopLoadTimer(); hideLoading(); clearLoadTimeout(); };
       // 视频一旦有进度，说明链路通畅，清零致命错误连击计数（避免把瞬时抖动累计成失败）
@@ -1777,6 +1911,7 @@ __DATA_SCRIPTS__
         video.play().catch(() => {});
       }
       startProgressWatch();
+      startStallWatch();   // 画面冻结自愈（见 startStallWatch 说明）
       if (resume) {
         const t = readProgress(currentItemKey);
         if (t > 5) {
@@ -1868,6 +2003,7 @@ __DATA_SCRIPTS__
       saveProgress();
       clearLoadTimeout();
       stopLoadTimer();
+      stopStallWatch();
       if (hlsPlayer) { try { hlsPlayer.destroy(); } catch (e) {} hlsPlayer = null; }
       const video = $('pvVideo');
       video.pause(); video.removeAttribute('src'); video.load();
@@ -2387,10 +2523,12 @@ _REGION_ORDER = ["内地", "香港", "台湾", "美国", "日本", "英国", "�
 
 
 def _source_label(raw: str) -> str:
-    """把 MacCMS 线路代码转成中文显示名；未命中保持原值。"""
-    if not raw:
-        return ""
-    return config.SOURCE_LABELS.get(raw, raw)
+    """把 MacCMS 线路代码转成中文显示名（唯一实现见 config.source_label）。
+
+    未识别的裸代码返回空串，由调用方兜底成「线路N」——页面上不该出现 hym3u8
+    这类英文代码给用户看。
+    """
+    return config.source_label(raw)
 
 
 def _normalize_region(raw: str) -> str:
@@ -2420,6 +2558,9 @@ def generate_index(output_dir: Path = None) -> Path:
     desc_map: Dict[str, Dict[str, str]] = {}
     _drop_dead = os.environ.get("WEB_KEEP_DEAD", "0") != "1"
     _dead_stat: Dict[str, int] = {}
+    # 未识别的线路代码（如 xlm3u8）→ 出现次数。页面侧会兜底显示「线路N」，
+    # 这里汇总打印出来，方便把新代码补进 config.SOURCE_LABELS。
+    _unknown_lines: Dict[str, int] = {}
     for cat in config.M3U_OUTPUT:
         items, _ = prepare_items(cat)
         # 线路体检：剔除已确认全线失效的播放地址（源站 CDN 大面积跑路，
@@ -2453,8 +2594,11 @@ def generate_index(output_dir: Path = None) -> Path:
                     except Exception:
                         pass
                 # _rank 仅用于排序（直连优先、需中转的靠后），落盘前移除
-                src_name = _source_label(it.get("line_name") or it.get("source") or "")
+                _raw_line = (it.get("line_name") or it.get("source") or "").strip()
+                src_name = _source_label(_raw_line)
                 if not src_name:
+                    if _raw_line:
+                        _unknown_lines[_raw_line] = _unknown_lines.get(_raw_line, 0) + 1
                     src_name = "线路%d" % (len(lst) + 1)
                 # 同片多条线路映射到同一中文名时（如 jsm3u8 / jsyun 都叫「极速」）
                 # 加数字后缀，否则播放器里会出现两个同名按钮，用户分不清该点哪个
@@ -2527,6 +2671,10 @@ def generate_index(output_dir: Path = None) -> Path:
     print(f"[线路体检] 域名 {n_ok}/{n_host} 可用；剔除失效线路 {sum(_dead_stat.values())} 条；"
           f"可播条目 {kept}" + ("（各类：%s）" % ", ".join(
               f"{k} -{v}" for k, v in _dead_stat.items() if v) if _dead_stat else ""))
+    if _unknown_lines:
+        top = sorted(_unknown_lines.items(), key=lambda kv: -kv[1])[:12]
+        print("[线路名] 未识别代码（页面已兜底为「线路N」，建议补进 config.SOURCE_LABELS）："
+              + ", ".join(f"{k}×{v}" for k, v in top))
     return out
 
 

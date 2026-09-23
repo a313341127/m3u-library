@@ -154,6 +154,94 @@ say('=== C 手工重复注入同一片 ===');
 say('  注入前 ' + beforeC + ' -> 注入后 ' + afterC);
 mark(beforeC === afterC);
 
+// D: 「不能播的线路默认隐藏」（renderSources 真代码）
+const fnDead = grabBlock(0, 'function isDeadSource(');
+const fnRenderSrc = grabBlock(0, 'function renderSources(');
+const makeRs = new Function(`
+  var currentSources = [], currentSourceIdx = 0, showAllSources = false;
+  var box = { innerHTML: '', textContent: '', kids: [], appendChild(el) { this.kids.push(el); } };
+  var titleEl = { textContent: '' };   // $('pvSrcTitle') 必须返回同一个对象，否则读不到写进去的标题
+  function $(id) { return id === 'pvSources' ? box : titleEl; }
+  function htmlEscape(s) { return String(s); }
+  function updatePvLine() {}
+  function renderEpisodes() {}
+  return (function () {
+    var document = { createElement: () => ({ className: '', innerHTML: '', textContent: '', onclick: null }) };
+    ${fnDead}
+    ${fnRenderSrc}
+    return {
+      run(sources, idx, all) {
+        currentSources = sources; currentSourceIdx = idx; showAllSources = !!all;
+        box.kids = []; box.innerHTML = ''; box.textContent = ''; titleEl.textContent = '';
+        renderSources();
+        return box;
+      },
+      title() { return titleEl.textContent; }
+    };
+  })();
+`)();
+const S = (src, probe, failed) => ({ src, url: 'http://x/' + src, _probe: probe, _failed: failed });
+say('=== D 线路列表隐藏不可用 ===');
+let rsBox = makeRs.run([S('虎牙', true), S('爱坤', false), S('红牛', true), S('豆瓣', true, true)], 0, false);
+const labels = rsBox.kids.map(k => k.textContent || k.innerHTML).join(' | ');
+const moreBtn = rsBox.kids.find(k => (k.className || '').indexOf('more') >= 0);
+say('  4 条线路(2 可用/1 探测死/1 失败) -> 渲染 ' + rsBox.kids.length + ' 个按钮 | 标题 ' + JSON.stringify(makeRs.title()));
+say('    按钮: ' + labels);
+mark(rsBox.kids.length === 3 && !!moreBtn && /另有 2 条/.test(moreBtn.textContent || '') &&
+     makeRs.title() === '播放源（2）');
+rsBox = makeRs.run([S('虎牙', true), S('爱坤', false), S('红牛', true), S('豆瓣', true, true)], 0, true);
+say('  展开全部 -> 渲染 ' + rsBox.kids.length + ' 个按钮 | 标题 ' + JSON.stringify(makeRs.title()));
+mark(rsBox.kids.length === 5 && /收起不可用线路/.test(rsBox.kids[4].textContent || '') &&
+     makeRs.title() === '播放源（4）');
+rsBox = makeRs.run([S('虎牙', false), S('爱坤', false)], 0, false);
+say('  全部探测失败但当前正在播第 0 条 -> 渲染 ' + rsBox.kids.length + ' 个按钮（必须留住当前线路）');
+mark(rsBox.kids.length >= 1 && rsBox.kids[0].className.indexOf('active') >= 0);
+
+// E: 画面冻结自愈（stallEvaluate 真代码）
+const fnFrames = grabBlock(0, 'function videoFrameCount(');
+const fnStall = grabBlock(0, 'function stallEvaluate(');
+const stallEval = new Function('document', `
+  var document = arguments[0];
+  ${fnFrames}
+  ${fnStall}
+  return stallEvaluate;
+`)({ hidden: false });
+const mkV = (t, frames, over) => Object.assign({
+  currentTime: t, paused: false, seeking: false, ended: false, readyState: 4,
+  getVideoPlaybackQuality: () => ({ totalVideoFrames: frames })
+}, over || {});
+const newSt = () => ({ lastT: 0, frames: null, hits: 0, fixStep: 0 });
+let st = newSt(), seq = [];
+seq.push(stallEval(mkV(1, 30), st));    // 建立基线
+seq.push(stallEval(mkV(2.5, 75), st));  // 帧数增长 → 正常
+seq.push(stallEval(mkV(4, 120), st));
+seq.push(stallEval(mkV(5.5, 120), st)); // 时间走、帧不动 → 第 1 次
+seq.push(stallEval(mkV(7, 120), st));   // 第 2 次 → 触发一级自愈
+seq.push(stallEval(mkV(8.5, 120), st));
+seq.push(stallEval(mkV(10, 120), st));  // → 二级
+seq.push(stallEval(mkV(11.5, 200), st));// 画面恢复（帧数重新增长）→ 自愈级别归零
+seq.push(stallEval(mkV(13, 200), st));  // 冻结重新计数 1
+seq.push(stallEval(mkV(14.5, 200), st));// 第 2 次 → **重新从一级开始**（而不是直接跳到三级换线路）
+seq.push(stallEval(mkV(16, 200), st));
+seq.push(stallEval(mkV(17.5, 200), st));// → 二级
+const wantE = ['', '', '', '', 'fix1', '', 'fix2', '', '', 'fix1', '', 'fix2'];
+say('=== E 画面冻结自愈判定 ===');
+say('  期望 ' + JSON.stringify(wantE));
+say('  实际 ' + JSON.stringify(seq));
+mark(JSON.stringify(seq) === JSON.stringify(wantE));
+const st2 = newSt();
+stallEval(mkV(1, 30), st2);
+stallEval(mkV(2.5, 30), st2);
+const pausedAct = stallEval(mkV(4, 30, { paused: true }), st2);
+const seekAct = stallEval(mkV(5, 30, { seeking: true }), st2);
+say('  暂停/拖动中不累积: paused=' + JSON.stringify(pausedAct) + ' seeking=' + JSON.stringify(seekAct) + ' hits=' + st2.hits);
+mark(pausedAct === '' && seekAct === '' && st2.hits === 0);
+const st3 = newSt();
+const noQ = { currentTime: 1, paused: false, seeking: false, ended: false, readyState: 4 };
+stallEval(noQ, st3);
+say('  浏览器不给帧统计时: 采样 ' + JSON.stringify(st3) + '（不启用检测）');
+mark(st3.hits === 0 && st3.frames === null);
+
 console.log(lines.join('\n'));
 console.log('\nVERDICT: ' + (allPass ? 'PASS' : 'FAIL'));
 process.exit(allPass ? 0 : 1);
@@ -225,10 +313,23 @@ def main():
                                   ("__LOADING__", tpl, "模板"), ("__READY__", tpl, "模板"),
                                   ("PART_CONC", tpl, "模板"), ("function ensureCat", tpl, "模板"),
                                   ("function hasPendingParts", tpl, "模板"),
+                                  ("function isDeadSource", tpl, "模板"),
+                                  ("function stallEvaluate", tpl, "模板"),
+                                  ("header-row", tpl, "模板"),
                                   ("__RESSEEN__", src, "源"), ("seen.has(k)", src, "源")]:
             if pat not in where:
                 ok = False
                 print(f"  标记缺失 [{label}]: {pat}")
+        # 布局断言：搜索框必须与分类 Tab 同一行（在 <header> 内），且不在 <main> 里重复
+        head_html = tpl[tpl.index("<header>"):tpl.index("</header>")]
+        body_html = tpl[tpl.index("<main"):]
+        for cond, msg in [(('id="search"' in head_html), "搜索框不在 <header> 内（要求与分类 Tab 同一行）"),
+                          (('id="tabs"' in head_html and "header-row" in head_html),
+                           "分类 Tab / header-row 结构缺失"),
+                          (("search-wrap" not in body_html), "<main> 里仍有 search-wrap（搜索框应只保留一份）")]:
+            if not cond:
+                ok = False
+                print(f"  布局检查失败: {msg}")
         print("  关键标记: " + ("全部在位" if ok else "有缺失"))
         m = re.search(r"const PART_CONC = (\d+)", tpl)
         m2 = re.search(r"const PART_RETRY = (\d+)", tpl)

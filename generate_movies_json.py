@@ -246,11 +246,13 @@ def build_from_rows(rows, cat: str, prefix: str) -> list:
         key = cids[idx]
         u = (row["url"] or "").strip()
         # 线路名优先；缺失时回退到采集源名（总比显示「未知线路」有用）
+        # 中文名统一走 config.source_label（与网页端同一实现），未识别的裸代码
+        # 不再原样输出，落成「未知线路」而不是把 hym3u8 这类代码抛给用户
         _ln = (row["line_name"] or "").strip()
         _src = (row["source"] or "").strip()
-        line_name = (config.SOURCE_LABELS.get(_ln)
-                     or config.SOURCE_LABELS.get(_src)
-                     or _ln or _src or "未知线路")
+        line_name = (config.source_label(_ln)
+                     or config.source_label(_src)
+                     or "未知线路")
         if not u:
             continue
         if key not in merged:

@@ -4,6 +4,7 @@
 分类体系、输出文件命名、编码等集中在这里。
 以后要调整分类/类型/地区，只改这个文件，不用动代码。
 """
+import re
 from pathlib import Path
 
 # ---------- 路径 ----------
@@ -275,7 +276,43 @@ SOURCE_LABELS = {
     "yhm3u8": "樱花",
     "youku": "优酷",
     "zuidam3u8": "最大",
+    # ---- cc0cd 聚合源带来的代码（2026-09-23 按站点接口反查确认，此前在页面上裸显示英文）----
+    #   虎牙：站点 API https://www.huyaapi.com/api.php/provide/vod/from/hym3u8/
+    #         实测其 vod_play_from 就是 hym3u8$$$hyyun（配置中心里该源 key=「虎牙」）
+    #   爱坤：站点 API https://ikunzyapi.com/api.php/provide/vod/from/ikm3u8/
+    "hym3u8": "虎牙", "hyyun": "虎牙",
+    "ikm3u8": "爱坤",
+    "dytt": "电影天堂",
+    "wjyun": "无尽",
 }
+
+# 线路代码 -> 中文显示名的**唯一实现**（web 页面与途播 JSON 都走这里，避免两处漂移）。
+# 规则：① 整串查表 ② 去掉 m3u8/yun 后缀再查（含反方向补后缀，兼容 dytt ↔ dyttm3u8、
+# wjyun ↔ wjm3u8 这类同站变体）③ 本身就含中文的直接用 ④ 仍不认识返回 ""，
+# 由调用方兜底成「线路N」——**绝不把 hym3u8 这类裸代码抛给用户看**。
+_LINE_SUFFIX_RE = re.compile(r"(m3u8|yun)$", re.I)
+_CJK_RE = re.compile(r"[\u4e00-\u9fff]")
+
+
+def source_label(raw) -> str:
+    """播放线路代码 → 中文显示名；无法识别返回空串。"""
+    if not raw:
+        return ""
+    s = str(raw).strip()
+    if not s:
+        return ""
+    lab = SOURCE_LABELS.get(s)
+    if lab:
+        return lab
+    base = _LINE_SUFFIX_RE.sub("", s)
+    cands = [base, base + "m3u8", base + "yun"] if base != s else [s + "m3u8", s + "yun"]
+    for cand in cands:
+        lab = SOURCE_LABELS.get(cand)
+        if lab:
+            return lab
+    if _CJK_RE.search(s):
+        return s
+    return ""
 
 # 采集黑名单：type_name（采集站分类名）命中任一关键词即跳过
 # 用于拦截成人/伦理/擦边内容，以及用户不需要的短剧/直播/演唱会等
