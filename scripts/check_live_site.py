@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""线上站点部署后验收：① 前端关键代码是否上线 ② 分类归属是否正常 ③ 卡片总量是否合理。
+"""线上站点部署后验收：① 前端关键代码 ② 分类归属 ③ 布局 ④ 线路名中文化 ⑤ 卡片总量。
 
 为什么要写成脚本：部署 run 结束 ≠ 线上生效（Pages 还要发布 + CDN 生效），
 而且**空转的验收比不验收更危险** —— 曾用「扫 0 张卡 → 0 个命中 → 判 PASS」报了个假通过。
@@ -26,10 +26,13 @@ import gzip
 import io
 import json
 import pathlib
+import re
 import sys
 import time
 import urllib.request
+from urllib.parse import quote
 import zlib
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -53,6 +56,24 @@ FRONTEND_MARKERS = {
     "搜索补全提示": ("正在加载全部片库", True),
     "搜索触发 ensureCat": ("if (searchQuery) ensureCat(currentCat", True),
     "筛选/排序补 ensureCat": ("ensureCat(currentCat, render)", True),
+    # 2026-09-23：播放体验四项改动
+    "画面冻结自愈 stallEvaluate": ("function stallEvaluate", True),
+    "隐藏死链线路 isDeadSource": ("function isDeadSource", True),
+    "冻结自愈提示文案": ("画面卡住，正在自动修复", True),
+    "隐藏线路入口文案": ("显示全部（另有 ", True),
+    # 2026-09-24：首页/全站搜索改走服务端 /site/search
+    "搜索服务端检索 runSearch": ("function runSearch", True),
+    "首页搜索结果视图 applyHomeSearchView": ("function applyHomeSearchView", True),
+    "搜索状态提示 appendSearchHint": ("function appendSearchHint", True),
+    "调用同源搜索接口": ("/site/search?cat=", True),
+    "条目自带分类 _cat": ("it._cat = c;", True),
+}
+
+# 布局断言：搜索框必须与分类 Tab 同一行（在 <header> 内），且 <main> 里不得重复
+LAYOUT_MARKERS = {
+    "搜索框在 <header> 内": ('id="search"', "header"),
+    "分类 Tab 与搜索框同一行 header-row": ("header-row", "header"),
+    "<main> 内无重复的 search-wrap": ("search-wrap", "!main"),
 }
 
 
@@ -143,13 +164,84 @@ def verify(pages=60, min_cards=5000):
         print(f"      {n!r}")
 
     cat_ok = not gala_in_movie and len(gala_in_variety) > 0
-    print("\nVERDICT: " + ("PASS" if front_ok and cat_ok else "FAIL"))
-    return front_ok and cat_ok
+
+    # ④ 布局：搜索框是否已并入导航栏（与分类 Tab 同一行）
+    print("\n④ 布局")
+    head_html = html[html.index("<header>"):html.index("</header>")] if "<header>" in html else ""
+    main_html = html[html.index("<main"):] if "<main" in html else ""
+    lay_ok = True
+    for label, (pat, where) in LAYOUT_MARKERS.items():
+        if where == "header":
+            ok = pat in head_html
+        else:
+            ok = pat not in main_html
+        lay_ok &= ok
+        print(f"   {'OK  ' if ok else 'FAIL'} {label}")
+    print(f"   （header 片段：{re.sub(r'\\s+', ' ', head_html)[:120]}…)")
+
+    # ⑤ 线路名必须全是中文（hym3u8 这类裸代码不该出现在用户界面）
+    print("\n⑤ 线路名（api srcs 抽样）")
+    line_names = Counter()
+    for m in mv:
+        for s in (m.get("srcs") or []):
+            line_names[s] += 1
+    latin = {k: v for k, v in line_names.items()
+             if re.search(r"[a-zA-Z]{3,}", str(k)) and not re.search(r"[\u4e00-\u9fff]", str(k))}
+    print(f"   {len(line_names)} 个不同线路名；TOP: " + ", ".join(f"{k}×{v}" for k, v in line_names.most_common(8)))
+    print(f"   仍是裸露英文代码的：{list(latin)[:8] or '无'}")
+    name_ok = (not latin) and len(line_names) > 0
+
+    # ⑥ 搜索接口：首页搜索完全依赖它（跨分类、覆盖全库，不下载分片）
+    print("\n⑥ 搜索接口 /site/search")
+    sr = get_json(bust(BASE + "site/search?cat=movie&limit=20&q=" + quote("功夫女足")))
+    if sr is None:
+        print("   [FAIL] 接口取不到（404 → worker 路由没上线）")
+        search_ok = False
+    else:
+        hits = sr.get("movies") or []
+        print(f"   ok={sr.get('ok')} total={sr.get('total')} 返回 {len(hits)} 条")
+        for m in hits[:3]:
+            print(f"      {m.get('name')} | {m.get('year')} | 线路 {(m.get('sources') or []) and len(m['sources']) or 0} 条")
+        bad_cat = get_json(bust(BASE + "site/search?cat=live&q=x"))
+        empty = get_json(bust(BASE + "site/search?cat=movie&q="))
+        search_ok = (bool(sr.get("ok")) and sr.get("total", 0) >= 1 and len(hits) >= 1
+                     and all(m.get("name") and m.get("id") and (m.get("url") or m.get("sources"))
+                             for m in hits))
+        # 直播不参与片名搜索、空词直接返回空：都应是「干净失败」而不是 500
+        print(f"   边界：cat=live → {'拒绝(400)' if bad_cat is None else bad_cat.get('error', 'ok?')}"
+              f" | 空词 → {'空结果' if not (empty or {}).get('movies') else '有结果?'}")
+        if bad_cat is not None and bad_cat.get("ok") is not False:
+            print("   [warn] live 分类未被拒绝")
+
+    print("\nVERDICT: " + ("PASS" if (front_ok and cat_ok and lay_ok and name_ok and search_ok) else "FAIL")
+          + f"  (前端 {front_ok} / 分类 {cat_ok} / 布局 {lay_ok} / 线路名 {name_ok} / 搜索 {search_ok})")
+    return front_ok and cat_ok and lay_ok and name_ok and search_ok
+
+
+def readiness_gaps(html):
+    """本轮的「正向标记 + 布局断言」里，还有哪些没上线。
+
+    为什么不用 updated 是否变化来判断：**CI 自己也会推提交并触发部署**
+    （update/backfill 工作流提交进度文件 → deploy.yml 的 paths 命中），
+    那种 run 跑的是旧代码、却同样会改 updated。只看 updated 会对着旧构建
+    验收一轮、白报一次 FAIL（2026-09-23 实际踩过）。改成直接探「新代码到没到」。
+    """
+    gaps = [k for k, (pat, want) in FRONTEND_MARKERS.items() if want and pat not in html]
+    if "<header>" not in html or "<main" not in html:
+        return gaps + ["header/main 结构缺失"]
+    head_html = html[html.index("<header>"):html.index("</header>")]
+    main_html = html[html.index("<main"):]
+    for label, (pat, where) in LAYOUT_MARKERS.items():
+        ok = (pat in head_html) if where == "header" else (pat not in main_html)
+        if not ok:
+            gaps.append(label)
+    return gaps
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--wait", action="store_true", help="等线上 updated 变化后再验收")
+    ap.add_argument("--wait", action="store_true",
+                    help="等「本轮新增标记」真的上线后再验收（比只看 updated 变化可靠）")
     ap.add_argument("--pages", type=int, default=60)
     ap.add_argument("--min-cards", type=int, default=5000)
     ap.add_argument("--timeout-min", type=int, default=90)
@@ -157,17 +249,25 @@ def main():
 
     if a.wait:
         base = (get_json(bust(BASE + "api/all.json")) or {}).get("updated")
-        print(f"基线 updated={base}，等待变化…", flush=True)
+        print(f"基线 updated={base}；等待本轮新代码上线（探标记，不只看 updated）…", flush=True)
         deadline = time.time() + a.timeout_min * 60
+        last = None
         while time.time() < deadline:
-            time.sleep(45)
-            cur = (get_json(bust(BASE + "api/all.json")) or {}).get("updated")
-            if cur and cur != base:
-                print(f"[{time.strftime('%H:%M:%S')}] 线上已更新 → {cur}，等 120s 让 CDN 各节点一致", flush=True)
+            html = (fetch(bust(BASE)) or b"").decode("utf-8", "ignore")
+            gaps = readiness_gaps(html)
+            if not gaps:
+                cur = (get_json(bust(BASE + "api/all.json")) or {}).get("updated")
+                print(f"[{time.strftime('%H:%M:%S')}] 新构建已上线（updated={cur}），"
+                      f"等 120s 让 CDN 各节点一致", flush=True)
                 time.sleep(120)
                 break
+            if gaps != last:
+                print(f"[{time.strftime('%H:%M:%S')}] 线上仍缺 {len(gaps)} 项："
+                      f"{', '.join(gaps[:3])}{' …' if len(gaps) > 3 else ''}", flush=True)
+                last = gaps
+            time.sleep(45)
         else:
-            print("等待超时", flush=True)
+            print("等待超时（标记未全部上线，下面按现状验收）", flush=True)
 
     return 0 if verify(a.pages, a.min_cards) else 1
 

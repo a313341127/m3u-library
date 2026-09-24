@@ -350,6 +350,14 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       color: #fff;
       background: rgba(0,0,0,0.65);
     }
+    /* 搜索状态提示（检索中 / 结果被截断 / 服务端降级） */
+    .grid-hint {
+      grid-column: 1 / -1;
+      text-align: center;
+      font-size: 13px;
+      color: var(--text-secondary);
+      padding: 14px 0;
+    }
     .sort-group {
       display: flex;
       gap: 6px;
@@ -978,10 +986,11 @@ __DATA_SCRIPTS__
         // 排序 / 筛选都只作用于「已加载的分片」；首屏只有第 0 片，
         // 此时排出来的「人气 TOP」是残缺的。所以本地先渲染一次给出反馈，
         // 再 ensureCat 把该分类剩余分片补齐后重排一次（幂等，已加载完则立即返回）。
+        // 搜索态下结果是服务端给全的，不需要再补分片。
         btn.onclick = () => {
           currentSort = key; displayLimit = PAGE_SIZE;
           renderGridOnly();
-          ensureCat(currentCat, renderGridOnly);
+          if (!searchQuery) ensureCat(currentCat, renderGridOnly);
         };
         bar.appendChild(btn);
       });
@@ -1029,7 +1038,7 @@ __DATA_SCRIPTS__
       all.onclick = () => {
         activeFilters[dim] = ''; displayLimit = PAGE_SIZE;
         render();
-        ensureCat(currentCat, render);
+        if (!searchQuery) ensureCat(currentCat, render);
       };
       c.appendChild(all);
       values.forEach(v => {
@@ -1039,7 +1048,7 @@ __DATA_SCRIPTS__
         span.onclick = () => {
           activeFilters[dim] = v; displayLimit = PAGE_SIZE;
           render();
-          ensureCat(currentCat, render);
+          if (!searchQuery) ensureCat(currentCat, render);
         };
         c.appendChild(span);
       });
@@ -1084,18 +1093,29 @@ __DATA_SCRIPTS__
       return arr.sort((a, b) => a.localeCompare(b, 'zh-CN'));
     }
 
+    // 搜索命中判据（唯一定义）：分类内筛选与本地兜底搜索共用。
+    // 与 worker 的 /site/search 保持同一语义：片名/类型/地区子串命中；
+    // 查询带空格时同时试「去掉空格」的形式（片名常把空格写没了：
+    // 搜「lady gaga」要能命中「LadyGaga：神彩巡回演唱会」）。
+    function matchSearch(it, q) {
+      if (!q) return true;
+      const low = q.toLowerCase();
+      const sq = low.replace(/\\s+/g, '');
+      const name = (it.name || '').toLowerCase();
+      const meta = ((it.media_type || '') + ' ' + (it.region || '')).toLowerCase();
+      if (name.indexOf(low) >= 0 || meta.indexOf(low) >= 0) return true;
+      if (sq && sq !== low) {
+        return name.replace(/\\s+/g, '').indexOf(sq) >= 0 || meta.replace(/\\s+/g, '').indexOf(sq) >= 0;
+      }
+      return false;
+    }
+
     function filterItems(items) {
       return items.filter(it => {
         if (activeFilters.media_type && it.media_type !== activeFilters.media_type) return false;
         if (activeFilters.region && it.region !== activeFilters.region) return false;
         if (activeFilters.year && it.year !== activeFilters.year) return false;
-        if (searchQuery) {
-          const q = searchQuery.toLowerCase();
-          return (it.name && it.name.toLowerCase().includes(q)) ||
-                 (it.media_type && it.media_type.toLowerCase().includes(q)) ||
-                 (it.region && it.region.toLowerCase().includes(q));
-        }
-        return true;
+        return matchSearch(it, searchQuery);
       });
     }
 
@@ -2156,7 +2176,7 @@ __DATA_SCRIPTS__
       const total = items.length;
       const shown = items.slice(0, displayLimit);
       $('resultCount').textContent = total > shown.length ? shown.length + ' / ' + total + ' 部' : total + ' 部';
-      $('sectionName').textContent = CATEGORIES[currentCat].label;
+      $('sectionName').textContent = searchQuery ? '搜索结果' : catLabel(currentCat);
       if (!shown.length) {
         grid.innerHTML = `<div class="empty">
           <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/></svg>
@@ -2165,22 +2185,28 @@ __DATA_SCRIPTS__
         return;
       }
       shown.forEach(it => {
+        // 每条记录自带分类（__RES__/搜索结果都会打 _cat）：
+        // 首页搜索是跨分类混合列表，徽标、续播键、播放器分类都必须按「条目自己的分类」算。
+        const cat = it._cat || currentCat;
         const card = document.createElement('a');
         card.className = 'card';
         card.href = it.url;
         card.onclick = e => {
           e.preventDefault();
           // dmhyy 式：点卡片直接弹出播放器（内嵌页面中间）播最佳线路
-          try { openPlayer(it, currentCat); } catch (err) { openDetail(it, currentCat); }
+          try { openPlayer(it, cat); } catch (err) { openDetail(it, cat); }
         };
-        const meta = [it.region, it.year, it.quality].filter(Boolean).join(' · ');
+        // 首页搜索是跨分类混合列表：meta 行前置分类名，让用户知道这条属于哪个分类
+        const mixed = (currentCat === 'home' || currentCat === 'live');
+        const meta = [mixed ? catLabel(cat) : '', it.region, it.year, it.quality]
+          .filter(Boolean).join(' · ');
         card.innerHTML = `
           <div class="poster">
             <img src="${it.cover || ''}" alt="${htmlEscape(it.name)}" loading="lazy" onerror="this.style.display='none'">
             <div class="play-icon"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div>
             ${it.quality ? `<span class="quality-badge">${htmlEscape(it.quality)}</span>` : ''}
             ${it.score > 0 ? `<span class="score-badge${it.score >= 8 ? ' high' : ''}">${it.score.toFixed(1)}</span>` : ''}
-            ${(currentCat === 'tv' || currentCat === 'anime' || currentCat === 'variety')
+            ${(cat === 'tv' || cat === 'anime' || cat === 'variety')
               ? '<span class="ep-badge">全集</span>' : ''}
           </div>
           <div class="info">
@@ -2194,12 +2220,12 @@ __DATA_SCRIPTS__
         infoBtn.className = 'card-info-btn';
         infoBtn.textContent = '详情';
         infoBtn.title = '查看简介与线路';
-        infoBtn.onclick = e => { e.preventDefault(); e.stopPropagation(); openDetail(it, currentCat); };
+        infoBtn.onclick = e => { e.preventDefault(); e.stopPropagation(); openDetail(it, cat); };
         const posterEl = card.querySelector('.poster');
         posterEl.appendChild(infoBtn);
         posterEl.style.position = 'relative';
         // 续播标记：本地存过播放进度则显示「续」徽标 + 进度条
-        const cp = cardProgress(currentCat + '|' + it.name + '|' + (it.year || ''));
+        const cp = cardProgress(cat + '|' + it.name + '|' + (it.year || ''));
         if (cp.t > 5) {
           const poster = posterEl;
           const badge = document.createElement('div');
@@ -2218,7 +2244,13 @@ __DATA_SCRIPTS__
         const more = document.createElement('button');
         more.className = 'load-more';
         more.textContent = '加载更多（还剩 ' + (total - shown.length) + ' 部）';
-        more.onclick = () => { displayLimit += PAGE_SIZE; ensureCat(currentCat, () => renderGridOnly()); };
+        // 搜索结果是服务端一次性给全的，只需扩大显示上限；
+        // 分类浏览才需要继续补拉分片。
+        more.onclick = () => {
+          displayLimit += PAGE_SIZE;
+          if (searchQuery) { renderGridOnly(); return; }
+          ensureCat(currentCat, () => renderGridOnly());
+        };
         grid.appendChild(more);
       }
     }
@@ -2296,21 +2328,174 @@ __DATA_SCRIPTS__
       return arr;
     }
 
+    // ---------- 搜索 ----------
+    // 搜索一律走同源的**服务端全库检索** /site/search（worker 读「生成期搜索索引」，
+    // 每个分类只读 1 个索引 + 命中所在的分页，子请求 ≤ 4）。这样「全库可搜」不再需要
+    // 把上百 MB 的分片全部下载下来 —— 旧实现正是这么干的（为了修「搜不到排在后面分片的片」
+    // 而 ensureCat 拉全部片），首页一搜索就要下 100MB+。
+    // 服务端不可用（分享站网关没有这个路由 / 请求失败）时才降级为本地分片扫描。
+    const SEARCH_CATS = ['movie', 'tv', 'anime', 'variety'];
+    let searchResults = null;       // 本次搜索的合并结果（null = 尚未开始或已清空）
+    let searchPending = 0;          // 还在等服务端响应的分类数
+    let searchTotal = 0;            // 服务端命中的总条数（可能大于实际返回条数）
+    let searchSeq = 0;              // 搜索序号：丢弃过期响应
+    let searchServerFailed = false; // 服务端不可用 → 降级本地扫描
+
+    // 本次搜索覆盖哪些分类：首页 = 全部分类；分类 Tab = 该分类
+    function searchCatsForView() {
+      if (currentCat === 'home' || currentCat === 'live') return SEARCH_CATS;
+      return RESOURCES[currentCat] ? [currentCat] : SEARCH_CATS;
+    }
+
+    // 服务端不可用时的兜底：只扫「已加载分片」（配合 ensureView 把分片拉齐）
+    function localSearchHits() {
+      const out = [];
+      searchCatsForView().forEach(c => {
+        const arr = RESOURCES[c];
+        if (!arr) return;
+        for (let i = 0; i < arr.length; i++) {
+          if (matchSearch(arr[i], searchQuery)) out.push(arr[i]);
+        }
+      });
+      return out;
+    }
+
+    // 相关度：完全匹配 > 前缀匹配 > 包含匹配，同级按人气
+    function rankSearch(list) {
+      const q = searchQuery.toLowerCase();
+      const rank = it => {
+        const n = (it.name || '').toLowerCase();
+        if (n === q) return 0;
+        if (n.indexOf(q) === 0) return 1;
+        return 2;
+      };
+      return list.slice().sort((a, b) => rank(a) - rank(b)
+        || popScore(b) - popScore(a) || (b.lines || 0) - (a.lines || 0));
+    }
+
+    // 发起一次搜索：先渲染「检索中」，随后每个分类的响应到达就补画一次（渐进呈现）
+    function runSearch() {
+      const q = searchQuery;
+      const seq = ++searchSeq;
+      searchServerFailed = false;
+      if (!q) {                                   // 清空搜索词 → 回到原视图
+        searchResults = null; searchPending = 0; searchTotal = 0;
+        // 只调 renderGridOnly：它自己会处理「首页无搜索词 → 多板块」，
+        // 这里再显式 renderHome 会让首页白渲染两遍。
+        renderGridOnly();
+        return;
+      }
+      const cats = searchCatsForView();
+      searchResults = []; searchPending = cats.length; searchTotal = 0;
+      renderGridOnly();                           // 立刻给出「正在检索全库…」，否则像点了没反应
+      cats.forEach(c => {
+        fetch('/site/search?cat=' + c + '&limit=200&q=' + encodeURIComponent(q),
+              { headers: { 'Accept': 'application/json' } })
+          .then(r => (r.ok ? r.json() : null))
+          .then(d => {
+            if (seq !== searchSeq) return;        // 已开始新一轮搜索，丢弃本次响应
+            if (d && d.ok) {
+              const list = d.movies || [];
+              for (let i = 0; i < list.length; i++) list[i]._cat = c;
+              searchResults = searchResults.concat(list);
+              searchTotal += (d.total || list.length);
+            } else {
+              searchServerFailed = true;
+            }
+          })
+          .catch(() => { if (seq === searchSeq) searchServerFailed = true; })
+          .then(() => {
+            if (seq !== searchSeq) return;
+            searchPending--;
+            renderGridOnly();
+            if (searchPending === 0) finishSearch(seq);
+          });
+      });
+    }
+
+    // 全部分类都回来了：若服务端整体不可用，退回本地分片扫描
+    function finishSearch(seq) {
+      if (!searchServerFailed || seq !== searchSeq) return;
+      ensureView(() => { if (seq === searchSeq) renderGridOnly(); });
+    }
+
+    // 本地兜底/筛选需要补齐哪些分片：首页搜索 = 全部分类；其余 = 该分类
+    function ensureView(done) {
+      if (searchQuery && (currentCat === 'home' || currentCat === 'live')) {
+        let left = SEARCH_CATS.length;
+        SEARCH_CATS.forEach(c => ensureCat(c, () => { if (--left === 0 && done) done(); }));
+        return;
+      }
+      ensureCat(currentCat, done);
+    }
+
+    // 搜索结果列表：优先服务端结果；服务端失败则本地扫描；null = 仍在检索
+    function searchList() {
+      if (searchResults && searchResults.length) return searchResults;
+      if (searchServerFailed) return localSearchHits();
+      return null;
+    }
+
+    // 首页「多板块」与「搜索结果网格」互斥切换。
+    // 刻意不碰 playerView —— 沉浸播放时搜索框依然可用，不能因为输入把播放器关掉。
+    function applyHomeSearchView() {
+      const on = (currentCat === 'home') && !!searchQuery;
+      $('sectionBar').style.display = on ? '' : 'none';
+      $('grid').style.display = on ? '' : 'none';
+      $('homeView').style.display = on ? 'none' : 'block';
+    }
+
+    // 搜索结果下方的状态提示（检索中 / 被截断 / 已降级）
+    function appendSearchHint() {
+      const shown = searchResults ? searchResults.length : 0;
+      let msg = '';
+      if (searchPending > 0) {
+        msg = '正在检索全库…已找到 ' + shown + ' 条，结果会自动补全';
+      } else if (searchServerFailed) {
+        msg = '服务端搜索暂不可用，已改用本地筛选（结果可能不全）';
+      } else if (searchTotal > shown) {
+        msg = '共 ' + searchTotal + ' 条命中，已显示前 ' + shown + ' 条，请补充关键字缩小范围';
+      }
+      if (!msg) return;
+      const tip = document.createElement('div');
+      tip.className = 'grid-hint';
+      tip.textContent = msg;
+      $('grid').appendChild(tip);
+    }
+
+    // 分类中文名（首页/搜索这类「虚拟分类」没有 CATEGORIES 表项，兜底显示原值）
+    function catLabel(c) {
+      const e = CATEGORIES && CATEGORIES[c];
+      return (e && e.label) || c;
+    }
+
     function renderGridOnly() {
       initSortGroup(); // 刷新排序按钮高亮状态
+      if (currentCat === 'home') {
+        applyHomeSearchView();
+        if (!searchQuery) { renderHome(); return; }   // 无搜索词 → 首页多板块
+      }
+      if (searchQuery) {
+        // 搜索态：分类 Tab 也走同一份服务端结果（限本分类），首页则是跨分类混合结果
+        const list = searchList();
+        if (!list) {
+          const grid = $('grid');
+          grid.className = 'grid';
+          grid.innerHTML = '<div class="grid-hint">正在检索全库…</div>';
+          $('sectionName').textContent = (currentCat === 'home') ? '搜索结果' : catLabel(currentCat);
+          $('resultCount').textContent = '';
+          return;
+        }
+        // 首页没有筛选/排序控件，只按相关度排；分类页沿用用户选的排序与筛选
+        renderGrid(currentCat === 'home' ? rankSearch(list) : sortItems(filterItems(list)));
+        appendSearchHint();
+        return;
+      }
       if (currentCat === 'live') {
         renderLiveGrid(sortLive(filterLive()));
-      } else {
-        renderGrid(sortItems(filterItems(RESOURCES[currentCat])));
-        // 搜索时若该分类尚未加载完，明确提示结果会自动补全 ——
-        // 否则用户看到"没搜到"会以为片库没有这部片（实际只是没加载到那一片）。
-        if (searchQuery && hasPendingParts(currentCat)) {
-          const tip = document.createElement('div');
-          tip.style.cssText = 'grid-column:1/-1;text-align:center;font-size:13px;color:#999;padding:10px 0;';
-          tip.textContent = '正在加载全部片库，搜索结果会自动补全…';
-          $('grid').appendChild(tip);
-        }
+        return;
       }
+      renderGrid(sortItems(filterItems(RESOURCES[currentCat])));
     }
 
     function switchCat(cat) {
@@ -2320,8 +2505,12 @@ __DATA_SCRIPTS__
       liveFilter = '';
       currentSort = cat === 'live' ? 'chan' : 'pop';
       displayLimit = PAGE_SIZE;
+      // 搜索态下换 Tab：先作废上一轮结果（序号自增让在途响应被丢弃），再按新分类重检索
+      const reSearch = !!searchQuery;
+      if (reSearch) { searchResults = null; searchPending = 0; searchTotal = 0; searchSeq++; }
       // 首屏只加载了各分类第 0 片；切到某分类时按需补全该分类剩余分片后再渲染
       ensureCat(cat, render);
+      if (reSearch) runSearch();
     }
 
     function hcardHtml(it, rank) {
@@ -2432,7 +2621,8 @@ __DATA_SCRIPTS__
       $('grid').style.display = isHome ? 'none' : '';
       $('homeView').style.display = isHome ? 'block' : 'none';
       $('search').placeholder = isLive ? '搜索频道...' : '搜索片名...';
-      if (isHome) { renderHome(); return; }
+      // 首页：无搜索词展示多板块；有搜索词（在别的 Tab 里输入后切回来）就切到搜索结果
+      if (isHome) { renderGridOnly(); return; }
       if (isLive) {
         makeLiveTags();
       } else {
@@ -2448,11 +2638,10 @@ __DATA_SCRIPTS__
       if (searchTimer) clearTimeout(searchTimer);
       searchTimer = setTimeout(() => {
         displayLimit = PAGE_SIZE;
-        // 搜索语义必须覆盖整个分类：先立即渲染已加载部分（马上有反馈），
-        // 再把剩余分片拉齐后自动重渲染补全。否则排在后面的分片永远搜不到 ——
-        // 曾表现为「搜『功夫女足』搜不到」：它在 movie 第 4 片，而首屏只同步加载第 1 片。
-        renderGridOnly();
-        if (searchQuery) ensureCat(currentCat, () => renderGridOnly());
+        // 搜索统一交给服务端全库检索（同源 /site/search）：
+        // 以前搜索只能扫「已加载分片」（首页甚至渲染进隐藏的 #grid，点了没反应），
+        // 修法是搜索时把全部分片拉下来本地筛 —— 首页一搜就是 100MB+。
+        runSearch();
       }, 300);
     });
 
@@ -2785,6 +2974,7 @@ def _write_data_shards(resources: Dict[str, list], live_data: List[dict], out_di
         "          if (seen.has(k)) continue;\n"
         "          seen.add(k);\n"
         "        }\n"
+        "        it._cat = c;   // 条目自带分类：首页跨分类搜索结果要靠它算徽标/续播键/播放器分类\n"
         "        r.push(it);\n"
         "      }\n"
         "    };\n"

@@ -265,6 +265,79 @@ function makeData(ctx, origin) {
   };
 }
 
+// ---------- 网站搜索（同源，供网页端搜索框使用）----------
+// 复用生成期搜索索引 search_{cat}.txt（与途播 /Items 同一套）：
+// 单次请求只读 1 个索引 + 命中所属的少数几个分页 → 子请求 ≤ 4，却覆盖该分类全量。
+// 前端按分类并行调用（首页搜索 = 4 个请求，可边到边渲染结果）。
+// 返回的是**网站卡片所需的原始影片对象**（含 url/sources），不是 Jellyfin DTO。
+const SITE_SEARCH_MAX = 300;
+
+async function siteSearchRoute(url, ctx) {
+  const cat = url.searchParams.get("cat") || "movie";
+  const q = (url.searchParams.get("q") || "").trim().toLowerCase();
+  const limit = Math.max(1, Math.min(
+    parseInt(url.searchParams.get("limit") || "120", 10) || 120, SITE_SEARCH_MAX));
+  const noStore = { "cache-control": "no-store" };
+  // 直播是另一套数据结构（频道列表），不参与片名搜索
+  if (!CAT_LABELS[cat] || cat === "live") return json({ ok: false, error: "bad cat" }, 400, noStore);
+  if (!q) return json({ ok: true, cat: cat, q: "", total: 0, movies: [] }, 200, noStore);
+
+  const origin = url.origin;
+  const txt = await getSearchText(cat, ctx, origin);
+  if (!txt) return json({ ok: false, error: "search index missing", cat: cat }, 404, noStore);
+
+  // 稀疏跳跃扫描：只认 name/low 字段 —— 必须跳过行首 id，
+  // 否则查 "a" 这类短词会把十六进制 id 全部命中（与 /Items 搜索同一套逻辑）。
+  // 带空格的查询额外再扫一遍「去掉空格」的形式：片名常把空格写没了
+  // （搜「lady gaga」要能命中「LadyGaga：神彩巡回演唱会」）。
+  const pats = [q];
+  const squeeze = q.replace(/\s+/g, "");
+  if (squeeze && squeeze !== q) pats.push(squeeze);
+
+  const ids = [];
+  const seen = new Set();
+  for (const pat of pats) {
+    let i = txt.indexOf(pat);
+    while (i >= 0) {
+      const ls = txt.lastIndexOf("\n", i) + 1;
+      const t1 = txt.indexOf("\t", ls);
+      if (t1 >= 0 && i > t1) {
+        let le = txt.indexOf("\n", i);
+        if (le < 0) le = txt.length;
+        const id = txt.slice(ls, t1);      // 首个字段即 id
+        if (!seen.has(id)) { seen.add(id); ids.push(id); }
+        if (le >= txt.length) break;
+        i = txt.indexOf(pat, le + 1);      // 同一行只计一次，跳到下一行
+      } else {
+        i = txt.indexOf(pat, i + 1);
+      }
+    }
+  }
+  const total = ids.length;
+
+  // 命中 id → 分页定位（idx 给出有序 id 与页内偏移），同页合并为一次 fetch。
+  // 只还原前 limit 条（扫描顺序＝热度顺序），避免「a」这类短词去拉几百个分页。
+  const idx = await getIdx(cat, ctx, origin);
+  const byPage = new Map();
+  for (let n = 0; n < ids.length && n < limit; n++) {
+    const pos = idx.ids.get(ids[n]);
+    if (pos === undefined) continue;
+    const p = Math.floor(pos / idx.pageSize);
+    if (!byPage.has(p)) byPage.set(p, []);
+    byPage.get(p).push(pos % idx.pageSize);
+  }
+  const movies = [];
+  for (const pair of byPage) {
+    const page = await getPage(cat, pair[0], ctx, origin);
+    for (const off of pair[1]) {
+      const m = page[off];
+      if (m) movies.push(m);
+    }
+  }
+  return json({ ok: true, cat: cat, q: q, total: total, shown: movies.length, movies: movies },
+              200, { "cache-control": "public, max-age=120" });
+}
+
 function json(obj, status = 200, extraHeaders = {}) {
   const headers = {
     "content-type": "application/json; charset=utf-8",
@@ -1192,6 +1265,12 @@ export default {
     ENV = env;   // 捕获绑定（含 KV_DELTA）；无绑定时 deltaEnabled()=false，自动降级纯静态
     const url = new URL(request.url);
     const p = url.pathname;
+
+    // 网站搜索：同源路由，必须在 ASSETS 兜底之前处理
+    if (p === "/site/search") {
+      try { return await siteSearchRoute(url, ctx); }
+      catch (e) { return json({ ok: false, error: String(e) }, 500, { "cache-control": "no-store" }); }
+    }
 
     if (!isJellyfinPath(p)) {
       return env.ASSETS.fetch(request);

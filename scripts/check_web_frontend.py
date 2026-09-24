@@ -87,9 +87,72 @@ new Function('PART_CONC', 'PART_RETRY', fnEnsure + '\n' + fnPending +
   '\nglobalThis.ensureCat=ensureCat; globalThis.hasPendingParts=hasPendingParts;')(PART_CONC, PART_RETRY);
 const arrow = grabBlock(src.indexOf("$('search').addEventListener('input'"), 'e => {');
 const RES_CODE = readFileSync(RESJS, 'utf8');
+g.window.__RESOURCES__ = g.window.__RESOURCES__ || {};   // 先建好，供下面搜索harness抓引用
+
+// ---------- 搜索：从 web.py 现抽真实实现（服务端检索 + 本地兜底）----------
+const SEARCH_FNS = [
+  'function matchSearch(', 'function filterItems(', 'function sortItems(', 'function popScore(',
+  'function catLabel(', 'function searchCatsForView(', 'function localSearchHits(',
+  'function rankSearch(', 'function runSearch(', 'function finishSearch(', 'function ensureView(',
+  'function searchList(', 'function applyHomeSearchView(', 'function appendSearchHint(',
+  'function renderGridOnly(',
+];
+const searchSrc = SEARCH_FNS.map(m => grabBlock(0, m)).join('\n');
+// ⚠️ new Function 建的函数运行在**全局作用域**，看不到模块作用域变量 →
+// 测试桩必须挂在 globalThis 上（SRV / FETCH_MODE），否则报 "SRV is not defined"。
+const SRV = g.SRV = {};               // cat -> 服务端要返回的条目
+g.FETCH_MODE = 'ok';                  // ok | fail | slow
+const makeSearch = new Function(`
+  var SEARCH_CATS = ['movie', 'tv', 'anime', 'variety'];
+  var searchResults = null, searchPending = 0, searchTotal = 0, searchSeq = 0, searchServerFailed = false;
+  var searchQuery = '', currentCat = 'home', displayLimit = 200, PAGE_SIZE = 200, currentSort = 'pop';
+  var activeFilters = { media_type: '', region: '', year: '' };
+  var RESOURCES = globalThis.__RESOURCES__;
+  var CATEGORIES = { home: {label:'首页'}, movie: {label:'电影'}, tv: {label:'剧集'},
+                     anime: {label:'动漫'}, variety: {label:'综艺'}, live: {label:'直播'} };
+  var els = {}, rendered = [], homeCalls = 0, fetchCalls = [];
+  function el() { return { innerHTML: '', textContent: '', className: '', style: {}, kids: [],
+                           appendChild(c) { this.kids.push(c); } }; }
+  function $(id) { return els[id] || (els[id] = el()); }
+  function htmlEscape(s) { return String(s); }
+  function initSortGroup() {}
+  function renderHome() { homeCalls++; }
+  function renderGrid(items) { rendered.push(items.slice()); }
+  function renderLiveGrid() {}
+  function sortLive(x) { return x; }
+  function filterLive() { return []; }
+  function fetch(url) {
+    fetchCalls.push(String(url));
+    const cat = (String(url).match(/cat=([a-z]+)/) || [])[1];
+    if (globalThis.FETCH_MODE === 'fail') return Promise.reject(new Error('boom'));
+    const list = (globalThis.SRV[cat] || []).map(m => Object.assign({}, m));
+    const mk = () => ({ ok: true, json: () => Promise.resolve({ ok: true, cat: cat, total: list.length, movies: list }) });
+    if (globalThis.FETCH_MODE === 'slow') return new Promise(r => setTimeout(() => r(mk()), 60));
+    return Promise.resolve(mk());
+  }
+  ${searchSrc}
+  return {
+    set(o) {
+      if (o.cat !== undefined) currentCat = o.cat;
+      if (o.q !== undefined) searchQuery = o.q;
+      if (o.fetchMode !== undefined) globalThis.FETCH_MODE = o.fetchMode;
+      fetchCalls = []; rendered = []; homeCalls = 0;
+      for (const k of Object.keys(els)) delete els[k];
+    },
+    run: () => runSearch(),
+    state: () => ({ pending: searchPending, total: searchTotal, failed: searchServerFailed,
+                    results: (searchResults || []).slice(), rendered: rendered.slice(),
+                    homeCalls: homeCalls, fetchCalls: fetchCalls.slice() }),
+    el: (id) => $(id),
+  };
+`)();
 
 const reset = () => {
-  g.window.__RESOURCES__ = {}; g.window.__RESSEEN__ = {};
+  // ⚠️ 必须「就地清空」而不是重新赋值：搜索测试那一组脚本里把 __RESOURCES__ 抓成了
+  // 变量引用，重新赋值会让它指向旧对象（表现为「搜索永远 0 条」这种诡异现象）。
+  const R = g.window.__RESOURCES__ = g.window.__RESOURCES__ || {};
+  for (const k of Object.keys(R)) delete R[k];
+  g.window.__RESSEEN__ = {};
   g.window.__READY__ = {}; g.window.__INJECTED__ = {}; g.window.__PENDING__ = {};
   g.window.__LOADING__ = {}; g.window.__QUEUE__ = {}; g.window.__RETRY__ = {}; g.window.__FAILED__ = {};
   g.window.__LOADED_PARTS__ = { movie: FIRST_LOADED };
@@ -100,13 +163,9 @@ const reset = () => {
 let lines = [], allPass = true;
 const say = (s) => lines.push(s);
 const mark = (ok, label) => { if (!ok) allPass = false; say('  -> ' + (ok ? 'PASS' : 'FAIL') + (label ? '  ' + label : '')); };
-let scope;
-const makeScope = () => ({
-  searchQuery: '', searchTimer: null, displayLimit: 9, PAGE_SIZE: 200, currentCat: 'movie',
-  renderCalls: 0, renderGridOnly() { scope.renderCalls++; }, ensureCat,
-});
-const fireSearch = new Function('scope',
-  'with(scope){ return (' + arrow + ')({target:{value:"功夫女足"}}); }');
+// 搜索监听器必须把活交给 runSearch（服务端全库检索）；旧实现只 renderGridOnly()，
+// 于是「只在已加载分片里找」——首页更是渲染进 display:none 的 #grid，点了完全没反应。
+const listenerCallsRunSearch = /runSearch\(\)/.test(arrow);
 
 // A: 并发调用不重复注入
 reset();
@@ -120,31 +179,95 @@ say('  回调数 ' + doneA + ' | 动态注入 ' + Object.keys(stats.injected).le
     ' | 重复注入 ' + (dup.length ? JSON.stringify(dup) : '无') + ' | 条目 ' + totalA + '/' + EXPECT_TOTAL +
     ' | 在途峰值 ' + stats.pendingMax + ')');
 mark(doneA === 3 && dup.length === 0 && totalA === EXPECT_TOTAL && stats.pendingMax <= PART_CONC);
+// __RES__ 必须给每条打上自身分类（首页跨分类搜索的徽标/续播键/播放器分类都靠它）
+const catStamped = (window.__RESOURCES__.movie || [])[0]._cat;
+say('  __RES__ 打的 _cat: ' + JSON.stringify(catStamped) + '（期望 "movie"）');
+mark(catStamped === 'movie');
 
-// B1: 搜索触发全库加载
-reset(); scope = makeScope();
-const beforeParts = Object.keys(stats.injected).length;
-fireSearch(scope);
-await new Promise(r => setTimeout(r, 1000));
-const totalB = (window.__RESOURCES__.movie || []).length;
-const uniqB = new Set((window.__RESOURCES__.movie || []).map(x => x.name)).size;
-const lastInjected = !!window.__INJECTED__[PARTS[PARTS.length - 1]];
-say('=== B1 搜索「功夫女足」正常网速 ===');
-say('  搜索前动态注入 ' + beforeParts + ' | 条目 ' + totalB + '/' + EXPECT_TOTAL + ' | 唯一片名 ' + uniqB +
-    ' | 末片已加载 ' + lastInjected + ' | 渲染 ' + scope.renderCalls + ' 次');
-mark(beforeParts === 0 && totalB === EXPECT_TOTAL && uniqB === totalB && lastInjected && scope.renderCalls >= 2);
+// B0: 搜索监听器接线
+say('=== B0 搜索监听器接线 ===');
+say('  监听器调用 runSearch: ' + listenerCallsRunSearch);
+mark(listenerCallsRunSearch);
 
-// B2: 慢网络下先给即时反馈
-reset(); PART_DELAY = 160; scope = makeScope();
-fireSearch(scope);
-await new Promise(r => setTimeout(r, 360));
-const midCalls = scope.renderCalls, midTotal = (window.__RESOURCES__.movie || []).length;
-await new Promise(r => setTimeout(r, 1500));
-const lateTotal = (window.__RESOURCES__.movie || []).length, lateCalls = scope.renderCalls;
-PART_DELAY = 2;
-say('=== B2 慢网络(每片160ms) ===');
-say('  360ms 时渲染 ' + midCalls + ' 次 / 条目 ' + midTotal + ' | 最终条目 ' + lateTotal + ' | 最终渲染 ' + lateCalls + ' 次');
-mark(midCalls === 1 && midTotal < EXPECT_TOTAL && lateTotal === EXPECT_TOTAL && lateCalls >= 2);
+// B1: 首页搜索（旧实现渲染进 display:none 的 #grid，点了等于没反应）
+reset();
+const mkItem = (name, cat) => ({ name: name, year: '2026', url: 'http://x/' + name, _cat: cat,
+                                 score: 7.5, hits: 100, sources: [{ src: '虎牙', url: 'http://x/' + name }] });
+SRV.movie = [mkItem('功夫女足', 'movie'), mkItem('功夫女足之外星人篇', 'movie')];
+SRV.tv = [mkItem('功夫女足 剧版', 'tv')];
+SRV.anime = []; SRV.variety = [];
+makeSearch.set({ cat: 'home', q: '功夫女足', fetchMode: 'ok' });
+makeSearch.run();
+await new Promise(r => setTimeout(r, 40));
+let S1 = makeSearch.state();
+const lastB1 = S1.rendered[S1.rendered.length - 1] || [];
+say('=== B1 首页搜索「功夫女足」（服务端 /site/search）===');
+say('  请求分类 ' + S1.fetchCalls.length + ' 个 | 结果 ' + lastB1.length + ' 条' +
+    ' | 各条分类 ' + JSON.stringify(lastB1.map(x => x._cat)));
+say('  homeView 显示 ' + JSON.stringify(makeSearch.el('homeView').style.display) +
+    ' | grid 显示 ' + JSON.stringify(makeSearch.el('grid').style.display) +
+    ' | 标题 ' + JSON.stringify(makeSearch.el('sectionName').textContent));
+mark(S1.fetchCalls.length === 4 &&                                   // 首页 = 跨全部分类检索
+     S1.fetchCalls.every(u => u.indexOf('/site/search') === 0) &&
+     lastB1.length === 3 &&
+     lastB1.filter(x => x._cat === 'movie').length === 2 &&
+     lastB1.filter(x => x._cat === 'tv').length === 1 &&
+     makeSearch.el('homeView').style.display === 'none' &&
+     makeSearch.el('grid').style.display === '' &&
+     makeSearch.el('sectionName').textContent === '搜索结果' && S1.pending === 0);
+
+// B2: 检索中先给反馈，响应到达再补画（渐进）
+reset();
+makeSearch.set({ cat: 'home', q: '功夫女足', fetchMode: 'slow' });
+makeSearch.run();
+await new Promise(r => setTimeout(r, 20));
+const midHtml = makeSearch.el('grid').innerHTML, midRendered = makeSearch.state().rendered.length;
+await new Promise(r => setTimeout(r, 120));
+const finB2 = makeSearch.state();
+say('=== B2 慢响应（60ms）===');
+say('  20ms 时 grid 文案 ' + JSON.stringify(midHtml) + ' | 已渲染批次 ' + midRendered +
+    ' | 最终结果 ' + ((finB2.rendered[finB2.rendered.length - 1] || []).length));
+mark(/正在检索全库/.test(midHtml) && finB2.pending === 0 &&
+     (finB2.rendered[finB2.rendered.length - 1] || []).length === 3);
+
+// B3: 清空搜索词 → 回到首页多板块
+reset();
+makeSearch.set({ cat: 'home', q: '', fetchMode: 'ok' });
+makeSearch.run();
+await new Promise(r => setTimeout(r, 20));
+const S3 = makeSearch.state();
+say('=== B3 清空搜索词 ===');
+say('  renderHome 调用 ' + S3.homeCalls + ' 次 | homeView ' + JSON.stringify(makeSearch.el('homeView').style.display) +
+    ' | grid ' + JSON.stringify(makeSearch.el('grid').style.display) + ' | 请求数 ' + S3.fetchCalls.length);
+mark(S3.homeCalls === 1 && makeSearch.el('homeView').style.display === 'block' &&
+     makeSearch.el('grid').style.display === 'none' && S3.fetchCalls.length === 0);
+
+// B4: 分类 Tab 内搜索只查该分类
+reset();
+makeSearch.set({ cat: 'movie', q: '功夫女足', fetchMode: 'ok' });
+makeSearch.run();
+await new Promise(r => setTimeout(r, 40));
+const S4 = makeSearch.state();
+const lastB4 = S4.rendered[S4.rendered.length - 1] || [];
+say('=== B4 分类 Tab(movie) 内搜索 ===');
+say('  请求 ' + JSON.stringify(S4.fetchCalls) + ' | 结果 ' + lastB4.length + ' 条');
+mark(S4.fetchCalls.length === 1 && /cat=movie/.test(S4.fetchCalls[0]) &&
+     lastB4.length === 2 && lastB4.every(x => x._cat === 'movie'));
+
+// B5: 服务端不可用 → 降级本地分片扫描（分享站网关没有该路由）
+reset();
+makeSearch.set({ cat: 'home', q: 'P0_', fetchMode: 'fail' });
+makeSearch.run();
+await new Promise(r => setTimeout(r, 50));
+const S5 = makeSearch.state();
+await new Promise(r => setTimeout(r, 600));   // 等 ensureView 把分片拉齐后重渲染
+const S5b = makeSearch.state();
+const lastB5 = S5b.rendered[S5b.rendered.length - 1] || [];
+say('=== B5 服务端搜索失败 → 本地兜底 ===');
+say('  failed=' + S5.failed + ' | 降级后抽到分片 ' + Object.keys(stats.injected).length +
+    ' | 本地命中 ' + lastB5.length + ' 条');
+mark(S5.failed === true && Object.keys(stats.injected).length >= PARTS.length - FIRST_LOADED &&
+     lastB5.length > 0 && lastB5.every(x => /^P0_/.test(x.name)));
 
 // C: 幂等兜底
 const beforeC = (window.__RESOURCES__.movie || []).length;
@@ -242,6 +365,60 @@ stallEval(noQ, st3);
 say('  浏览器不给帧统计时: 采样 ' + JSON.stringify(st3) + '（不启用检测）');
 mark(st3.hits === 0 && st3.frames === null);
 
+// F: 跨分类搜索结果逐条按「条目自己的分类」渲染（真 renderGrid）
+//    首页搜索是混合列表，徽标/续播键/播放器分类都必须取 it._cat —— 用 currentCat 会全错。
+const fnRenderGrid = grabBlock(0, 'function renderGrid(');
+const fnCatLabelF = grabBlock(0, 'function catLabel(');
+const fnHtmlEsc = grabBlock(0, 'function htmlEscape(');
+const opened = [], progressKeys = [];
+const fx = new Function('state', `
+  var state = arguments[0];
+  var searchQuery = state.q, currentCat = state.cat, displayLimit = 50, PAGE_SIZE = 50;
+  var CATEGORIES = { home:{label:'首页'}, movie:{label:'电影'}, tv:{label:'剧集'}, anime:{label:'动漫'}, variety:{label:'综艺'}, live:{label:'直播'} };
+  var grid = { className: '', innerHTML: '', kids: [], appendChild(el) { this.kids.push(el); } };
+  var meta = { textContent: '' }, count = { textContent: '' };
+  function $(id) { return id === 'grid' ? grid : (id === 'sectionName' ? meta : count); }
+  function cardProgress(k) { state.progressKeys.push(k); return { t: 0, d: 0 }; }
+  function openPlayer(it, cat) { state.opened.push([it.name, cat]); }
+  function openDetail(it, cat) { state.opened.push([it.name, 'D:' + cat]); }
+  function document_createEl() {
+    const el = { className: '', innerHTML: '', textContent: '', href: '', style: {}, kids: [],
+                 appendChild(c) { this.kids.push(c); }, querySelector() { return this._poster; } };
+    el._poster = { appendChild(c) { this.kids = (this.kids || []).concat([c]); }, style: {} };
+    return el;
+  }
+  var document = { createElement: document_createEl };
+  ${fnRenderGrid}
+  ${fnCatLabelF}
+  ${fnHtmlEsc}
+  return { grid: grid, meta: meta, count: count, renderGrid: renderGrid };
+`)({ q: '功夫女足', cat: 'home', opened: opened, progressKeys: progressKeys });
+const fg = fx.grid;
+fx.renderGrid([
+  { name: '功夫女足', year: '2026', _cat: 'movie', score: 7.5, region: '内地', quality: 'HD',
+    cover: 'c1.jpg', url: 'http://x/1', sources: [{ src: '虎牙', url: 'http://x/1' }] },
+  { name: '功夫女足外传', year: '2026', _cat: 'anime', score: 8.6, region: '日本',
+    cover: 'c2.jpg', url: 'http://x/2', sources: [{ src: '爱坤', url: 'http://x/2' }] },
+]);
+const fCards = fg.kids.filter(k => (k.className || '').indexOf('card') >= 0);
+say('=== F 跨分类结果的逐条分类 ===');
+say('  渲染 ' + fCards.length + ' 张卡 | 标题 ' + JSON.stringify(fx.meta.textContent) +
+    ' | 续播键 ' + JSON.stringify(progressKeys));
+say('  卡片1 meta ' + JSON.stringify((fCards[0].innerHTML.match(/class="meta">([^<]*)</) || [])[1]) +
+    ' | 卡片2 meta ' + JSON.stringify((fCards[1].innerHTML.match(/class="meta">([^<]*)</) || [])[1]));
+const card1 = fCards[0].innerHTML, card2 = fCards[1].innerHTML;
+mark(fCards.length === 2 &&
+     fx.meta.textContent === '搜索结果' &&
+     /电影 ·/.test((card1.match(/class="meta">([^<]*)</) || [])[1] || '') &&
+     /动漫 ·/.test((card2.match(/class="meta">([^<]*)</) || [])[1] || '') &&
+     card1.indexOf('ep-badge') < 0 && card2.indexOf('ep-badge') >= 0 &&   // 「全集」只该出现在动漫那条
+     progressKeys[0] === 'movie|功夫女足|2026' && progressKeys[1] === 'anime|功夫女足外传|2026');
+// 点击卡片进播放器：分类必须取条目自身的，否则续播进度会记到错误的分类下
+fCards[0].onclick({ preventDefault() {} });
+fCards[1].onclick({ preventDefault() {} });
+say('  点击后 openPlayer 收到 ' + JSON.stringify(opened));
+mark(opened.length === 2 && opened[0][1] === 'movie' && opened[1][1] === 'anime');
+
 console.log(lines.join('\n'));
 console.log('\nVERDICT: ' + (allPass ? 'PASS' : 'FAIL'));
 process.exit(allPass ? 0 : 1);
@@ -315,8 +492,14 @@ def main():
                                   ("function hasPendingParts", tpl, "模板"),
                                   ("function isDeadSource", tpl, "模板"),
                                   ("function stallEvaluate", tpl, "模板"),
+                                  ("function runSearch", tpl, "模板"),
+                                  ("function applyHomeSearchView", tpl, "模板"),
+                                  ("function appendSearchHint", tpl, "模板"),
+                                  ("/site/search?cat=", tpl, "模板"),
+                                  (".grid-hint", tpl, "模板"),
                                   ("header-row", tpl, "模板"),
-                                  ("__RESSEEN__", src, "源"), ("seen.has(k)", src, "源")]:
+                                  ("__RESSEEN__", src, "源"), ("seen.has(k)", src, "源"),
+                                  ("it._cat = c;", src, "源")]:
             if pat not in where:
                 ok = False
                 print(f"  标记缺失 [{label}]: {pat}")
