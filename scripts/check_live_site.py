@@ -71,6 +71,7 @@ FRONTEND_MARKERS = {
     # 2026-09-24 补：服务端撞到分页数上限时客户端凭 nextOff 续拉（否则散落命中 0 结果）
     "搜索续拉 searchCatTask": ("function searchCatTask", True),
     "续拉游标 nextOff": ("d.nextOff", True),
+    "线路名形态归一 srcList": ("function srcList(", True),
 }
 
 # 布局断言：搜索框必须与分类 Tab 同一行（在 <header> 内），且 <main> 里不得重复

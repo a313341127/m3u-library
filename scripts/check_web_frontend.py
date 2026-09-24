@@ -359,6 +359,25 @@ rsBox = makeRs.run([S('虎牙', false), S('爱坤', false)], 0, false);
 say('  全部探测失败但当前正在播第 0 条 -> 渲染 ' + rsBox.kids.length + ' 个按钮（必须留住当前线路）');
 mark(rsBox.kids.length >= 1 && rsBox.kids[0].className.indexOf('active') >= 0);
 
+// D2: srcList 归一 —— 搜索/API 形态 sources=[url,...]+srcs=[名,...] 必须转成
+// [{src,url}]，否则播放器整排兜底「线路1..N」、中文线路名全丢（2026-09-24 线上实锤）
+const fnSrcList = grabBlock(0, 'function srcList(');
+const srcList = new Function(`return ${fnSrcList}`)();
+const apiItem = { name: '功夫女足', url: 'http://a/1',
+                  sources: ['http://a/1', 'http://b/2', 'http://c/3', 'http://d/4'],
+                  srcs: ['聚合', '红牛', '聚合', ''] };
+const wl = srcList(apiItem);
+const webItem = { sources: [{ src: '光速', url: 'http://x/1' }], url: 'http://x/1' };
+const wl2 = srcList(webItem);
+const wl3 = srcList({ url: 'http://y/1' });
+say('=== D2 srcList 归一（API 形态） ===');
+say('  API 形态 4 条 -> ' + JSON.stringify(wl.map(x => x.src)) +
+    ' | web 形态透传 ' + wl2[0].src + ' | 空线路兜底 ' + wl3[0].src);
+mark(wl.length === 4 && wl[0].src === '聚合' && wl[1].src === '红牛' &&
+     wl[2].src === '聚合2' && wl[3].src === '线路4' &&
+     wl[0].url === 'http://a/1' &&
+     wl2[0].src === '光速' && wl3[0].src === '默认线路');
+
 // E: 画面冻结自愈（stallEvaluate 真代码）
 const fnFrames = grabBlock(0, 'function videoFrameCount(');
 const fnStall = grabBlock(0, 'function stallEvaluate(');

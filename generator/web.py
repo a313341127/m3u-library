@@ -1361,8 +1361,7 @@ __DATA_SCRIPTS__
 
       const box = $('dvSources');
       box.innerHTML = '';
-      const list = (item.sources && item.sources.length)
-        ? item.sources : [{ src: '默认线路', url: item.url }];
+      const list = srcList(item);
       list.forEach(function (s, i) {
         const b = document.createElement('button');
         b.className = 'dv-src';
@@ -1523,13 +1522,31 @@ __DATA_SCRIPTS__
       return r ? buildResolverUrl(r, base.url) : '';
     }
 
+    // 归一线路列表：两种数据形态并存——
+    //   web 分片：sources=[{src,url,episodes},...]（生成期已做好中文名+重名后缀）
+    //   API/搜索：sources=[url,...] + srcs=[中文名,...]（/site/search、api/cat_*.json）
+    // 不归一的话，搜索/直链进来的卡片 sources 全是字符串 → s.src 为 undefined
+    // → 播放器整排兜底「线路1..N」，srcs 里的中文线路名全被丢掉。
+    function srcList(item) {
+      const s = (item && item.sources) || [];
+      if (!s.length) return [{ src: '默认线路', url: (item && item.url) || '' }];
+      if (typeof s[0] !== 'string') return s;
+      const names = (item && item.srcs) || [];
+      const used = {};
+      return s.map(function (u, i) {
+        let n = names[i] || ('线路' + (i + 1));
+        if (used[n]) { let k = 2; while (used[n + k]) k++; n = n + k; }
+        used[n] = true;
+        return { src: n, url: u };
+      });
+    }
+
     function openPlayer(item, cat, startIdx) {
       currentIsLive = (cat === 'live');
       const myToken = ++playerToken;
       currentItemKey = cat + '|' + (item.name || '') + '|' + (item.year || '');
       showAllSources = false;   // 每部影片都从「隐藏不可用线路」的默认态开始
-      currentSources = (item.sources && item.sources.length)
-        ? item.sources.slice() : [{ src: '默认线路', url: item.url }];
+      currentSources = srcList(item);
       // 默认首选服务端中转线路：可自定义 Referer/UA 绕过源站反盗链；
       // 若中转失败再回退尝试直连源。直播保持直连，避免 worker 代理实时流。
       const resolverList = (window.RESOLVER_LINES || []).filter(r => r && r.url);
@@ -1584,7 +1601,7 @@ __DATA_SCRIPTS__
         }
       };
       _considerEps(item.episodes);
-      (item.sources || []).forEach(s => _considerEps(s.episodes));
+      srcList(item).forEach(s => _considerEps(s.episodes));
       renderSources();
       renderEpisodes();
       // 内嵌播放器：打开时滚动到播放器位置，而不是锁 body 滚动
@@ -2072,7 +2089,7 @@ __DATA_SCRIPTS__
     $('dvCopy').onclick = function () {
       const d = currentDetail;
       if (!d) return;
-      const s = d.item.sources || [];
+      const s = srcList(d.item);
       copyToClipboard((s[0] && s[0].url) || d.item.url || '');
     };
 
