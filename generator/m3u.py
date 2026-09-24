@@ -88,6 +88,28 @@ def film_fingerprint(description: str) -> str:
     return hashlib.md5(d.encode("utf-8")).hexdigest()
 
 
+# ---------------------------------------------------------------- 年份钳制（判定与显示共用的唯一规则）
+# 源站常把年份标成垃圾值（2030/2036…）。显示层（build_from_rows）一直把它们钳成
+# None，但 cluster_ids 判定层此前用的是**原始年份** —— 同一部片会因「垃圾年份
+# 不同」被 (名,年) 键拆成多张卡，且这些卡显示完全相同（都是无年份）：
+#   实测 anime「新大头儿子和小头爸爸—— 运动中国行」2026/2030/2036 → 3 张卡，
+#   其中两张 id 仅差 _1 后缀（id 基座相同），电影「女兵突击」同理裂成 2 张。
+# 收口成单一函数：cluster_ids（判定）与 generate_movies_json（显示）必须共用，
+# 判定口径与显示口径一致后，垃圾年份的同片自然合并。
+# ⚠️ YEAR_MAX 需要随年份维护（2027 年 1 月改成 2027），否则新一年度的片会被当垃圾年。
+YEAR_MIN = 1900
+YEAR_MAX = 2026
+
+
+def sane_year(y):
+    """年份钳制：仅接受 YEAR_MIN–YEAR_MAX 的整数，其余（垃圾值/缺失/非整数）一律 None。
+
+    这是「同一部片」判定与显示共用的年份口径；判定层与显示层必须一致，
+    否则会出现「卡片显示无年份、却因垃圾年份不同而裂成多张」的重复。
+    """
+    return y if isinstance(y, int) and YEAR_MIN <= y <= YEAR_MAX else None
+
+
 def film_merge_key(it: dict) -> tuple:
     """合并键。prepare_items / _flat_best_items 会先跑聚类并把组号挂到 _ckey，
     此时直接返回组号（这样「豆瓣 ID 跨源合并」的连通分量结果才能被 web 的线路聚合
@@ -100,7 +122,7 @@ def film_merge_key(it: dict) -> tuple:
     fp = film_fingerprint(it.get("description") or "")
     if fp:
         return (name, fp)
-    return (name, "\x00y:%s" % (it.get("year") if it.get("year") is not None else ""))
+    return (name, "\x00y:%s" % (sane_year(it.get("year")) or ""))
 
 
 def entry_field(entry, key, default=None):
@@ -184,7 +206,10 @@ def cluster_ids(entries, name_key=None) -> List[int]:
 
     nk = name_key or _default_name_key
     names = [nk(e) for e in entries]
-    years = [entry_field(e, "year", "") or "" for e in entries]
+    # 年份与显示层同口径（sane_year 钳制）：源站的垃圾年份（2030/2036…）在
+    # 显示层早已钳成 None，判定层若用原始年份会把同片裂成多张「显示一模一样」
+    # 的卡（实测：新大头儿子和小头爸爸——运动中国行 2026/2030/2036 → 3 张卡）。
+    years = [sane_year(entry_field(e, "year", "")) or "" for e in entries]
     fps = [film_fingerprint(entry_field(e, "description", "") or "") for e in entries]
 
     # ① 豆瓣 ID（强键，先建立可靠分组）
@@ -248,6 +273,51 @@ def match_name(name: str) -> str:
     n = clean_title(name or "")
     n = _MATCH_PUNCT_RE.sub("", n)
     return n.casefold()
+
+
+# ------------------------------------------------- 卡片端判定/排序/id 键（收口后的唯一实现）
+# generate_movies_json / jellyfin_data / sync_delta_kv 一律从这里 import。
+# ⚠️ 禁止再内联副本 —— 历史上 4 处副本各自漂移，是「同一部片裂成多张卡」
+# 反复复发的根因（748 组缺口、网页/途播卡片数对不上都源于此）。
+# 注意区分三个键的用途：
+#   clean_title  显示清洗（保留标点，id/途播 JSON 的 sort 也基于它）
+#   match_name   判定用归一片名（m3u/TXT 输出侧，不剥季集——分季是刻意保留的）
+#   match_sort   判定用归一片名（卡片/途播侧，剥季集+年份括号）
+_YEAR_BRACKET_RE = re.compile(r"[\（\(]\d{4}[\）\)]")
+_SEASON_TAIL_RE = re.compile(r"\s*[第][\d一二三四五六七八九十百千]+[季部集话]")
+
+
+def clean_sort(name: str) -> str:
+    """去掉清晰度/音轨标记、年份括号、季集后缀，保留核心用于排序与去重。"""
+    n = clean_title(name or "").strip()
+    n = _YEAR_BRACKET_RE.sub("", n)
+    n = _SEASON_TAIL_RE.sub("", n)
+    return n.strip() or (name or "")
+
+
+def match_sort(name: str) -> str:
+    """途播/卡片端**判定用**片名（显示不用它）：一年份括号 + 去季集后缀 + match_name。
+
+    cluster_ids 的卡片侧 name_key 走这里，保证「(片名,年份) 去重」与
+    「豆瓣 ID 连通分量聚类」用的是同一套片名归一。
+    """
+    n = _YEAR_BRACKET_RE.sub("", name or "")
+    n = _SEASON_TAIL_RE.sub("", n)
+    return match_name(n) or (name or "").strip().casefold()
+
+
+def norm_key(name: str, year) -> tuple:
+    """去重主键：归一片名 + 年份（归一片名见 match_sort）。"""
+    return (match_sort(name), year)
+
+
+def id_sort(name: str) -> str:
+    """**仅用于生成稳定 id** 的片名归一：保持历史行为（clean_sort + 小写 + 去空白）。
+
+    ⚠️ 不要改这个函数 —— id 由「id_sort(片名) + 年份」派生，改动会让大量影片 id 变化，
+    途播端这些片的播放历史/收藏会全部重置。去重判定另走 match_sort / cluster_ids。
+    """
+    return re.sub(r"\s+", "", clean_sort(name).lower())
 
 
 # ---------------------------------------------------------------- 分类归属纠正

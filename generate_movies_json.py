@@ -31,7 +31,6 @@ import json
 import sys
 import os
 import glob
-import re
 import datetime
 import hashlib
 import sqlite3
@@ -46,8 +45,10 @@ sys.path.insert(0, ROOT)
 _LIVE_LOGO_ROOT = os.path.join(ROOT, "data", "live_logos")
 import config  # noqa: E402
 from generator.m3u import (  # noqa: E402
-    _region_bucket, _is_domestic, strip_audio_tags, clean_title, match_name,
-    film_fingerprint, cluster_ids,
+    _region_bucket, _is_domestic, cluster_ids,
+    # 卡片端判定/排序/id 键：收口后的唯一实现在 generator.m3u（含 sane_year 年份钳制），
+    # 严禁再在本文件内联副本 —— 历史上多处副本漂移是「同片裂多卡」反复复发的根因。
+    clean_sort, match_sort, id_sort, sane_year,
 )
 from generator import health as _health  # noqa: E402
 
@@ -64,45 +65,6 @@ JELLYFIN_CATS = [
     ("variety", "v_", "综艺"),
     ("anime", "a_", "动漫"),
 ]
-
-
-def clean_sort(name: str) -> str:
-    """去掉清晰度标记（4K/1080P/高清…）、音轨标记（国语/粤语…）、年份括号与季集后缀，
-    保留核心用于排序与去重。
-
-    必须与网页端 generator.m3u.clean_title 用同一套剥离规则，否则同一部片
-    在途播端与网页端的卡片数会对不上（实测途播端此前只去音轨、不去清晰度，
-    漏掉 748 组「美国往事 / 美国往事高清 / 美国往事4K」这类重复）。
-    """
-    n = clean_title(name or "").strip()
-    n = re.sub(r"[\（\(]\d{4}[\）\)]", "", n)
-    n = re.sub(r"\s*[第][\d一二三四五六七八九十百千]+[季部集话]", "", n)
-    return n.strip() or (name or "")
-
-
-def match_sort(name: str) -> str:
-    """途播端**判定用**片名（显示不用它）：一年份括号 + 去季集后缀 + match_name。
-
-    norm_key 的名称部分与 cluster_ids 的 name_key 都走这里，保证
-    「(片名,年份) 去重」与「豆瓣 ID 连通分量聚类」用的是同一套片名归一。
-    """
-    n = re.sub(r"[\（\(]\d{4}[\）\)]", "", name or "")
-    n = re.sub(r"\s*[第][\d一二三四五六七八九十百千]+[季部集话]", "", n)
-    return match_name(n) or (name or "").strip().casefold()
-
-
-def norm_key(name: str, year) -> tuple:
-    """去重主键：归一片名 + 年份（归一片名见 match_sort）。"""
-    return (match_sort(name), year)
-
-
-def id_sort(name: str) -> str:
-    """**仅用于生成稳定 id** 的片名归一：保持历史行为（clean_sort + 小写 + 去空白）。
-
-    ⚠️ 不要改这个函数 —— id 由「id_sort(片名) + 年份」派生，改动会让大量影片 id 变化，
-    途播端这些片的播放历史/收藏会全部重置。去重判定另走 match_sort / cluster_ids。
-    """
-    return re.sub(r"\s+", "", clean_sort(name).lower())
 
 
 def popularity(hits, score, lines: int = 1, year: int = None) -> float:
@@ -231,7 +193,7 @@ def build_from_rows(rows, cat: str, prefix: str) -> list:
     """对「已按分类筛好的」资源行做同片合并 + 合并线路 + 格式化，产出规范影片记录。
 
     同片判定走 generator.m3u.cluster_ids（豆瓣 ID 强键 → 片名+年份 → 片名+简介指纹），
-    与网页端共用同一套连通分量逻辑；name_key 用途播自己的 match_sort，
+    与网页端共用同一套连通分量逻辑；name_key 用收口后的 generator.m3u.match_sort，
     以保留「去季集后缀」等既有语义。
 
     抽出为独立函数，使 sync_delta_kv.py 能对「仅最近新增的行子集」复用同一套
@@ -241,8 +203,9 @@ def build_from_rows(rows, cat: str, prefix: str) -> list:
     merged = {}
     order = []
     for idx, row in enumerate(rows):
-        yi = row["year"]
-        year = yi if (isinstance(yi, int) and 1900 <= yi <= 2026) else None
+        # 年份口径与判定层同源（generator.m3u.sane_year）：垃圾年份（2030…）一律 None，
+        # 这样 cluster_ids 判定与显示不会出现「同一部片裂成多张 year=None 的卡」。
+        year = sane_year(row["year"])
         key = cids[idx]
         u = (row["url"] or "").strip()
         # 线路名优先；缺失时回退到采集源名（总比显示「未知线路」有用）
