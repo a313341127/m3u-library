@@ -53,8 +53,9 @@ FRONTEND_MARKERS = {
     "终态标记 __READY__": ("__READY__", True),
     "并发注入 const PART_CONC": ("const PART_CONC", True),
     "旧 push 单行已消失": ("for (var i = 0; i < a.length; i++) r.push(a[i]);", False),
-    "搜索补全提示": ("正在加载全部片库", True),
-    "搜索触发 ensureCat": ("if (searchQuery) ensureCat(currentCat", True),
+    "搜索补全提示": ("正在检索全库", True),
+    # 注：旧「搜索触发 ensureCat 补全分片」已被服务端 /site/search 取代（2026-09-24），
+    # 不再保留该正向标记 —— 留着会因代码已删除而永远 readiness_gaps 非空、--wait 白等 90 分钟。
     "筛选/排序补 ensureCat": ("ensureCat(currentCat, render)", True),
     # 2026-09-23：播放体验四项改动
     "画面冻结自愈 stallEvaluate": ("function stallEvaluate", True),
