@@ -93,7 +93,8 @@ g.window.__RESOURCES__ = g.window.__RESOURCES__ || {};   // 先建好，供下�
 const SEARCH_FNS = [
   'function matchSearch(', 'function filterItems(', 'function sortItems(', 'function popScore(',
   'function catLabel(', 'function searchCatsForView(', 'function localSearchHits(',
-  'function rankSearch(', 'function runSearch(', 'function finishSearch(', 'function ensureView(',
+  'function rankSearch(', 'function searchCatTask(', 'function runSearch(',
+  'function finishSearch(', 'function ensureView(',
   'function searchList(', 'function applyHomeSearchView(', 'function appendSearchHint(',
   'function renderGridOnly(',
 ];
@@ -102,9 +103,12 @@ const searchSrc = SEARCH_FNS.map(m => grabBlock(0, m)).join('\n');
 // 测试桩必须挂在 globalThis 上（SRV / FETCH_MODE），否则报 "SRV is not defined"。
 const SRV = g.SRV = {};               // cat -> 服务端要返回的条目
 g.FETCH_MODE = 'ok';                  // ok | fail | slow
+g.SRV_TRUNC = 0;                      // >0 时模拟服务端「分页数上限被撞到」：每轮只还这么多条
 const makeSearch = new Function(`
   var SEARCH_CATS = ['movie', 'tv', 'anime', 'variety'];
   var searchResults = null, searchPending = 0, searchTotal = 0, searchSeq = 0, searchServerFailed = false;
+  var searchCatTotals = {};
+  var SEARCH_ROUNDS_MAX = 3;
   var searchQuery = '', currentCat = 'home', displayLimit = 200, PAGE_SIZE = 200, currentSort = 'pop';
   var activeFilters = { media_type: '', region: '', year: '' };
   var RESOURCES = globalThis.__RESOURCES__;
@@ -122,11 +126,24 @@ const makeSearch = new Function(`
   function sortLive(x) { return x; }
   function filterLive() { return []; }
   function fetch(url) {
-    fetchCalls.push(String(url));
-    const cat = (String(url).match(/cat=([a-z]+)/) || [])[1];
+    const u = String(url);
+    fetchCalls.push(u);
+    const cat = (u.match(/cat=([a-z]+)/) || [])[1];
     if (globalThis.FETCH_MODE === 'fail') return Promise.reject(new Error('boom'));
-    const list = (globalThis.SRV[cat] || []).map(m => Object.assign({}, m));
-    const mk = () => ({ ok: true, json: () => Promise.resolve({ ok: true, cat: cat, total: list.length, movies: list }) });
+    const all = (globalThis.SRV[cat] || []).map(m => Object.assign({}, m));
+    // ⚠️ 这段桩代码本身位于 JS 模板字符串内，正则里的 \\d 会被模板字面量吃掉转义
+    // （变成 /off=(d+)/ 永不匹配）→ 用纯字符串解析，避免任何反斜杠。
+    const oi = u.indexOf('off=');
+    const off = oi >= 0 ? (parseInt(u.slice(oi + 4), 10) || 0) : 0;
+    // SRV_TRUNC>0：模拟 worker 撞到 SITE_SEARCH_MAX_PAGES，只还原一部分并回传 nextOff
+    const cap = globalThis.SRV_TRUNC || 0;
+    const avail = Math.max(0, all.length - off);
+    const list = all.slice(off, off + (cap > 0 ? Math.min(cap, avail) : avail));
+    const rest = avail - list.length;
+    const trun = cap > 0 && rest > 0;
+    const mk = () => ({ ok: true, json: () => Promise.resolve({
+      ok: true, cat: cat, total: all.length, shown: list.length, off: off,
+      truncated: trun, nextOff: trun ? off + list.length : null, movies: list }) });
     if (globalThis.FETCH_MODE === 'slow') return new Promise(r => setTimeout(() => r(mk()), 60));
     return Promise.resolve(mk());
   }
@@ -136,6 +153,7 @@ const makeSearch = new Function(`
       if (o.cat !== undefined) currentCat = o.cat;
       if (o.q !== undefined) searchQuery = o.q;
       if (o.fetchMode !== undefined) globalThis.FETCH_MODE = o.fetchMode;
+      if (o.trunc !== undefined) globalThis.SRV_TRUNC = o.trunc;
       fetchCalls = []; rendered = []; homeCalls = 0;
       for (const k of Object.keys(els)) delete els[k];
     },
@@ -253,6 +271,27 @@ say('=== B4 分类 Tab(movie) 内搜索 ===');
 say('  请求 ' + JSON.stringify(S4.fetchCalls) + ' | 结果 ' + lastB4.length + ' 条');
 mark(S4.fetchCalls.length === 1 && /cat=movie/.test(S4.fetchCalls[0]) &&
      lastB4.length === 2 && lastB4.every(x => x._cat === 'movie'));
+
+// B6: 服务端撞到「分页数上限」被截断 → 客户端凭 nextOff 续拉补齐。
+// 线上真实场景：tv「狂飙」42 条命中散在 37 个分页，一次全拉必然 500 Too many subrequests。
+// 注意必须在 B5（会 reset 并拉齐全部分片）之前，否则会把 B5 建立的状态清掉、连带 C 组误报。
+// 也刻意用 movie（分片已存在）而非 tv：searchCatsForView 对「无分片的分类」会退化成全分类。
+SRV.movie = [mkItem('狂飙', 'movie'), mkItem('狂飙 第二季', 'movie'), mkItem('狂飙 番外', 'movie'),
+             mkItem('狂飙 合集', 'movie'), mkItem('狂飙 花絮', 'movie')];
+makeSearch.set({ cat: 'movie', q: '狂飙', fetchMode: 'ok', trunc: 2 });
+makeSearch.run();
+await new Promise(r => setTimeout(r, 40));
+const S6 = makeSearch.state();
+const lastB6 = S6.rendered[S6.rendered.length - 1] || [];
+const offsB6 = S6.fetchCalls.map(u => (u.match(/[?&]off=(\d+)/) || [0, '0'])[1]);
+say('=== B6 服务端截断 → 续拉补齐 ===');
+say('  5 条命中 / 每轮只还 2 条 -> 请求 ' + S6.fetchCalls.length + ' 次（off=' + offsB6.join(',') + '）' +
+    ' | 结果 ' + lastB6.length + ' 条 | total ' + S6.total + ' | pending ' + S6.pending);
+mark(S6.fetchCalls.length === 3 && offsB6[0] === '0' && offsB6[1] === '2' && offsB6[2] === '4' &&
+     lastB6.length === 5 && new Set(lastB6.map(x => x.name)).size === 5 &&
+     lastB6.every(x => x._cat === 'movie') && S6.total === 5 && S6.pending === 0);
+makeSearch.set({ trunc: 0 });
+SRV.movie = [mkItem('功夫女足', 'movie'), mkItem('功夫女足之外星人篇', 'movie')];
 
 // B5: 服务端不可用 → 降级本地分片扫描（分享站网关没有该路由）
 reset();
@@ -493,6 +532,9 @@ def main():
                                   ("function isDeadSource", tpl, "模板"),
                                   ("function stallEvaluate", tpl, "模板"),
                                   ("function runSearch", tpl, "模板"),
+                                  ("function searchCatTask", tpl, "模板"),
+                                  ("SEARCH_ROUNDS_MAX", tpl, "模板"),
+                                  ("d.nextOff", tpl, "模板"),
                                   ("function applyHomeSearchView", tpl, "模板"),
                                   ("function appendSearchHint", tpl, "模板"),
                                   ("/site/search?cat=", tpl, "模板"),

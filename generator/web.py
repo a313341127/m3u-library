@@ -2373,6 +2373,36 @@ __DATA_SCRIPTS__
         || popScore(b) - popScore(a) || (b.lines || 0) - (a.lines || 0));
     }
 
+    // 每一轮都是一次**独立**的 Worker 调用：服务端单次调用有子请求上限，命中散落在
+    // 很多分页时它只还原一部分并回传 nextOff，客户端凭 nextOff 续拉补齐（不丢结果）。
+    const SEARCH_ROUNDS_MAX = 3;
+    let searchCatTotals = {};       // 每个分类的服务端命中总数（按分类记账，多轮不重复累加）
+
+    function searchCatTask(c, q, seq) {
+      const step = (round, off) => {
+        const url = '/site/search?cat=' + c + '&limit=200&q=' + encodeURIComponent(q)
+                  + (off ? ('&off=' + off) : '');
+        return fetch(url, { headers: { 'Accept': 'application/json' } })
+          .then(r => (r.ok ? r.json() : null))
+          .then(d => {
+            if (seq !== searchSeq) return;            // 已开始新一轮搜索，丢弃本次响应
+            if (!d || !d.ok) { searchServerFailed = true; return; }
+            const list = d.movies || [];
+            for (let i = 0; i < list.length; i++) list[i]._cat = c;
+            searchResults = searchResults.concat(list);
+            searchCatTotals[c] = Math.max(searchCatTotals[c] || 0, d.total || list.length);
+            searchTotal = 0;
+            Object.keys(searchCatTotals).forEach(k => { searchTotal += searchCatTotals[k]; });
+            renderGridOnly();                          // 每轮到达都补画一次，保持渐进呈现
+            const next = d.nextOff;
+            if (round + 1 < SEARCH_ROUNDS_MAX && d.truncated && next > off) {
+              return step(round + 1, next);           // 服务端被分页数上限截断 → 续拉
+            }
+          });
+      };
+      return step(0, 0);
+    }
+
     // 发起一次搜索：先渲染「检索中」，随后每个分类的响应到达就补画一次（渐进呈现）
     function runSearch() {
       const q = searchQuery;
@@ -2386,23 +2416,10 @@ __DATA_SCRIPTS__
         return;
       }
       const cats = searchCatsForView();
-      searchResults = []; searchPending = cats.length; searchTotal = 0;
+      searchResults = []; searchPending = cats.length; searchTotal = 0; searchCatTotals = {};
       renderGridOnly();                           // 立刻给出「正在检索全库…」，否则像点了没反应
       cats.forEach(c => {
-        fetch('/site/search?cat=' + c + '&limit=200&q=' + encodeURIComponent(q),
-              { headers: { 'Accept': 'application/json' } })
-          .then(r => (r.ok ? r.json() : null))
-          .then(d => {
-            if (seq !== searchSeq) return;        // 已开始新一轮搜索，丢弃本次响应
-            if (d && d.ok) {
-              const list = d.movies || [];
-              for (let i = 0; i < list.length; i++) list[i]._cat = c;
-              searchResults = searchResults.concat(list);
-              searchTotal += (d.total || list.length);
-            } else {
-              searchServerFailed = true;
-            }
-          })
+        searchCatTask(c, q, seq)
           .catch(() => { if (seq === searchSeq) searchServerFailed = true; })
           .then(() => {
             if (seq !== searchSeq) return;
@@ -2507,7 +2524,7 @@ __DATA_SCRIPTS__
       displayLimit = PAGE_SIZE;
       // 搜索态下换 Tab：先作废上一轮结果（序号自增让在途响应被丢弃），再按新分类重检索
       const reSearch = !!searchQuery;
-      if (reSearch) { searchResults = null; searchPending = 0; searchTotal = 0; searchSeq++; }
+      if (reSearch) { searchResults = null; searchPending = 0; searchTotal = 0; searchCatTotals = {}; searchSeq++; }
       // 首屏只加载了各分类第 0 片；切到某分类时按需补全该分类剩余分片后再渲染
       ensureCat(cat, render);
       if (reSearch) runSearch();

@@ -67,6 +67,9 @@ FRONTEND_MARKERS = {
     "搜索状态提示 appendSearchHint": ("function appendSearchHint", True),
     "调用同源搜索接口": ("/site/search?cat=", True),
     "条目自带分类 _cat": ("it._cat = c;", True),
+    # 2026-09-24 补：服务端撞到分页数上限时客户端凭 nextOff 续拉（否则散落命中 0 结果）
+    "搜索续拉 searchCatTask": ("function searchCatTask", True),
+    "续拉游标 nextOff": ("d.nextOff", True),
 }
 
 # 布局断言：搜索框必须与分类 Tab 同一行（在 <header> 内），且 <main> 里不得重复
@@ -212,6 +215,34 @@ def verify(pages=60, min_cards=5000):
               f" | 空词 → {'空结果' if not (empty or {}).get('movies') else '有结果?'}")
         if bad_cat is not None and bad_cat.get("ok") is not False:
             print("   [warn] live 分类未被拒绝")
+
+        # ⑦ 散落命中的重灾区：worker 单次调用子请求上限约 50，而一部的各版本可能
+        # 散落在几十个分页上（实测 tv「狂飙」42 条命中散在 37 个分页）→ 早期实现直接
+        # 500 "Too many subrequests"。现在必须：①不 500 ②给 nextOff 续拉游标 ③凭 off 能续拉。
+        print("\n⑦ 散落命中不再 500（分页数上限 + 续拉）")
+        scat = get_json(bust(BASE + "site/search?cat=tv&limit=200&q=" + quote("狂飙")))
+        if scat is None:
+            print("   [FAIL] 散落命中查询直接失败（很可能是 Too many subrequests 500）")
+            scattered_ok = False
+        else:
+            got = len(scat.get("movies") or [])
+            print(f"   ok={scat.get('ok')} total={scat.get('total')} 返回 {got} 条"
+                  f" | pages={scat.get('pages')} truncated={scat.get('truncated')}"
+                  f" nextOff={scat.get('nextOff')}")
+            scattered_ok = bool(scat.get("ok")) and got >= 1 and isinstance(scat.get("pages"), int)
+            if scat.get("truncated"):
+                nx = scat.get("nextOff")
+                tail = get_json(bust(BASE + f"site/search?cat=tv&limit=200&q={quote('狂飙')}&off={nx}"))
+                tgot = len((tail or {}).get("movies") or [])
+                first_ids = {m.get("id") for m in (scat.get("movies") or [])}
+                tail_ids = {m.get("id") for m in ((tail or {}).get("movies") or [])}
+                dup = first_ids & tail_ids
+                print(f"   续拉 off={nx} → {'失败' if tail is None else str(tgot) + ' 条，与首轮重复 ' + str(len(dup))}")
+                scattered_ok = scattered_ok and tail is not None and bool(tail.get("ok")) and \
+                    tgot >= 1 and not dup
+            else:
+                print("   （本轮未被截断，说明命中集中，无需续拉）")
+        search_ok = search_ok and scattered_ok
 
     print("\nVERDICT: " + ("PASS" if (front_ok and cat_ok and lay_ok and name_ok and search_ok) else "FAIL")
           + f"  (前端 {front_ok} / 分类 {cat_ok} / 布局 {lay_ok} / 线路名 {name_ok} / 搜索 {search_ok})")

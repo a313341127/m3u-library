@@ -271,12 +271,19 @@ function makeData(ctx, origin) {
 // 前端按分类并行调用（首页搜索 = 4 个请求，可边到边渲染结果）。
 // 返回的是**网站卡片所需的原始影片对象**（含 url/sources），不是 Jellyfin DTO。
 const SITE_SEARCH_MAX = 300;
+// 单次调用最多还原多少个分页。Worker 单次调用的子请求上限约 50，而命中可能
+// 散落在几十个分页上（实测 tv「狂飙」42 条命中散在 37 个分页 → 之前直接 500
+// "Too many subrequests"）。这里硬性限量，剩余命中由客户端带 &off= 续拉补齐：
+// 每一轮都是一次**独立**的 Worker 调用，各自有独立的子请求配额。
+const SITE_SEARCH_MAX_PAGES = 12;
 
 async function siteSearchRoute(url, ctx) {
   const cat = url.searchParams.get("cat") || "movie";
   const q = (url.searchParams.get("q") || "").trim().toLowerCase();
   const limit = Math.max(1, Math.min(
     parseInt(url.searchParams.get("limit") || "120", 10) || 120, SITE_SEARCH_MAX));
+  // 从命中序列的第 off 条开始还原（续拉游标，见上面 SITE_SEARCH_MAX_PAGES 说明）
+  const off = Math.max(0, parseInt(url.searchParams.get("off") || "0", 10) || 0);
   const noStore = { "cache-control": "no-store" };
   // 直播是另一套数据结构（频道列表），不参与片名搜索
   if (!CAT_LABELS[cat] || cat === "live") return json({ ok: false, error: "bad cat" }, 400, noStore);
@@ -316,26 +323,40 @@ async function siteSearchRoute(url, ctx) {
   const total = ids.length;
 
   // 命中 id → 分页定位（idx 给出有序 id 与页内偏移），同页合并为一次 fetch。
-  // 只还原前 limit 条（扫描顺序＝热度顺序），避免「a」这类短词去拉几百个分页。
+  // 只还原前 limit 条（扫描顺序＝热度顺序），避免「a」这类短词去拉几百个分页；
+  // 并且最多开 SITE_SEARCH_MAX_PAGES 个分页，撞到上限就停下并回传 nextOff，
+  // 客户端凭 nextOff 再发一轮把剩下的命中取回来（不会丢结果，只是分几次请求）。
   const idx = await getIdx(cat, ctx, origin);
   const byPage = new Map();
-  for (let n = 0; n < ids.length && n < limit; n++) {
+  let consumed = off;
+  let truncated = false;
+  for (let n = off; n < ids.length && (n - off) < limit; n++) {
     const pos = idx.ids.get(ids[n]);
-    if (pos === undefined) continue;
+    if (pos === undefined) { consumed = n + 1; continue; }
     const p = Math.floor(pos / idx.pageSize);
-    if (!byPage.has(p)) byPage.set(p, []);
-    byPage.get(p).push(pos % idx.pageSize);
+    let bucket = byPage.get(p);
+    if (!bucket) {
+      if (byPage.size >= SITE_SEARCH_MAX_PAGES) { truncated = true; break; }
+      bucket = [];
+      byPage.set(p, bucket);
+    }
+    bucket.push(pos % idx.pageSize);
+    consumed = n + 1;
   }
   const movies = [];
   for (const pair of byPage) {
     const page = await getPage(cat, pair[0], ctx, origin);
-    for (const off of pair[1]) {
-      const m = page[off];
+    for (const o of pair[1]) {
+      const m = page[o];
       if (m) movies.push(m);
     }
   }
-  return json({ ok: true, cat: cat, q: q, total: total, shown: movies.length, movies: movies },
-              200, { "cache-control": "public, max-age=120" });
+  return json({
+    ok: true, cat: cat, q: q, total: total, shown: movies.length,
+    off: off, pages: byPage.size, truncated: truncated,
+    nextOff: truncated ? consumed : null,
+    movies: movies,
+  }, 200, { "cache-control": "public, max-age=120" });
 }
 
 function json(obj, status = 200, extraHeaders = {}) {
