@@ -1,8 +1,8 @@
 {
-  "checked_at": "2026-09-25T16:51:44.460261+00:00",
-  "healthy": false,
-  "stalled": true,
-  "last_success_collect": "2026-09-25T11:32:51Z",
+  "checked_at": "2026-09-25T23:26:04.152626+00:00",
+  "healthy": true,
+  "stalled": false,
+  "last_success_collect": "2026-09-25T20:26:14Z",
   "fails": {
     "fast-collect.yml": 0,
     "update.yml": 0,
@@ -49,7 +49,7 @@
     "光速|12": 34,
     "光速|13": 344,
     "光速|14": 205,
-    "_rotate_offset": 2,
+    "_rotate_offset": 17,
     "量子|3": 2,
     "量子|1": 2,
     "量子|4": 2,
@@ -323,7 +323,7 @@
     "星球|49": 10,
     "星球|50": 23,
     "星球|54": 5,
-    "星球|59": 48,
+    "星球|59": 49,
     "星球|75": 811,
     "星球|86": 47,
     "星球|87": 24,
@@ -393,15 +393,13 @@
     "豆瓣|55": 2
   },
   "actions": [
-    "[fast-collect.yml] 最新 run 36163005581: in_progress/None (updated 2026-09-25T16:47:39Z)",
+    "[fast-collect.yml] 最新 run 36200932666: pending/None (updated 2026-09-25T23:25:05Z)",
     "  -> 运行中, 观察",
-    "[update.yml] 最新 run 36068146057: completed/success (updated 2026-09-24T23:23:49Z)",
-    "  -> 成功, 重置失败计数",
+    "[update.yml] 最新 run 36197231731: in_progress/None (updated 2026-09-25T22:32:56Z)",
+    "  -> 运行中, 观察",
     "[backfill-episodes.yml] 最新 run 36116991557: completed/success (updated 2026-09-25T09:13:42Z)",
     "  -> 成功, 重置失败计数",
-    "最近采集 run(in_progress): 2026-09-25T16:47:35Z (4 分钟前)",
-    "最近成功采集: 2026-09-25T11:32:51Z (5.3h 前)",
-    "!! 采集停滞(无成功>3h), 兜底重投 fast-collect.yml (repository_dispatch 接力)",
-    "  -> 已重投 fast-collect.yml (via_chain=True) -> run 36163473665"
+    "最近采集 run(pending): 2026-09-25T23:25:05Z (1 分钟前)",
+    "最近成功采集: 2026-09-25T20:26:14Z (3.0h 前)"
   ]
 }
