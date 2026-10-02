@@ -1071,8 +1071,10 @@ __DATA_SCRIPTS__
     }
 
     function getFilterValues(cat, dim) {
+      const items = RESOURCES[cat];
+      if (!items) return [];   // 分类分片尚未就绪（首屏错峰加载中，见 bgLoadPart）
       const set = new Set();
-      RESOURCES[cat].forEach(it => {
+      items.forEach(it => {
         let v = it[dim];
         if (dim === 'region') {
           v = normalizeRegion(v);
@@ -1142,6 +1144,9 @@ __DATA_SCRIPTS__
     let hlsStarted = false;        // 本次播放是否已成功起播（用于区分「加载阶段失效」与「播放中瞬时抖动」）
     let hlsFatalStreak = 0;       // 连续致命错误计数：视频有进度即清零，连续多次才放弃切源
     let currentIsLive = false;     // 当前是否为直播（直播不代理 HLS 分片）
+    let currentSegProxy = false;   // 当前线路分片是否整体走中转（直连优先，直连被 CORS 拦才切）
+    let currentProxyRetry = false; // 本线路是否已做过「直连→中转」重试（每线路一次，防循环）
+    let currentPlayResume = false; // 本次开播是否要续播（直连→中转重试时复用）
 
     // 是否为 HLS：带 .m3u8/.m3u 或未知短链交给 hls.js；明确的视频文件走原生播放
     function isHls(url) {
@@ -1298,6 +1303,18 @@ __DATA_SCRIPTS__
         document.head.appendChild(s);
       };
       const key = encodeURIComponent(cat);
+      // 优先用生成端给的文件名清单（内容哈希名，见 __DESCFILES__）；无清单时退回旧命名
+      const files = (window.__DESCFILES__ || {})[cat];
+      if (files && files.length) {
+        let i = 0;
+        const nextH = function () {
+          i++;
+          if (i >= files.length) { if (cb) cb(); return; }
+          inject('/web/' + files[i], nextH);
+        };
+        inject('/web/' + files[0], nextH);
+        return;
+      }
       inject('/web/desc_' + key + '.js', function () {
         const total = (window.__DESC_PARTS__ || {})[cat] || 1;
         let i = 1;
@@ -1824,6 +1841,8 @@ __DATA_SCRIPTS__
       if (hlsPlayer) { try { hlsPlayer.destroy(); } catch (e) {} hlsPlayer = null; }
       hlsStarted = false;
       hlsFatalStreak = 0;
+      currentSegProxy = false;
+      currentProxyRetry = false;
       startLoadTimeout(idx);
 
       if (isResolver && s._resolver && s._resolver.mode === 'json') {
@@ -1860,6 +1879,7 @@ __DATA_SCRIPTS__
 
     function playUrl(url, idx, resume) {
       const video = $('pvVideo');
+      currentPlayResume = !!resume;
       // 缓冲/可播事件：缓冲时显示遮罩，开始播放即隐藏（断流/拖动 seek 也会触发）
       video.onwaiting = () => { if (!loadTimer && !stallFixing) showLoading('视频缓冲中…'); };
       video.onplaying = () => { hlsStarted = true; hlsFatalStreak = 0; stopLoadTimer(); hideLoading(); clearLoadTimeout(); };
@@ -1890,9 +1910,12 @@ __DATA_SCRIPTS__
           hlsPlayer = new Hls({
             maxBufferLength: 30,
             enableWorker: false,
-            // 跨域 ts/key/片段走同源 proxy：解决 AES-128 密钥、分片 CDN 的 CORS 阻断
+            // 直连优先（2026-10-02 实测）：源站分片 CORS 全开、直连 ~375KB/s；
+            // 走 /proxy 中转仅 ~50KB/s（跨境慢管道），视频码率要 ~520KB/s，必然永远缓冲。
+            // 默认分片直连；CORS/网络被拦时由 ERROR 处理器把整条线路切中转重试。
             xhrSetup: function(xhr, reqUrl) {
               if (currentIsLive) return; // 直播不代理，避免 worker 实时流延迟
+              if (!currentSegProxy) return;
               if (/^https?:\/\//i.test(reqUrl) && !reqUrl.startsWith(location.origin) &&
                   /\.(ts|key|aac|mp3|mp4|webm|flv)(\?|$)/i.test(reqUrl)) {
                 xhr.open('GET', '/proxy?u=' + encodeURIComponent(reqUrl), true);
@@ -1912,13 +1935,26 @@ __DATA_SCRIPTS__
             if (!data.fatal) return;
             const alreadyPlaying = hlsStarted || (video.currentTime > 1 && !video.paused);
             const giveup = () => handleSourceFail(idx);
-            if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-              const code = (data.response && data.response.code) || 0;
-              // 加载阶段：403/401/530（源码站反盗链/拉黑）或未知(code 0)基本不可恢复，直接切源
-              if (!alreadyPlaying && (code === 403 || code === 401 || code === 530 || code === 0)) {
-                giveup();
-                return;
-              }
+          if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+            const code = (data.response && data.response.code) || 0;
+            // 加载阶段：403/401/530（源码站反盗链/拉黑）基本不可恢复，直接切源
+            if (!alreadyPlaying && (code === 403 || code === 401 || code === 530)) {
+              giveup();
+              return;
+            }
+            // 直连被拦（CORS/混合内容/断网，code 0）且本线路还没试过中转：
+            // 整条线路（manifest+分片）改走本站中转重试一次，而不是直接判死换线
+            if (!alreadyPlaying && code === 0 && !currentProxyRetry &&
+                currentUrl && currentUrl.indexOf('/proxy?u=') < 0) {
+              currentProxyRetry = true;
+              currentSegProxy = true;
+              showLoading('直连受限，改用本站中转…');
+              if (hlsPlayer) { try { hlsPlayer.destroy(); } catch (e) {} hlsPlayer = null; }
+              const v2 = $('pvVideo');
+              v2.pause(); v2.removeAttribute('src'); v2.load();
+              playUrl(location.origin + '/proxy?u=' + encodeURIComponent(currentUrl), idx, currentPlayResume);
+              return;
+            }
               // 已起播：单分片瞬时抖动（CDN 节点轮换/签名过期/超时）hls.js 可自愈，
               // 连续多次才放弃切源；每次视频有进度都会把 streak 清零。
               hlsFatalStreak++;
@@ -2529,7 +2565,7 @@ __DATA_SCRIPTS__
         renderLiveGrid(sortLive(filterLive()));
         return;
       }
-      renderGrid(sortItems(filterItems(RESOURCES[currentCat])));
+      renderGrid(sortItems(filterItems(RESOURCES[currentCat] || [])));
     }
 
     function switchCat(cat) {
@@ -2678,6 +2714,54 @@ __DATA_SCRIPTS__
         runSearch();
       }, 300);
     });
+
+    // ===== 首屏错峰加载（2026-10-02）=====
+    // 生成端只给电影分类一个同步 <script> 标签；其余分类在第 0 屏渲染完后由这里
+    // **顺序**拉各自第 0 片（不并发，避免 4 个分片抢同一条跨境慢管道，首屏等待差 3~4 倍）。
+    // 该分类剩余分片仍由 ensureCat() 按需加载（筛选/排序/搜索降级时触发）。
+    function bgLoadPart(cat, done) {
+      const parts = (window.__DATAMANIFEST__ || {})[cat] || [];
+      const name = parts[0];
+      if (!name) { if (done) done(); return; }
+      window.__INJECTED__ = window.__INJECTED__ || {};
+      window.__LOADING__ = window.__LOADING__ || {};
+      // 与 ensureCat 协同：该分片已在途/已注入/该分类已就绪都不重复拉
+      if (window.__INJECTED__[name] || window.__LOADING__[cat] || window.__READY__[cat]) {
+        if (done) done();
+        return;
+      }
+      window.__INJECTED__[name] = true;
+      const s = document.createElement('script');
+      s.src = '/web/' + name + (window.__DVER__ ? '?v=' + window.__DVER__ : '');
+      s.onload = function () { window.__LOADED_PARTS__[cat] = 1; if (done) done(); };
+      s.onerror = function () { window.__INJECTED__[name] = false; if (done) done(); };
+      document.head.appendChild(s);
+    }
+    // 首页多板块刷新钩子：每个分类第 0 片到达后重渲染首页
+    // （用户已往下滚就不打断，留给下一次 render 自然带出新板块）
+    window.__HOME_REFRESH__ = function () {
+      try {
+        if (currentCat !== 'home' || searchQuery) return;
+        if (window.scrollY > 400) return;
+        if ($('playerView') && $('playerView').classList.contains('show')) return;
+        renderHome();
+      } catch (e) {}
+    };
+    (function () {
+      const q = [];
+      Object.keys(window.__DATAMANIFEST__ || {}).forEach(c => {
+        if ((window.__LOADED_PARTS__[c] || 0) === 0 && (window.__DATAMANIFEST__[c] || []).length) q.push(c);
+      });
+      const step = function () {
+        const c = q.shift();
+        if (!c) return;
+        bgLoadPart(c, function () {
+          try { if (window.__HOME_REFRESH__) window.__HOME_REFRESH__(); } catch (e) {}
+          setTimeout(step, 1200);
+        });
+      };
+      if (q.length) setTimeout(step, 1500);
+    })();
 
     render();
   </script>
@@ -2882,10 +2966,12 @@ def generate_index(output_dir: Path = None) -> Path:
     html_text = HTML_TEMPLATE
     html_text = html_text.replace("__CATEGORIES__", json.dumps(categories, ensure_ascii=False))
     html_text = html_text.replace("__RESOLVERS__", json.dumps(getattr(config, "RESOLVER_LINES", []), ensure_ascii=False))
-    # 全量数据分片外置（不再内联进 index.html）：见 _write_data_shards 说明。
-    html_text = html_text.replace("__DATA_SCRIPTS__", _write_data_shards(resources, live_data, out.parent))
     # 简介按分类单独分片，详情页按需加载（不进首屏，见 _write_desc_shards 说明）。
-    _write_desc_shards(desc_map, out.parent)
+    # 必须先生成简介分片：文件名清单要随 __DESCFILES__ 注进数据分片头。
+    desc_files = _write_desc_shards(desc_map, out.parent)
+    # 全量数据分片外置（不再内联进 index.html）：见 _write_data_shards 说明。
+    html_text = html_text.replace("__DATA_SCRIPTS__",
+                                  _write_data_shards(resources, live_data, out.parent, desc_files))
 
     out.write_text(html_text, encoding="utf-8")
     print(f"[OK] 已生成 {out}")
@@ -2918,15 +3004,27 @@ def _desc_key(name: str, year: str) -> str:
     return "%s|%s" % (name or "", year or "")
 
 
-def _write_shard(path, cat: str, json_items: List[str]) -> None:
-    """把一个分类的一批条目写成 window.__RES__(cat, [...]) 的分片脚本。"""
-    with path.open("w", encoding="utf-8") as f:
-        f.write("window.__RES__(" + json.dumps(cat) + ",[\n")
-        f.write(",\n".join(json_items))
-        f.write("\n]);\n")
+def _hash_write(web_dir, stem: str, body: str) -> str:
+    """把 body 写成 <stem>.<sha1前10>.js，返回最终文件名。
+
+    内容哈希进文件名（2026-10-02）：未变化的分片 URL 不变，浏览器/边缘缓存可长期
+    命中（配合 /web/* 的 immutable 长缓存），每日更新后只重下真正变化的分片。
+    """
+    h = hashlib.sha1(body.encode("utf-8")).hexdigest()[:10]
+    fname = f"{stem}.{h}.js"
+    (web_dir / fname).write_text(body, encoding="utf-8")
+    return fname
 
 
-def _write_data_shards(resources: Dict[str, list], live_data: List[dict], out_dir) -> str:
+def _write_shard(web_dir, stem: str, cat: str, json_items: List[str]) -> str:
+    """把一个分类的一批条目写成 window.__RES__(cat, [...]) 的分片脚本（文件名含内容哈希）。"""
+    body = ("window.__RES__(" + json.dumps(cat) + ",[\n"
+            + ",\n".join(json_items) + "\n]);\n")
+    return _hash_write(web_dir, stem, body)
+
+
+def _write_data_shards(resources: Dict[str, list], live_data: List[dict], out_dir,
+                       desc_files: Dict[str, List[str]]) -> str:
     """把全量数据分片写到 out_dir/web/data_*.js，返回注入 index.html 的 <script> 标签串。
 
     背景（关键）：
@@ -2935,22 +3033,30 @@ def _write_data_shards(resources: Dict[str, list], live_data: List[dict], out_di
       而 update.yml 的「提交数据库变更」在部署之后，于是那批采集数据全部丢失。
       改为分片外部脚本后，index.html 只保留应用外壳（几十 KB），数据按 6 MiB 切分，
       用同步 <script src> 加载，渲染逻辑无需改动（仍是同步读取全局变量）。
+
+    2026-10-02 两项首屏提速：
+      1. 文件名带内容哈希（_hash_write）→ 配合 /web/* immutable 长缓存，
+         每日更新后只有真正变化的分片会被重新下载。
+      2. 首屏只同步加载电影分片；其余分类由前端 bgLoadPart() 在第 0 屏渲染完后
+         顺序错峰拉第 0 片（避免 4 个分片并抢跨境慢管道，首屏等待差 3~4 倍）。
     """
     web_dir = out_dir / "web"
     web_dir.mkdir(parents=True, exist_ok=True)
-    # 清理旧分片，避免分类/条目变化后残留文件造成重复数据
-    for old in list(web_dir.glob("data_*.js")) + list(web_dir.glob("live.js")):
+    # 清理旧分片（含历史无哈希命名），避免分类/条目变化后残留文件造成重复数据
+    for old in list(web_dir.glob("data_*.js")) + list(web_dir.glob("live*.js")):
         try:
             old.unlink()
         except OSError:
             pass
 
-    # 数据版本号：每次生成取当前时间戳，拼到所有 data 分片 URL（?v=）做 cache-bust。
-    # 配合 /web/* 的 max-age=86400 长缓存，部署后新版本自然失效、旧版本不再被请求。
+    # 数据版本号：每次生成取当前时间戳，拼到动态注入的分片 URL（?v=）做 cache-bust。
+    # 文件名已含内容哈希时 ?v= 冗余但无害，保留以兼容旧逻辑。
     WEB_DATA_VERSION = datetime.utcnow().strftime("%Y%m%d%H")
+    # 首屏唯一同步加载的分类（访问量最大的电影）；其余分类交给前端错峰加载
+    SYNC_FIRST_CAT = "movie"
     scripts: List[str] = []
-    manifest: Dict[str, List[str]] = {}   # cat -> 该分类全部分片文件名（含第 0 片）
-    loaded: Dict[str, int] = {}           # cat -> 已加载到的分片数（首屏只加载第 0 片）
+    manifest: Dict[str, List[str]] = {}   # cat -> 该分类全部分片文件名（含第 0 片，哈希名）
+    loaded: Dict[str, int] = {}           # cat -> 已加载到的分片数（首屏只同步电影第 0 片）
     for cat, items in resources.items():
         buf: List[str] = []
         size = 0
@@ -2959,28 +3065,27 @@ def _write_data_shards(resources: Dict[str, list], live_data: List[dict], out_di
         for it in items:
             s = json.dumps(it, ensure_ascii=False)
             if buf and size + len(s) > SHARD_MAX_BYTES:
-                _write_shard(web_dir / f"data_{cat}_{part}.js", cat, buf)
-                parts.append(f"data_{cat}_{part}.js")
+                parts.append(_write_shard(web_dir, f"data_{cat}_{part}", cat, buf))
                 part += 1
                 buf, size = [], 0
             buf.append(s)
             size += len(s)
         if buf:
-            _write_shard(web_dir / f"data_{cat}_{part}.js", cat, buf)
-            parts.append(f"data_{cat}_{part}.js")
+            parts.append(_write_shard(web_dir, f"data_{cat}_{part}", cat, buf))
         manifest[cat] = parts
-        # 首屏只同步加载第 0 片；其余分片由前台 ensureCat() 按需动态注入，
-        # 避免一次性阻塞下载全量分片导致首屏慢（见 HTML 模板里的 ensureCat 实现）。
+        # 首屏只同步加载电影第 0 片；其余分类第 0 片由前端 bgLoadPart 错峰拉取，
+        # 剩余分片由 ensureCat() 按需动态注入（见 HTML 模板里的 ensureCat 实现）。
         if parts:
-            scripts.append(f'  <script src="/web/{parts[0]}?v={WEB_DATA_VERSION}"></script>')
-            loaded[cat] = 1
+            if cat == SYNC_FIRST_CAT:
+                scripts.append(f'  <script src="/web/{parts[0]}"></script>')
+                loaded[cat] = 1
+            else:
+                loaded[cat] = 0
 
     if live_data:
-        live_path = web_dir / "live.js"
-        live_path.write_text(
-            "window.__LIVESET__(" + json.dumps(live_data, ensure_ascii=False) + ");\n",
-            encoding="utf-8")
-        scripts.append(f'  <script src="/web/live.js?v={WEB_DATA_VERSION}"></script>')
+        body = "window.__LIVESET__(" + json.dumps(live_data, ensure_ascii=False) + ");\n"
+        live_name = _hash_write(web_dir, "live", body)
+        scripts.append(f'  <script src="/web/{live_name}"></script>')
 
     # 先定义全局容器与合并函数，再按序加载第 0 片分片。
     # __DATAMANIFEST__ 给出每个分类的全部分片清单，__LOADED_PARTS__ 记录首屏已加载到的片数，
@@ -3020,6 +3125,7 @@ def _write_data_shards(resources: Dict[str, list], live_data: List[dict], out_di
         "      for (var k in m) t[k] = m[k];\n"
         "    };\n"
         "    window.__DESCN__ = function (c, n) { window.__DESC_PARTS__[c] = n; };\n"
+        "    window.__DESCFILES__ = " + json.dumps(desc_files, ensure_ascii=False) + ";\n"
         "    window.__DATAMANIFEST__ = " + json.dumps(manifest, ensure_ascii=False) + ";\n"
         "    window.__LOADED_PARTS__ = " + json.dumps(loaded, ensure_ascii=False) + ";\n"
         "  </script>"
@@ -3027,8 +3133,8 @@ def _write_data_shards(resources: Dict[str, list], live_data: List[dict], out_di
     return "\n".join([header] + scripts)
 
 
-def _write_desc_shards(desc_map: Dict[str, Dict[str, str]], out_dir) -> None:
-    """把简介按分类 + 按体积写成分片 output/web/desc_{cat}[_p{N}].js，供详情页按需加载。
+def _write_desc_shards(desc_map: Dict[str, Dict[str, str]], out_dir) -> Dict[str, List[str]]:
+    """把简介按分类 + 按体积写成分片 output/web/desc_*[_p*].js，返回 {cat: [文件名...]}。
 
     背景：全量简介若并入主分片会让首屏体积翻倍，手机端加载体验很差。
     改为按分类独立分片后，首屏大小不变，只有用户首次打开某分类的详情页时才
@@ -3038,8 +3144,10 @@ def _write_desc_shards(desc_map: Dict[str, Dict[str, str]], out_dir) -> None:
     突破 Cloudflare Pages 单文件 25 MiB 上限 → 整个部署失败 → 站点回退到上次
     成功部署（表现为「全站内容静止/为空」，极易误判成数据丢失）。
     因此这里必须按「序列化体积」而非「条数」切分：单片 ≤ DESC_MAX_BYTES。
-    第 0 片仍叫 desc_{cat}.js（保持前端入口不变），并声明总片数，
-    后续片为 desc_{cat}_p1.js、_p2.js …，前端顺序加载后合并（见 __DESC__）。
+
+    2026-10-02：文件名带内容哈希（_hash_write）+ 返回文件名清单，前端 loadDescs
+    按清单顺序加载（清单随 __DESCFILES__ 注入 index.html）——/web/* 改 immutable
+    长缓存后，固定文件名会让旧简介永久滞留浏览器缓存，必须哈希化。
     """
     web_dir = out_dir / "web"
     web_dir.mkdir(parents=True, exist_ok=True)
@@ -3049,6 +3157,7 @@ def _write_desc_shards(desc_map: Dict[str, Dict[str, str]], out_dir) -> None:
         except OSError:
             pass
 
+    desc_files: Dict[str, List[str]] = {}
     for cat, dmap in desc_map.items():
         if not dmap:
             continue
@@ -3067,20 +3176,23 @@ def _write_desc_shards(desc_map: Dict[str, Dict[str, str]], out_dir) -> None:
         if buf:
             parts.append(buf)
 
+        files: List[str] = []
         for i, chunk in enumerate(parts):
             body = ("window.__DESC__(" + json.dumps(cat) + ","
                     + json.dumps(chunk, ensure_ascii=False) + ");\n")
             if i == 0:
-                # 第 0 片额外声明总片数，前端据此顺序拉取剩余片
+                # 第 0 片额外声明总片数（兼容旧前端逻辑）
                 body = ("window.__DESCN__(" + json.dumps(cat) + ","
                         + str(len(parts)) + ");\n") + body
-                fname = f"desc_{cat}.js"
+                stem = f"desc_{cat}"
             else:
-                fname = f"desc_{cat}_p{i}.js"
-            (web_dir / fname).write_text(body, encoding="utf-8")
+                stem = f"desc_{cat}_p{i}"
+            files.append(_hash_write(web_dir, stem, body))
+        desc_files[cat] = files
         if len(parts) > 1:
             print(f"[体积保护] desc_{cat}.js 超过 {DESC_MAX_BYTES // (1024*1024)}MiB"
                   f" -> 切成 {len(parts)} 片（前端顺序加载后合并）")
+    return desc_files
 
 
 def _load_live_json() -> List[dict]:

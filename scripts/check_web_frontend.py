@@ -477,6 +477,99 @@ fCards[1].onclick({ preventDefault() {} });
 say('  点击后 openPlayer 收到 ' + JSON.stringify(opened));
 mark(opened.length === 2 && opened[0][1] === 'movie' && opened[1][1] === 'anime');
 
+// G: 首屏错峰加载 / 播放直连优先 / 简介清单（2026-10-02）
+//    ⚠️ 桩里一律用 indexOf/slice 解析 URL，不写带反斜杠的正则（模板字面量会吃掉转义）
+const fnBg = grabBlock(0, 'function bgLoadPart(');
+const fnGFV = grabBlock(0, 'function getFilterValues(');
+// normalizeRegion 依赖模块级常量 REGION_ORDER，桩里用透传 stub 替代（断言只关心守卫与透传值）
+const fnNR = 'function normalizeRegion(v) { return v; }';
+const fnLD = grabBlock(0, 'function loadDescs(');
+say('=== G 首屏错峰加载 / 直连优先 / 简介清单 ===');
+{
+  const gdocs = [];
+  const fakeDoc = { createElement: () => ({}), head: { appendChild(s) { gdocs.push(s); } } };
+  const e = new Function('fakeDoc', `
+    var document = fakeDoc;
+    var window = globalThis;
+    ${fnBg}
+    return { bgLoadPart: bgLoadPart };
+  `)(fakeDoc);
+  g.window.__DATAMANIFEST__ = { movie: ['data_movie_0.aaa.js'], tv: ['data_tv_0.bbb.js', 'data_tv_1.ccc.js'],
+                                variety: ['data_variety_0.ddd.js'] };
+  g.window.__LOADED_PARTS__ = { movie: 1 };
+  g.window.__INJECTED__ = {}; g.window.__LOADING__ = {}; g.window.__READY__ = {};
+  g.window.__DVER__ = 'v1';
+  const cbs = [];
+  e.bgLoadPart('tv', () => cbs.push('tv'));
+  say('  注入 script: ' + JSON.stringify(gdocs.map(s => s.src)) + ' cb=' + JSON.stringify(cbs));
+  mark(gdocs.length === 1 && gdocs[0].src === '/web/data_tv_0.bbb.js?v=v1' && cbs.length === 0);
+  gdocs[0].onload();
+  say('  onload 后 __LOADED_PARTS__.tv=' + g.window.__LOADED_PARTS__.tv);
+  mark(g.window.__LOADED_PARTS__.tv === 1 && cbs.length === 1);
+  e.bgLoadPart('tv', () => cbs.push('tv2'));
+  say('  重复调用不重复注入: ' + gdocs.length + ' 个, cb=' + cbs.length);
+  mark(gdocs.length === 1 && cbs.length === 2);
+  e.bgLoadPart('anime', () => cbs.push('anime'));
+  say('  清单外分类直接回调: ' + gdocs.length + ' 个, cb=' + cbs.length);
+  mark(gdocs.length === 1 && cbs.length === 3);
+  e.bgLoadPart('variety', () => cbs.push('variety'));
+  gdocs[1].onerror();
+  say('  失败放行重试: __INJECTED__=' + JSON.stringify(g.window.__INJECTED__) +
+      ' loaded=' + JSON.stringify(g.window.__LOADED_PARTS__));
+  mark(g.window.__INJECTED__['data_variety_0.ddd.js'] === false && !g.window.__LOADED_PARTS__.variety);
+}
+{
+  g.window.__RESOURCES__ = {};   // tv 尚未就绪
+  const e2 = new Function(`
+    var RESOURCES = globalThis.__RESOURCES__;
+    var REGION_ORDER = [];   // getFilterValues 的排序依赖；空数组 indexOf 恒 -1，不影响断言
+    ${fnGFV}
+    ${fnNR}
+    return { gfv: getFilterValues };
+  `)();
+  say('  未就绪分类筛选值 -> ' + JSON.stringify(e2.gfv('tv', 'region')));
+  mark(JSON.stringify(e2.gfv('tv', 'region')) === '[]');
+  g.window.__RESOURCES__.tv = [{ region: '内地', year: '2026' }, { region: '美国', year: '2026' }];
+  const yrs = e2.gfv('tv', 'year');
+  say('  就绪后 region=' + JSON.stringify(e2.gfv('tv', 'region')) + ' year=' + JSON.stringify(yrs));
+  mark(JSON.stringify(e2.gfv('tv', 'region')) === JSON.stringify(['内地', '美国']) && yrs.length === 1);
+}
+{
+  const ddocs = [];
+  const fakeDoc2 = { createElement: () => ({}), head: { appendChild(s) { ddocs.push(s); } } };
+  const e3 = new Function('fakeDoc', `
+    var document = fakeDoc;
+    var window = globalThis;
+    var _descLoaded = {};   // loadDescs 的会话级去重表（模块级 const，沙箱里补一个）
+    ${fnLD}
+    return { loadDescs: loadDescs };
+  `)(fakeDoc2);
+  g.window.__DESCFILES__ = { tv: ['desc_tv.eee.js', 'desc_tv_p1.fff.js'] };
+  const dcbs = [];
+  e3.loadDescs('tv', () => dcbs.push(1));
+  say('  简介清单注入: ' + JSON.stringify(ddocs.map(s => s.src)) + ' cb=' + dcbs.length);
+  mark(ddocs.length === 1 && ddocs[0].src === '/web/desc_tv.eee.js' && dcbs.length === 0);
+  ddocs[0].onload();
+  say('  第 1 片到位: ' + JSON.stringify(ddocs.map(s => s.src)));
+  mark(ddocs.length === 2 && ddocs[1].src === '/web/desc_tv_p1.fff.js' && dcbs.length === 0);
+  ddocs[1].onload();
+  say('  清单加载完回调: cb=' + dcbs.length);
+  mark(dcbs.length === 1);
+  g.window.__DESCFILES__ = {};
+  e3.loadDescs('anime', () => dcbs.push(2));
+  ddocs[2].onload();
+  say('  无清单退回旧命名: ' + ddocs[2].src + ' cb=' + dcbs.length);
+  mark(ddocs[2].src === '/web/desc_anime.js' && dcbs.length === 2);
+  e3.loadDescs('live', () => dcbs.push(3));
+  say('  live 直接回调: cb=' + dcbs.length);
+  mark(dcbs.length === 3 && ddocs.length === 3);
+}
+// 播放器直连优先：静态断言放 Python 侧（marker 表），这里只验证关键分支字符串在真实模板里
+mark(src.indexOf('if (!currentSegProxy) return;') >= 0 &&
+     src.indexOf('currentProxyRetry = true') >= 0 &&
+     src.indexOf("'/proxy?u=' + encodeURIComponent(currentUrl)") >= 0);
+say('  直连优先/中转重试分支标记 -> PASS');
+
 console.log(lines.join('\n'));
 console.log('\nVERDICT: ' + (allPass ? 'PASS' : 'FAIL'));
 process.exit(allPass ? 0 : 1);
@@ -559,7 +652,11 @@ def main():
                                   ("/site/search?cat=", tpl, "模板"),
                                   (".grid-hint", tpl, "模板"),
                                   ("header-row", tpl, "模板"),
-                                  ("__RESSEEN__", src, "源"), ("seen.has(k)", src, "源"),
+                                  ("function bgLoadPart", tpl, "模板"),
+                                  ("__HOME_REFRESH__", tpl, "模板"),
+                                  ("if (!currentSegProxy) return;", tpl, "模板"),
+                                  ("currentProxyRetry = true", tpl, "模板"),
+                                  ("__DESCFILES__", src, "源"), ("__RESSEEN__", src, "源"), ("seen.has(k)", src, "源"),
                                   ("it._cat = c;", src, "源")]:
             if pat not in where:
                 ok = False

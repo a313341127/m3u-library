@@ -72,6 +72,11 @@ FRONTEND_MARKERS = {
     "搜索续拉 searchCatTask": ("function searchCatTask", True),
     "续拉游标 nextOff": ("d.nextOff", True),
     "线路名形态归一 srcList": ("function srcList(", True),
+    # 2026-10-02：首屏错峰加载 + 播放直连优先 + 分片内容哈希文件名
+    "错峰加载 bgLoadPart": ("function bgLoadPart", True),
+    "首页刷新钩子 __HOME_REFRESH__": ("__HOME_REFRESH__", True),
+    "播放直连优先 xhrSetup": ("if (!currentSegProxy) return;", True),
+    "直连受阻切中转重试": ("currentProxyRetry = true", True),
 }
 
 # 布局断言：搜索框必须与分类 Tab 同一行（在 <header> 内），且 <main> 里不得重复

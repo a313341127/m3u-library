@@ -180,6 +180,10 @@ jobs:
             Cache-Control: max-age=0, must-revalidate
           /index.html
             Cache-Control: max-age=0, must-revalidate
+          # 数据/简介分片文件名含内容哈希（generator/web.py _hash_write）→ 可放心 immutable：
+          # 内容不变 URL 不变（浏览器零重下），内容变了 URL 必变（不会吃到旧缓存）
+          /web/*
+            Cache-Control: public, max-age=31536000, immutable
           EOF
 
       - name: 部署前体积闸门（Cloudflare Pages 单文件 25 MiB 硬上限）
