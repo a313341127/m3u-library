@@ -32,7 +32,11 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 PROJECT = "qinjin"
 # 需要监控的自定义域（Cloudflare Pages 自定义域）
-DOMAINS = ["qinjin.ccwu.cc", "qinjin.cc.cd"]
+# ⚠️ 只有 qinjin.ccwu.cc 归本项目专用（用户 2026-10-02 指定）。
+# qinjin.cc.cd 已归还其他项目（apex 由 qinjin-maintenance worker 接管，
+# update.* = 发票助手更新源，license/* = 磁盘清理工具授权），严禁再加回
+# 本列表——脚本发现域不在 Pages 绑定里会自动抢绑回来。
+DOMAINS = ["qinjin.ccwu.cc"]
 # 已知反诈沉洞 IP（出现即视为被劫持）
 SINKHOLE_IPS = {"183.192.65.101", "183.192.65.102", "183.192.65.103"}
 # 干净解析器（用于判定「是否广泛污染」）。注意：不要用本机默认解析器判定。
