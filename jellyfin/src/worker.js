@@ -337,7 +337,8 @@ function extractVideoUrl(html, pageUrl) {
 async function proxyFetch(target, origin, depth = 0) {
   if (depth > 3) return new Response("parse too deep", { status: 502 });
   try {
-    let referer = "https://qinjintubo.cc.cd/";
+    // Referer 兜底值与任何自有域名无关（实际会被 target 的 origin 覆盖）
+    let referer = "https://www.google.com/";
     try { referer = new URL(target).origin + "/"; } catch (_) {}
     const upstream = await fetch(target, {
       redirect: "follow",
