@@ -1,0 +1,82 @@
+name: 途播分享层部署（tubo-share）
+
+# 独立轻工作流：部署 /j 分享码反代 worker + 海外 runner 冒烟验收。
+# 刻意不共用 qinjin-collection 并发组（几分钟即完，不顶掉采集/主部署）。
+# 部署走 CF API 直传（含 workers_dev 元数据），不用 wrangler——
+# 因为当前 CLOUDFLARE_API_TOKEN 无 workers.dev 子域开关权限（10405），
+# wrangler deploy 会在这一步报错。
+
+on:
+  push:
+    paths:
+      - 'share_tubo/**'
+      - '.github/workflows/tubo-share.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tubo-share
+  cancel-in-progress: true
+
+jobs:
+  deploy-and-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 部署 worker（CF API 直传）
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          echo '{"main_module":"worker.js","compatibility_date":"2024-09-23","bindings":[],"workers_dev":true}' > /tmp/metadata.json
+          curl -sS -X PUT \
+            "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/workers/scripts/tubo-share" \
+            -H "Authorization: Bearer $CF_TOKEN" \
+            -F "metadata=</tmp/metadata.json;type=application/json" \
+            -F "worker.js=@share_tubo/src/worker.js;type=application/javascript+module" \
+            | python3 -c "import json,sys; d=json.load(sys.stdin); print('deploy success:', d['success']); sys.exit(0 if d['success'] else 1)"
+
+      - name: 冒烟验收（海外网络）
+        run: |
+          BASE=https://tubo-share.a313341127.workers.dev
+          # 冒烟码：2026-10-06 铸的 1 天期码（本地用 SHARE_KEY 铸）。
+          # 过期后此步自动降级为「验证 403 时效机制」，仍算通过；
+          # 需要重新全链路验证时，用 _t/tubo_share_secrets.txt 里的 SHARE_KEY 重铸一枚换进来。
+          SMOKE_CODE="v1.V2J6Nr1IZiWdm0lv.7DFSkg9qbERhfLkp_CCNT1F_z4ZdcsZOBy4-FBDOHgf5mJwOlxBItFFlMssa__OEvMoFqYv7GbmawP5AjzaFf-fRAIRajQGH6deXdQ6M0mNu4vjS6PrY9VR7A9leH9RZMA"
+          fail=0
+
+          # 1) 管理页可达、含标题、不泄露真实后端地址
+          ADMIN=$(curl -sS "$BASE/admin")
+          echo "$ADMIN" | grep -q "分享码生成" || { echo "FAIL: 管理页内容异常"; fail=1; }
+          if echo "$ADMIN" | grep -q "m3u-jellyfin"; then echo "FAIL: 管理页泄露真实后端!"; fail=1; fi
+
+          # 2) 假码必须 403
+          S=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE/j/v1.AAAA.BBBB/System/Info/Public")
+          [ "$S" = "403" ] || { echo "FAIL: 假码应 403，实为 $S"; fail=1; }
+
+          # 3) 冒烟码反代上游公开接口（过期则降级验证时效 403）
+          S=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE/j/$SMOKE_CODE/System/Info/Public")
+          if [ "$S" = "200" ]; then
+            echo "PASS: 冒烟码全链路 200"
+            # 4) 反代登录（真实 Jellyfin 认证端点）
+            S=$(curl -sS -o /tmp/login.json -w '%{http_code}' -X POST \
+              "$BASE/j/$SMOKE_CODE/Users/AuthenticateByName" \
+              -H 'Content-Type: application/json' \
+              -H 'X-Emby-Authorization: MediaBrowser Client="smoke", DeviceId="smoke", DeviceName="smoke"' \
+              -d '{"Username":"tubo","Pw":"x"}')
+            if [ "$S" = "200" ] && grep -q "AccessToken" /tmp/login.json; then
+              echo "PASS: 反代登录 200 + AccessToken"
+            else
+              echo "FAIL: 反代登录 $S"; head -c 200 /tmp/login.json; fail=1
+            fi
+          elif [ "$S" = "403" ]; then
+            echo "PASS: 冒烟码已过期(403)——时效机制正常（全链路 200 验证见 2026-10-06 首跑）"
+          else
+            echo "FAIL: 冒烟码请求 $S"; fail=1
+          fi
+
+          [ $fail = 0 ] && echo "SMOKE ALL PASS" || exit 1

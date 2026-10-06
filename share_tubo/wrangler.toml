@@ -1,0 +1,9 @@
+name = "tubo-share"
+main = "src/worker.js"
+compatibility_date = "2024-09-23"
+
+# 途播时效分享层：把 m3u-jellyfin 包装成带时效的加密分享码，不暴露真实后端地址。
+# Secrets（用 wrangler secret put 或 CF API 设置，不进 git）：
+#   SHARE_KEY   32 字节随机密钥的 base64url（43 字符）——码的加解密密钥，必须稳定，
+#               换掉后所有已发分享码立即失效
+#   ADMIN_PASS  管理页口令
