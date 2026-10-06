@@ -97,5 +97,9 @@ jobs:
               -d "{\"title\":\"tubo-share 冒烟失败 run $GITHUB_RUN_ID\",\"body\":$BODY}" \
               > /tmp/issue.json 2>&1 || true
             head -c 300 /tmp/issue.json
+            # 诊断逐行转成 check-run annotation（公开仓库匿名 API 可读）
+            grep -E "FAIL|---" /tmp/smoke.log | head -12 | while IFS= read -r l; do
+              echo "::error::${l//%/‰}"
+            done
             exit 1
           fi
