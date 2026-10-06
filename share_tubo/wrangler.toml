@@ -7,3 +7,11 @@ compatibility_date = "2024-09-23"
 #   SHARE_KEY   32 字节随机密钥的 base64url（43 字符）——码的加解密密钥，必须稳定，
 #               换掉后所有已发分享码立即失效
 #   ADMIN_PASS  管理页口令
+#
+# 🔴 入口域名（关键）：本 worker 不走 workers.dev（部署 token 无子域开关权限，
+#   元数据 workers_dev 会被静默忽略）。实际入口是 zone 路由（已建，幂等持久）：
+#     qinjin.ccwu.cc/j/*          → 分享码反代
+#     qinjin.ccwu.cc/tubo-admin*  → 管理页
+#   zone id 54e8f109861315e853a47a3571337151。若路由丢失，用 CF API
+#   POST /zones/{zid}/workers/routes {"pattern","script":"tubo-share"} 重建。
+# Secrets：SHARE_KEY / ADMIN_PASS 已在 worker 上配置（_t/tubo_share_secrets.txt）。

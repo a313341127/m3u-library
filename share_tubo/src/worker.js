@@ -10,9 +10,12 @@
 //   过期信息编在码内，无需任何存储；码无法篡改（GCM 认证）。
 //
 // 路由：
-//   GET  /admin            管理页（口令 + 选时长 → 生成分享码）
-//   POST /admin/generate   {pass, days, target?} → {code, url, expire_at}
-//   ANY  /j/{code}/**      反代（含 WebSocket / Range / 流式视频）
+//   GET  /admin 或 /tubo-admin        管理页（口令 + 选时长 → 生成分享码）
+//   POST /admin/generate 同 /tubo-admin/generate
+//   ANY  /j/{code}/**                 反代（含 WebSocket / Range / 流式视频）
+//
+// 入口域名：不依赖 workers.dev（token 无子域开关权限），而是挂 zone 路由
+//   qinjin.ccwu.cc/j/*  与  qinjin.ccwu.cc/tubo-admin*（本文件 wrangler.toml 有说明）
 //
 // 安全边界：
 //   - /admin/generate 仅口令（ADMIN_PASS secret）持有者可用
@@ -133,6 +136,22 @@ async function handleProxy(request, env, code, subpath, search) {
   } catch (e) {
     return text(502, "upstream error");
   }
+
+  // 🔒 防泄露改写：上游会把「自己的 origin」拼进 JSON（PlaybackInfo 的 Path/
+  // DirectStreamUrl）和 m3u8 播放列表（/proxy?u= 重写），必须替换成分享入口，
+  // 否则接收方在响应体里就能看到真实后端地址。只缓冲小体积文本响应，
+  // 视频/图片等二进制流照旧直通。
+  const ct = (resp.headers.get("content-type") || "").toLowerCase();
+  if (/json|m3u8|mpegurl|^text\//.test(ct)) {
+    const tOrigin = new URL(info.t).origin;
+    const shareOrigin = new URL(request.url).origin + "/j/" + code;
+    const raw = await resp.text();
+    const out = tOrigin !== shareOrigin ? raw.split(tOrigin).join(shareOrigin) : raw;
+    const outHeaders = cleanHeaders(resp.headers);
+    outHeaders.delete("content-length");
+    return new Response(out, { status: resp.status, headers: outHeaders });
+  }
+
   return new Response(resp.body, {
     status: resp.status, statusText: resp.statusText, headers: cleanHeaders(resp.headers),
   });
@@ -183,8 +202,12 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
 
-    if (path === "/admin" && request.method === "GET") return adminPage();
-    if (path === "/admin/generate" && request.method === "POST") return handleGenerate(request, env);
+    const isAdminPage = (path === "/admin" || path === "/tubo-admin") && request.method === "GET";
+    const isGenerate = (path === "/admin/generate" || path === "/tubo-admin/generate")
+      && request.method === "POST";
+
+    if (isAdminPage) return adminPage();
+    if (isGenerate) return handleGenerate(request, env);
 
     const m = path.match(/^\/j\/([A-Za-z0-9_.-]+)(\/.*)?$/);
     if (m) return handleProxy(request, env, m[1], m[2] || "/", url.search);
@@ -263,10 +286,11 @@ const ADMIN_HTML = `<!DOCTYPE html>
                   '><span>' + (d===1?'1 天':d===365?'1 年':d+' 天') + '</span>';
     box.appendChild(l);
   });
+  var GEN = (location.pathname.indexOf('/tubo-admin') === 0 ? '/tubo-admin' : '/admin') + '/generate';
   document.getElementById('go').onclick = function() {
     var err = document.getElementById('err');
     err.style.display = 'none';
-    fetch('/admin/generate', { method:'POST',
+    fetch(GEN, { method:'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
         pass: document.getElementById('pass').value,

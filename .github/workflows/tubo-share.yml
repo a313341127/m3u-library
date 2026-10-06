@@ -44,7 +44,7 @@ jobs:
       - name: 冒烟验收（海外网络）
         run: |
           set +eo pipefail
-          BASE=https://tubo-share.a313341127.workers.dev
+          BASE=https://qinjin.ccwu.cc   # 分享层挂主站 zone 路由（/j/*、/tubo-admin*），不依赖 workers.dev
           # 冒烟码：2026-10-06 铸的 1 天期码（本地用 SHARE_KEY 铸）。
           # 过期后此步自动降级为「验证 403 时效机制」，仍算通过；
           # 需要重新全链路验证时，用 _t/tubo_share_secrets.txt 里的 SHARE_KEY 重铸一枚换进来。
@@ -52,7 +52,7 @@ jobs:
           fail=0
           {
           # 1) 管理页可达、含标题、不泄露真实后端地址
-          ADMIN=$(curl -sS -m 30 -w '\nHTTP:%{http_code}' "$BASE/admin" 2>&1 || true)
+          ADMIN=$(curl -sS -m 30 -w '\nHTTP:%{http_code}' "$BASE/tubo-admin" 2>&1 || true)
           echo "--- admin 页前 80 字节: $(echo "$ADMIN" | head -c 80)"
           echo "$ADMIN" | grep -q "分享码生成" || { echo "FAIL: 管理页内容异常"; fail=1; }
           if echo "$ADMIN" | grep -q "m3u-jellyfin"; then echo "FAIL: 管理页泄露真实后端!"; fail=1; fi
@@ -61,6 +61,15 @@ jobs:
           S=$(curl -sS -m 30 -o /dev/null -w '%{http_code}' "$BASE/j/v1.AAAA.BBBB/System/Info/Public" || true)
           echo "--- 假码: $S"
           [ "$S" = "403" ] || { echo "FAIL: 假码应 403，实为 $S"; fail=1; }
+
+          # 2.5) 全链路：Items → PlaybackInfo，并扫描响应体不泄露真实后端
+          IT=$(curl -sS -m 30 "$BASE/j/$SMOKE_CODE/Items?Limit=1")
+          IID=$(echo "$IT" | python3 -c "import json,sys; print(json.load(sys.stdin)['Items'][0]['Id'])" 2>/dev/null || true)
+          if [ -n "$IID" ]; then
+            PB=$(curl -sS -m 30 -X POST "$BASE/j/$SMOKE_CODE/Items/$IID/PlaybackInfo" -H 'Content-Type: application/json')
+            if echo "$PB" | grep -q "m3u-jellyfin"; then echo "FAIL: PlaybackInfo 泄露真实后端!"; fail=1;
+            else echo "PASS: PlaybackInfo 无泄露"; fi
+          fi
 
           # 3) 冒烟码反代上游公开接口（过期则降级验证时效 403）
           S=$(curl -sS -m 60 -o /tmp/pub.json -w '%{http_code}' "$BASE/j/$SMOKE_CODE/System/Info/Public" || true)
