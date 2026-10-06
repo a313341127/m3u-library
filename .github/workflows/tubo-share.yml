@@ -15,6 +15,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 concurrency:
   group: tubo-share
@@ -42,6 +43,7 @@ jobs:
 
       - name: 冒烟验收（海外网络）
         run: |
+          {
           BASE=https://tubo-share.a313341127.workers.dev
           # 冒烟码：2026-10-06 铸的 1 天期码（本地用 SHARE_KEY 铸）。
           # 过期后此步自动降级为「验证 403 时效机制」，仍算通过；
@@ -50,7 +52,7 @@ jobs:
           fail=0
 
           # 1) 管理页可达、含标题、不泄露真实后端地址
-          ADMIN=$(curl -sS "$BASE/admin")
+          ADMIN=$(curl -sS -w '\nHTTP:%{http_code}' "$BASE/admin" 2>&1)
           echo "$ADMIN" | grep -q "分享码生成" || { echo "FAIL: 管理页内容异常"; fail=1; }
           if echo "$ADMIN" | grep -q "m3u-jellyfin"; then echo "FAIL: 管理页泄露真实后端!"; fail=1; fi
 
@@ -59,9 +61,10 @@ jobs:
           [ "$S" = "403" ] || { echo "FAIL: 假码应 403，实为 $S"; fail=1; }
 
           # 3) 冒烟码反代上游公开接口（过期则降级验证时效 403）
-          S=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE/j/$SMOKE_CODE/System/Info/Public")
+          S=$(curl -sS -o /tmp/pub.json -w '%{http_code}' "$BASE/j/$SMOKE_CODE/System/Info/Public")
           if [ "$S" = "200" ]; then
             echo "PASS: 冒烟码全链路 200"
+            head -c 200 /tmp/pub.json; echo
             # 4) 反代登录（真实 Jellyfin 认证端点）
             S=$(curl -sS -o /tmp/login.json -w '%{http_code}' -X POST \
               "$BASE/j/$SMOKE_CODE/Users/AuthenticateByName" \
@@ -71,12 +74,22 @@ jobs:
             if [ "$S" = "200" ] && grep -q "AccessToken" /tmp/login.json; then
               echo "PASS: 反代登录 200 + AccessToken"
             else
-              echo "FAIL: 反代登录 $S"; head -c 200 /tmp/login.json; fail=1
+              echo "FAIL: 反代登录 $S"; head -c 300 /tmp/login.json; fail=1
             fi
           elif [ "$S" = "403" ]; then
             echo "PASS: 冒烟码已过期(403)——时效机制正常（全链路 200 验证见 2026-10-06 首跑）"
           else
-            echo "FAIL: 冒烟码请求 $S"; fail=1
+            echo "FAIL: 冒烟码请求 $S"; head -c 300 /tmp/pub.json; fail=1
           fi
 
-          [ $fail = 0 ] && echo "SMOKE ALL PASS" || exit 1
+          if [ $fail = 0 ]; then echo "SMOKE ALL PASS"; else exit 3; fi
+          } 2>&1 | tee /tmp/smoke.log
+          # 失败时把诊断投到 issue（仓库公开，匿名可读）
+          if grep -q "FAIL" /tmp/smoke.log; then
+            BODY=$(python3 -c "import json;print(json.dumps(open('/tmp/smoke.log').read()))")
+            curl -sS -X POST "https://api.github.com/repos/${GITHUB_REPOSITORY}/issues" \
+              -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+              -d "{\"title\":\"tubo-share 冒烟失败 run $GITHUB_RUN_ID\",\"body\":$BODY}" \
+              | python3 -c "import json,sys; d=json.load(sys.stdin); print('issue:', d.get('number') or d)" || true
+            exit 1
+          fi
