@@ -1,15 +1,15 @@
 {
-  "checked_at": "2026-10-08T20:33:36.579544+00:00",
-  "healthy": true,
-  "stalled": false,
-  "last_success_collect": "2026-10-08T19:46:23Z",
+  "checked_at": "2026-10-09T01:02:57.644521+00:00",
+  "healthy": false,
+  "stalled": true,
+  "last_success_collect": "2026-10-09T00:11:28Z",
   "fails": {
     "fast-collect.yml": 0,
     "update.yml": 0,
     "backfill-episodes.yml": 0
   },
   "progress_pages": {
-    "索尼|all": 7239,
+    "索尼|all": 7240,
     "红牛|1": 2,
     "金鹰|all": 5741,
     "樱花|all": 5190,
@@ -49,12 +49,12 @@
     "光速|12": 34,
     "光速|13": 346,
     "光速|14": 208,
-    "_rotate_offset": 12,
+    "_rotate_offset": 17,
     "量子|3": 2,
     "量子|1": 2,
     "量子|4": 2,
     "量子|2": 2,
-    "最大|all": 6201,
+    "最大|all": 6202,
     "茅台|1": 2,
     "魔都|1": 131,
     "魔都|3": 33,
@@ -108,7 +108,7 @@
     "暴风|21": 253,
     "暴风|23": 227,
     "星球|4": 419,
-    "优酷|all": 2945,
+    "优酷|all": 2946,
     "星球|3": 215,
     "豆瓣|3": 3,
     "豆瓣|2": 3,
@@ -223,7 +223,7 @@
     "爱奇艺|37": 5,
     "量子|20": 140,
     "量子|21": 34,
-    "量子|22": 103,
+    "量子|22": 104,
     "量子|23": 27,
     "量子|24": 40,
     "量子|25": 148,
@@ -395,13 +395,15 @@
     "豆瓣|all": 265
   },
   "actions": [
-    "[fast-collect.yml] 最新 run 37834445796: completed/success (updated 2026-10-08T19:57:46Z)",
+    "[fast-collect.yml] 最新 run 37863487865: completed/success (updated 2026-10-09T00:49:44Z)",
     "  -> 成功, 重置失败计数",
-    "[update.yml] 最新 run 37703372114: completed/success (updated 2026-10-08T00:34:02Z)",
+    "[update.yml] 最新 run 37861456917: completed/success (updated 2026-10-09T00:45:18Z)",
     "  -> 成功, 重置失败计数",
     "[backfill-episodes.yml] 最新 run 37767247821: completed/success (updated 2026-10-08T11:04:11Z)",
     "  -> 成功, 重置失败计数",
-    "最近采集 run(completed): 2026-10-08T19:46:23Z (47 分钟前)",
-    "最近成功采集: 2026-10-08T19:46:23Z (0.8h 前)"
+    "最近采集 run(completed): 2026-10-09T00:11:28Z (52 分钟前)",
+    "最近成功采集: 2026-10-09T00:11:28Z (0.9h 前)",
+    "!! 采集停滞(空档>50min), 兜底重投 fast-collect.yml (repository_dispatch 接力)",
+    "  -> 已重投 fast-collect.yml (via_chain=True) -> run 37867852645"
   ]
 }
