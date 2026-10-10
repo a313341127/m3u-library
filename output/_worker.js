@@ -1268,6 +1268,10 @@ function isJellyfinPath(p) {
     p.startsWith("/System/") ||
     p.startsWith("/Users/") ||
     p.startsWith("/Items") ||      // /Items 列表 + /Items/{id} 详情/播放信息
+    p.startsWith("/Branding/") ||  // 通用客户端兼容层（carTV 等 Emby 系 App）
+    p.startsWith("/Sessions/") ||
+    p.startsWith("/DisplayPreferences/") ||
+    p.startsWith("/Shows/") ||
     p.startsWith("/Videos/") ||
     p === "/proxy" ||
     p === "/probe" ||             // 线路预检：前端开播前并发探测，避免死链空等
@@ -1285,7 +1289,10 @@ export default {
   async fetch(request, env, ctx) {
     ENV = env;   // 捕获绑定（含 KV_DELTA）；无绑定时 deltaEnabled()=false，自动降级纯静态
     const url = new URL(request.url);
-    const p = url.pathname;
+    // Emby 系客户端（carTV 等车机 App）所有请求带 /emby 前缀，统一剥掉
+    // ⚠️ 与 jellyfin/src/worker.js 的兼容层保持同步，两处改动须一起提交
+    let p = url.pathname;
+    if (/^\/emby(\/|$)/i.test(p)) p = p.slice(5) || "/";
 
     // 网站搜索：同源路由，必须在 ASSETS 兜底之前处理
     if (p === "/site/search") {
@@ -1301,6 +1308,19 @@ export default {
       if (p === "/System/Info/Public" || p === "/System/Info")
         return cacheJson(request, systemInfo(), 200, DATA_VERSION + "_sys", 3600, 86400);
       if (p === "/System/Ping") return new Response("pong", { status: 200 });
+
+      // ===== 通用客户端兼容层（carTV 等 Emby/Jellyfin 双协议 App 需要的周边端点）=====
+      if (p === "/Branding/Configuration")
+        return json({ SplashscreenEnabled: false, CustomCss: "" });
+      if (p === "/System/Configuration") return json({});
+      if (/^\/Sessions\/Playing/.test(p)) return new Response(null, { status: 204 });
+      if (/^\/DisplayPreferences\//.test(p)) return json({});
+      if (/\/Items\/Latest$/.test(p)) return json([]);
+      if (/\/Items\/(Resume|ContinueWatching|NextUp)$/.test(p))
+        return json({ Items: [], TotalRecordCount: 0 });
+      if (/^\/Shows\/[^\/]+\/(Episodes|Seasons)/.test(p))
+        return json({ Items: [], TotalRecordCount: 0 });
+
       if (p === "/proxy") return proxyRoute(url, request);
       if (p === "/probe") return probeRoute(url);
 
@@ -1346,6 +1366,13 @@ export default {
       if (m) {
         const data = makeData(ctx, url.origin);
         return cacheJson(request, await playbackInfo(data, m[1], url.origin), 200, DATA_VERSION + "_play_" + m[1], 60, 300);
+      }
+      m = p.match(/^\/Items\/([^\/]+)\/(Similar|Intros)/);
+      if (m) return json({ Items: [], TotalRecordCount: 0 });
+      m = p.match(/^\/Items\/([^\/]+)\/Download/);
+      if (m) {
+        const data = makeData(ctx, url.origin);
+        return streamProxy(data, m[1], url, request, ctx);
       }
       m = p.match(/^\/Videos\/([^\/]+)(\/stream)?/);
       if (m) {
