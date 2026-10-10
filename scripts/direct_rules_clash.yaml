@@ -11,6 +11,7 @@ rules:
   - DOMAIN-KEYWORD,feifei,DIRECT
   - DOMAIN-KEYWORD,fengbao,DIRECT
   - DOMAIN-KEYWORD,ffzy,DIRECT
+  - DOMAIN-KEYWORD,freetv,DIRECT
   - DOMAIN-KEYWORD,iptv,DIRECT
   - DOMAIN-KEYWORD,lzcdn,DIRECT
   - DOMAIN-KEYWORD,modujx,DIRECT
@@ -156,6 +157,7 @@ rules:
   - DOMAIN-SUFFIX,ffzyread2.com,DIRECT
   - DOMAIN-SUFFIX,ffzyvideo.com,DIRECT
   - DOMAIN-SUFFIX,freetv.fun,DIRECT
+  - DOMAIN-SUFFIX,freetv.top,DIRECT
   - DOMAIN-SUFFIX,ganzitv.com,DIRECT
   - DOMAIN-SUFFIX,gatv.com.cn,DIRECT
   - DOMAIN-SUFFIX,gggread.com,DIRECT
@@ -286,7 +288,6 @@ rules:
   - DOMAIN-SUFFIX,otkbl.com,DIRECT
   - DOMAIN-SUFFIX,ottiptv.cc,DIRECT
   - DOMAIN-SUFFIX,patv123.com,DIRECT
-  - DOMAIN-SUFFIX,pdtvhd.com,DIRECT
   - DOMAIN-SUFFIX,phimgood.com,DIRECT
   - DOMAIN-SUFFIX,play-cdn10.com,DIRECT
   - DOMAIN-SUFFIX,play-cdn11.com,DIRECT
