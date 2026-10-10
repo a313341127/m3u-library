@@ -1,0 +1,40 @@
+name: 调试-临时抓取Pages实时请求
+# 临时排障用：workflow_dispatch 启动，对最新生产部署 tail N 分钟。
+# 用途：抓取通用客户端（carTV 等）播放失败时的真实请求路径。
+# 排障完成后可删除本文件。
+on:
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: "tail 分钟数"
+        required: false
+        default: "12"
+
+concurrency:
+  group: qinjin-tail-debug   # 独立并发组，不占用采集组
+  cancel-in-progress: true
+
+jobs:
+  tail:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: 解析最新生产部署
+        id: dep
+        env:
+          CF: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          DEP=$(curl -s -H "Authorization: Bearer $CF" \
+            "https://api.cloudflare.com/client/v4/accounts/62dc1dfbe3b880e9c16017687aac9717/pages/projects/qinjin/deployments?env=production" \
+            | jq -r '.result[0].id')
+          echo "dep=$DEP" >> "$GITHUB_OUTPUT"
+          echo "tailing deployment: $DEP"
+      - name: tail 实时日志
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          npx --yes wrangler@4 pages deployment tail "${{ steps.dep.outputs.dep }}" \
+            --project-name qinjin --format json 2>&1
