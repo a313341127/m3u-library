@@ -1,5 +1,5 @@
 {
- "updated_at": "2026-10-09 23:42:44",
+ "updated_at": "2026-10-10 23:01:26",
  "proxy_origin": "https://qinjin.pages.dev",
  "hosts": {
   "hd.ijycnd.com": {
@@ -10,21 +10,13 @@
    "best": "none",
    "urls": 130684
   },
-  "play.xluuss.com": {
+  "vod4.wgslsw.com": {
    "direct": 200,
    "refer": null,
    "proxy": 200,
    "ok": true,
    "best": "direct",
-   "urls": 133215
-  },
-  "play.hhuus.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 130866
+   "urls": 22149
   },
   "vod12.wgslsw.com": {
    "direct": 200,
@@ -42,13 +34,29 @@
    "best": "direct",
    "urls": 27827
   },
-  "vod4.wgslsw.com": {
+  "bfikuncdn.com": {
    "direct": 200,
    "refer": null,
    "proxy": 200,
    "ok": true,
    "best": "direct",
-   "urls": 22149
+   "urls": 59978
+  },
+  "play.hhuus.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 130866
+  },
+  "play.xluuss.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 133215
   },
   "v.gsuus.com": {
    "direct": 200,
@@ -56,15 +64,7 @@
    "proxy": 200,
    "ok": true,
    "best": "direct",
-   "urls": 132431
-  },
-  "vv.jisuzyv.com": {
-   "direct": "URLError",
-   "refer": "URLError",
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 129286
+   "urls": 132631
   },
   "play.subokk.com": {
    "direct": 200,
@@ -74,45 +74,13 @@
    "best": "direct",
    "urls": 100454
   },
-  "bfikuncdn.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 59978
-  },
-  "vodcnd01.ajupf.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 26377
-  },
-  "play.maoyanplay.top": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 31295
-  },
-  "vodcnd11.ajupf.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 15876
-  },
-  "vodcnd03.ajupf.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 15482
+  "vv.jisuzyv.com": {
+   "direct": "URLError",
+   "refer": "URLError",
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 129304
   },
   "vodcnd01.uvjtih.cn": {
    "direct": 200,
@@ -121,6 +89,14 @@
    "ok": true,
    "best": "direct",
    "urls": 24523
+  },
+  "play.maoyanplay.top": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 31299
   },
   "vodcnd04.ajupf.com": {
    "direct": 200,
@@ -138,14 +114,6 @@
    "best": "direct",
    "urls": 127322
   },
-  "svip.xgplay17.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 17739
-  },
   "play.ly166.com:65": {
    "direct": 200,
    "refer": null,
@@ -154,29 +122,21 @@
    "best": "direct",
    "urls": 37887
   },
-  "v1.ppqrrs.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 26777
-  },
-  "hn.bfvvs.com": {
+  "svip.xgplay17.com": {
    "direct": 200,
    "refer": null,
    "proxy": 200,
    "ok": true,
    "best": "direct",
-   "urls": 132276
+   "urls": 17739
   },
-  "play.modujx15.com": {
+  "vodcnd01.ajupf.com": {
    "direct": 200,
    "refer": null,
    "proxy": 200,
    "ok": true,
    "best": "direct",
-   "urls": 14308
+   "urls": 26377
   },
   "vodcnd11.uvjtih.cn": {
    "direct": 200,
@@ -186,13 +146,21 @@
    "best": "direct",
    "urls": 15319
   },
-  "v1.rstu6.com": {
+  "play.modujx15.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 14308
+  },
+  "v1.ppqrrs.com": {
    "direct": 403,
    "refer": 403,
    "proxy": 502,
    "ok": false,
    "best": "none",
-   "urls": 26053
+   "urls": 26777
   },
   "v1.zuidazym3u8.com": {
    "direct": 403,
@@ -202,6 +170,30 @@
    "best": "none",
    "urls": 26220
   },
+  "v1.rstu6.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 26053
+  },
+  "hn.bfvvs.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 132276
+  },
+  "vodcnd03.ajupf.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 15482
+  },
   "vip1.lz-cdn1.com": {
    "direct": 404,
    "refer": 404,
@@ -209,30 +201,6 @@
    "ok": true,
    "best": "proxy",
    "urls": 18986
-  },
-  "vip.lz-cdn3.com": {
-   "direct": 404,
-   "refer": 404,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 16360
-  },
-  "vodcnd10.ajupf.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 12290
-  },
-  "c1.ddbbffcdn.com": {
-   "direct": "UnicodeEncodeError",
-   "refer": "UnicodeEncodeError",
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 14186
   },
   "vodcnd04.uvjtih.cn": {
    "direct": 200,
@@ -242,29 +210,29 @@
    "best": "direct",
    "urls": 12805
   },
-  "v.qq.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 502,
-   "ok": true,
-   "best": "direct",
-   "urls": 14435
-  },
-  "v6.wsyzym3u8.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 11281
-  },
   "vip.lzcdn2.com": {
    "direct": 404,
    "refer": 404,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 18837
+  },
+  "vip.lz-cdn3.com": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 16360
+  },
+  "c1.ddbbffcdn.com": {
+   "direct": "UnicodeEncodeError",
+   "refer": "UnicodeEncodeError",
    "proxy": 502,
    "ok": false,
    "best": "none",
-   "urls": 18837
+   "urls": 14186
   },
   "c1.rrcdnbf6.com": {
    "direct": "UnicodeEncodeError",
@@ -274,6 +242,38 @@
    "best": "none",
    "urls": 12366
   },
+  "v.qq.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 502,
+   "ok": true,
+   "best": "direct",
+   "urls": 14435
+  },
+  "vodcnd10.ajupf.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 12290
+  },
+  "v6.wsyzym3u8.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 11281
+  },
+  "vip.ffzy-play6.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 20161
+  },
   "p.bvvvvvvvvv1f.com": {
    "direct": 404,
    "refer": 404,
@@ -281,62 +281,6 @@
    "ok": false,
    "best": "none",
    "urls": 14014
-  },
-  "vodcnd08.uvjtih.cn": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 12033
-  },
-  "www.iqiyi.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 502,
-   "ok": true,
-   "best": "direct",
-   "urls": 12265
-  },
-  "vodcnd03.uvjtih.cn": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 10404
-  },
-  "vodcnd02.ajupf.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 11326
-  },
-  "vodcnd06.uvjtih.cn": {
-   "direct": 404,
-   "refer": 404,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 12341
-  },
-  "vodcnd02.uvjtih.cn": {
-   "direct": 404,
-   "refer": 404,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 14145
-  },
-  "vodcnd07.uvjtih.cn": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 10551
   },
   "c1.rrcdnbf2.com": {
    "direct": "UnicodeEncodeError",
@@ -346,21 +290,21 @@
    "best": "none",
    "urls": 11144
   },
-  "vodcnd12.uvjtih.cn": {
+  "www.iqiyi.com": {
    "direct": 200,
    "refer": null,
-   "proxy": 200,
+   "proxy": 502,
    "ok": true,
    "best": "direct",
-   "urls": 11398
+   "urls": 12265
   },
-  "vodcnd08.ajupf.com": {
+  "vodcnd07.uvjtih.cn": {
    "direct": 200,
    "refer": null,
    "proxy": 200,
    "ok": true,
    "best": "direct",
-   "urls": 10010
+   "urls": 10551
   },
   "vodcnd10.uvjtih.cn": {
    "direct": 200,
@@ -370,38 +314,6 @@
    "best": "direct",
    "urls": 10082
   },
-  "vodcnd13.ajupf.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 9666
-  },
-  "cdn7.ryplay7.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 9703
-  },
-  "cdn1.ryplay1.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 9715
-  },
-  "vodcnd09.ajupf.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 9622
-  },
   "vodcnd14.uvjtih.cn": {
    "direct": 404,
    "refer": 404,
@@ -410,29 +322,21 @@
    "best": "none",
    "urls": 12180
   },
-  "play.modujx16.com": {
+  "vodcnd03.uvjtih.cn": {
    "direct": 200,
    "refer": null,
    "proxy": 200,
    "ok": true,
    "best": "direct",
-   "urls": 9250
+   "urls": 10404
   },
-  "p.bvvvvvvv7f.com": {
-   "direct": 404,
-   "refer": 404,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 9557
-  },
-  "svip.ryplay15.com": {
+  "vodcnd08.ajupf.com": {
    "direct": 200,
    "refer": null,
    "proxy": 200,
    "ok": true,
    "best": "direct",
-   "urls": 9196
+   "urls": 10010
   },
   "vodcnd14.ajupf.com": {
    "direct": 404,
@@ -442,29 +346,45 @@
    "best": "none",
    "urls": 10233
   },
-  "vip.ffzy-play6.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 20161
-  },
-  "v6.rstu6.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 8762
-  },
-  "vodcnd09.uvjtih.cn": {
+  "vodcnd12.uvjtih.cn": {
    "direct": 200,
    "refer": null,
    "proxy": 200,
    "ok": true,
    "best": "direct",
-   "urls": 8655
+   "urls": 11398
+  },
+  "vodcnd02.ajupf.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 11326
+  },
+  "vodcnd13.ajupf.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 9666
+  },
+  "svip.xgplay7.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 10341
+  },
+  "vip.ffzy-online1.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 14312
   },
   "svip.xgplay3.com": {
    "direct": 403,
@@ -474,29 +394,29 @@
    "best": "none",
    "urls": 26228
   },
-  "play.modujx11.com": {
+  "vodcnd09.ajupf.com": {
    "direct": 200,
    "refer": null,
    "proxy": 200,
    "ok": true,
    "best": "direct",
-   "urls": 8664
+   "urls": 9622
   },
-  "vip.ffzy-play7.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 44837
-  },
-  "v4.wsyzym3u8.com": {
+  "cdn1.ryplay1.com": {
    "direct": 200,
    "refer": null,
    "proxy": 200,
    "ok": true,
    "best": "direct",
-   "urls": 8070
+   "urls": 9715
+  },
+  "cdn7.ryplay7.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 9703
   },
   "vip.dytt-film.com": {
    "direct": 403,
@@ -506,37 +426,53 @@
    "best": "none",
    "urls": 26226
   },
-  "vip.dytt-kan.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 15588
-  },
-  "vodcnd12.ajupf.com": {
+  "play.modujx16.com": {
    "direct": 200,
    "refer": null,
    "proxy": 200,
    "ok": true,
    "best": "direct",
-   "urls": 7670
+   "urls": 9250
   },
-  "vip1.lz-cdn7.com": {
-   "direct": 404,
-   "refer": 404,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 8794
-  },
-  "tyyszywvod2.com": {
-   "direct": "RemoteDisconnected",
-   "refer": "RemoteDisconnected",
+  "vip.ffzy-play7.com": {
+   "direct": 403,
+   "refer": 403,
    "proxy": 502,
    "ok": false,
    "best": "none",
-   "urls": 8543
+   "urls": 44837
+  },
+  "vodcnd06.uvjtih.cn": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 12341
+  },
+  "svip.ryplay15.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 9196
+  },
+  "vodcnd02.uvjtih.cn": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 14145
+  },
+  "vodcnd09.uvjtih.cn": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 8655
   },
   "svip.xgplay4.com": {
    "direct": 403,
@@ -546,30 +482,6 @@
    "best": "none",
    "urls": 14164
   },
-  "vip.dytt-live.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 13143
-  },
-  "vip.ffzy-online1.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 14312
-  },
-  "cdn4.ryplay4.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 8436
-  },
   "svip.xgplay9.com": {
    "direct": 403,
    "refer": 403,
@@ -578,13 +490,53 @@
    "best": "none",
    "urls": 13136
   },
-  "vod3.wgslsw.com": {
+  "play.modujx11.com": {
    "direct": 200,
    "refer": null,
    "proxy": 200,
    "ok": true,
    "best": "direct",
-   "urls": 7130
+   "urls": 8664
+  },
+  "vip.dytt-kan.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 15588
+  },
+  "v4.wsyzym3u8.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 8070
+  },
+  "p.bvvvvvvv7f.com": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 9557
+  },
+  "vodcnd12.ajupf.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 7670
+  },
+  "tyyszywvod2.com": {
+   "direct": "RemoteDisconnected",
+   "refer": "RemoteDisconnected",
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 8550
   },
   "vip.dytt-hot.com": {
    "direct": 403,
@@ -594,21 +546,37 @@
    "best": "none",
    "urls": 14145
   },
-  "v.fengbao8.com": {
-   "direct": "UnicodeEncodeError",
-   "refer": "UnicodeEncodeError",
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 7143
-  },
-  "play.modujx10.com": {
+  "cdn4.ryplay4.com": {
    "direct": 200,
    "refer": null,
    "proxy": 200,
    "ok": true,
    "best": "direct",
-   "urls": 6994
+   "urls": 8436
+  },
+  "v6.rstu6.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 8762
+  },
+  "vod3.wgslsw.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 7130
+  },
+  "vodcnd11.ajupf.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 15876
   },
   "v6.zuidazym3u8.com": {
    "direct": 403,
@@ -618,6 +586,30 @@
    "best": "none",
    "urls": 8067
   },
+  "vip.dytt-live.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 13143
+  },
+  "vip1.lz-cdn7.com": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 8794
+  },
+  "play.modujx10.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 6994
+  },
   "v5.wsyzym3u8.com": {
    "direct": 200,
    "refer": null,
@@ -626,6 +618,30 @@
    "best": "direct",
    "urls": 6788
   },
+  "ukzy.ukubf4.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 37754
+  },
+  "v.fengbao8.com": {
+   "direct": "UnicodeEncodeError",
+   "refer": "UnicodeEncodeError",
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 7143
+  },
+  "vodcnd15.ajupf.com": {
+   "direct": 502,
+   "refer": 502,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 9764
+  },
   "v6.ppqrrs.com": {
    "direct": 403,
    "refer": 403,
@@ -633,22 +649,6 @@
    "ok": false,
    "best": "none",
    "urls": 7654
-  },
-  "ukzyvod3.ukubf5.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 19503
-  },
-  "v4.rstu6.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 6983
   },
   "v.youku.com": {
    "direct": 200,
@@ -674,21 +674,21 @@
    "best": "direct",
    "urls": 6207
   },
-  "svip.xgplay7.com": {
+  "v4.rstu6.com": {
    "direct": 403,
    "refer": 403,
    "proxy": 502,
    "ok": false,
    "best": "none",
-   "urls": 10341
+   "urls": 6983
   },
-  "vodcnd05.uvjtih.cn": {
-   "direct": 404,
-   "refer": 404,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 8397
+  "vip.dytt-cine.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 9941
   },
   "v8.wsyzym3u8.com": {
    "direct": 200,
@@ -706,6 +706,22 @@
    "best": "direct",
    "urls": 5784
   },
+  "vodcnd05.uvjtih.cn": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 8397
+  },
+  "c1.rrcdnbf5.com": {
+   "direct": "UnicodeEncodeError",
+   "refer": "UnicodeEncodeError",
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 6361
+  },
   "cdn5.ryplay5.com": {
    "direct": 200,
    "refer": null,
@@ -713,30 +729,6 @@
    "ok": true,
    "best": "direct",
    "urls": 6370
-  },
-  "vodcnd15.ajupf.com": {
-   "direct": 502,
-   "refer": 502,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 9764
-  },
-  "c1.rrcdnbf5.com": {
-   "direct": "UnicodeEncodeError",
-   "refer": "UnicodeEncodeError",
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 6361
-  },
-  "svip.xgplay15.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 9941
   },
   "v13.wsyzym3u8.com": {
    "direct": 200,
@@ -746,7 +738,7 @@
    "best": "direct",
    "urls": 5502
   },
-  "vip.dytt-cine.com": {
+  "svip.xgplay15.com": {
    "direct": 403,
    "refer": 403,
    "proxy": 502,
@@ -757,9 +749,9 @@
   "c1.rrcdnbf4.com": {
    "direct": "UnicodeEncodeError",
    "refer": "UnicodeEncodeError",
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
    "urls": 5738
   },
   "s1.bfllvip.com": {
@@ -770,13 +762,13 @@
    "best": "proxy",
    "urls": 6171
   },
-  "vip.ffzy-online2.com": {
+  "ukzyvod3.ukubf5.com": {
    "direct": 403,
    "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 9629
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 19513
   },
   "v5.rstu6.com": {
    "direct": 403,
@@ -786,93 +778,13 @@
    "best": "none",
    "urls": 5448
   },
-  "svip.feifei-play.com": {
+  "vip.ffzy-online2.com": {
    "direct": 403,
    "refer": 403,
    "proxy": 502,
    "ok": false,
    "best": "none",
-   "urls": 8792
-  },
-  "www.mgtv.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 502,
-   "ok": true,
-   "best": "direct",
-   "urls": 5400
-  },
-  "v14.wsyzym3u8.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 5033
-  },
-  "v8.rstu6.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 5291
-  },
-  "s2.bfllvip.com": {
-   "direct": 404,
-   "refer": 404,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 5262
-  },
-  "v8.zuidazym3u8.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 5014
-  },
-  "v3.rstu6.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 4992
-  },
-  "vip.ffzy-plays.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 7005
-  },
-  "svip.xgplay2.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 7364
-  },
-  "vodcnd13.uvjtih.cn": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 5440
-  },
-  "vip.dytt-movies.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 7365
+   "urls": 9629
   },
   "yzzy.play-cdn17.com": {
    "direct": 403,
@@ -882,6 +794,102 @@
    "best": "proxy",
    "urls": 6552
   },
+  "v14.wsyzym3u8.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 5033
+  },
+  "svip.feifei-play.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 8792
+  },
+  "vip.dytt-cinema.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 5574
+  },
+  "v8.rstu6.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 5291
+  },
+  "vip.dytt-movies.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 7365
+  },
+  "v3.rstu6.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 4992
+  },
+  "www.mgtv.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 502,
+   "ok": true,
+   "best": "direct",
+   "urls": 5400
+  },
+  "svip.xgplay2.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 7364
+  },
+  "vip.ffzyread2.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 6744
+  },
+  "v8.zuidazym3u8.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 5014
+  },
+  "vodcnd13.uvjtih.cn": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 5440
+  },
+  "s2.bfllvip.com": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 5262
+  },
   "play.modujx12.com": {
    "direct": 200,
    "refer": null,
@@ -889,22 +897,6 @@
    "ok": true,
    "best": "direct",
    "urls": 4961
-  },
-  "v8.ppqrrs.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 4929
-  },
-  "yzzy21.playback-speed.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 5920
   },
   "vip.ffzy-play10.com": {
    "direct": 403,
@@ -914,21 +906,13 @@
    "best": "none",
    "urls": 7164
   },
-  "v13.rstu6.com": {
+  "v8.ppqrrs.com": {
    "direct": 403,
    "refer": 403,
    "proxy": 502,
    "ok": false,
    "best": "none",
-   "urls": 4913
-  },
-  "svip.xgplay1.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 6977
+   "urls": 4929
   },
   "v11.wsyzym3u8.com": {
    "direct": 200,
@@ -938,38 +922,6 @@
    "best": "direct",
    "urls": 4510
   },
-  "vip.dytt-music.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 6979
-  },
-  "svip.xgplay12.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 6685
-  },
-  "vip.dytt-tv.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 6685
-  },
-  "v5.zuidazym3u8.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 4584
-  },
   "v3.zuidazym3u8.com": {
    "direct": 403,
    "refer": 403,
@@ -977,6 +929,14 @@
    "ok": false,
    "best": "none",
    "urls": 4744
+  },
+  "v13.rstu6.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 4915
   },
   "v3.ppqrrs.com": {
    "direct": 403,
@@ -986,13 +946,37 @@
    "best": "none",
    "urls": 4621
   },
-  "vip.ffzyread2.com": {
+  "vip.ffzy-plays.com": {
    "direct": 403,
    "refer": 403,
    "proxy": 502,
    "ok": false,
    "best": "none",
-   "urls": 6744
+   "urls": 7005
+  },
+  "v14.rstu6.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 4532
+  },
+  "v5.zuidazym3u8.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 4584
+  },
+  "yzzy21.playback-speed.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 5920
   },
   "vodcnd06.ajupf.com": {
    "direct": 200,
@@ -1002,45 +986,37 @@
    "best": "direct",
    "urls": 4344
   },
-  "v14.rstu6.com": {
+  "super.ffzy-online6.com": {
    "direct": 403,
    "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 4528
-  },
-  "svip.xgplay13.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 5584
-  },
-  "svip.xgplay16.com": {
-   "direct": 200,
-   "refer": null,
    "proxy": 200,
    "ok": true,
-   "best": "direct",
-   "urls": 4143
+   "best": "proxy",
+   "urls": 4990
   },
-  "v2.ppqrrs.com": {
+  "vip.dytt-tv.com": {
    "direct": 403,
    "refer": 403,
    "proxy": 502,
    "ok": false,
    "best": "none",
-   "urls": 4350
+   "urls": 6685
   },
-  "svip.xgplay20.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 4198
+  "svip.xgplay1.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 6977
+  },
+  "svip.xgplay12.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 6685
   },
   "v2.rstu6.com": {
    "direct": 403,
@@ -1050,29 +1026,13 @@
    "best": "none",
    "urls": 4402
   },
-  "c1.rrcdnbf3.com": {
-   "direct": "UnicodeEncodeError",
-   "refer": "UnicodeEncodeError",
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 4205
-  },
-  "ukzy.ukubf4.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": "TimeoutError",
-   "ok": false,
-   "best": "none",
-   "urls": 37754
-  },
-  "svip.ryplay14.com": {
+  "vip.dytt-music.com": {
    "direct": 403,
    "refer": 403,
    "proxy": 502,
    "ok": false,
    "best": "none",
-   "urls": 5401
+   "urls": 6979
   },
   "vodcnd16.ajupf.com": {
    "direct": 200,
@@ -1090,21 +1050,13 @@
    "best": "direct",
    "urls": 4123
   },
-  "vip.ffzy-online.com": {
+  "v2.ppqrrs.com": {
    "direct": 403,
    "refer": 403,
    "proxy": 502,
    "ok": false,
    "best": "none",
-   "urls": 5481
-  },
-  "ukzy.ukubf3.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": "TimeoutError",
-   "ok": false,
-   "best": "none",
-   "urls": 22777
+   "urls": 4350
   },
   "vip.ffzy-online3.com": {
    "direct": 403,
@@ -1114,21 +1066,29 @@
    "best": "none",
    "urls": 5553
   },
-  "v12.wsyzym3u8.com": {
+  "svip.xgplay16.com": {
    "direct": 200,
    "refer": null,
    "proxy": 200,
    "ok": true,
    "best": "direct",
-   "urls": 3855
+   "urls": 4143
   },
-  "ukzy.ukubf8.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": "TimeoutError",
+  "svip.xgplay20.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 4198
+  },
+  "c1.rrcdnbf3.com": {
+   "direct": "UnicodeEncodeError",
+   "refer": "UnicodeEncodeError",
+   "proxy": 502,
    "ok": false,
    "best": "none",
-   "urls": 8774
+   "urls": 4205
   },
   "cdn3.ryplay3.com": {
    "direct": 200,
@@ -1138,13 +1098,13 @@
    "best": "direct",
    "urls": 4107
   },
-  "vip.dytt-cinema.com": {
+  "svip.xgplay13.com": {
    "direct": 403,
    "refer": 403,
    "proxy": 502,
    "ok": false,
    "best": "none",
-   "urls": 5574
+   "urls": 5584
   },
   "v2.zuidazym3u8.com": {
    "direct": 403,
@@ -1153,6 +1113,22 @@
    "ok": false,
    "best": "none",
    "urls": 4126
+  },
+  "v12.wsyzym3u8.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 3855
+  },
+  "vip.ffzy-play1.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 4368
   },
   "vodcnd07.ajupf.com": {
    "direct": 404,
@@ -1170,6 +1146,30 @@
    "best": "none",
    "urls": 3960
   },
+  "vip.ffzy-online.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 5481
+  },
+  "svip.ryplay14.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 5403
+  },
+  "vip1.lz-cdn5.com": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 3952
+  },
   "vip.dytt-network.com": {
    "direct": 200,
    "refer": null,
@@ -1177,6 +1177,22 @@
    "ok": true,
    "best": "direct",
    "urls": 3784
+  },
+  "v.lzcdn24.com": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 3940
+  },
+  "ukzy.ukubf8.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 8784
   },
   "cdn.ryplay11.com": {
    "direct": 200,
@@ -1186,22 +1202,6 @@
    "best": "direct",
    "urls": 3678
   },
-  "vip1.lz-cdn5.com": {
-   "direct": 404,
-   "refer": 404,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 3952
-  },
-  "super.ffzy-online6.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 4990
-  },
   "v.lzcdn27.com": {
    "direct": 404,
    "refer": 404,
@@ -1209,6 +1209,14 @@
    "ok": true,
    "best": "proxy",
    "urls": 3849
+  },
+  "ukzy.ukubf3.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": "TimeoutError",
+   "ok": false,
+   "best": "none",
+   "urls": 22795
   },
   "v11.ppqrrs.com": {
    "direct": 403,
@@ -1226,13 +1234,13 @@
    "best": "none",
    "urls": 3593
   },
-  "v.lzcdn24.com": {
-   "direct": 404,
-   "refer": 404,
+  "vod.feifei-video.com": {
+   "direct": 403,
+   "refer": 403,
    "proxy": 200,
    "ok": true,
    "best": "proxy",
-   "urls": 3940
+   "urls": 4334
   },
   "yzzy.play-cdn2.com": {
    "direct": 403,
@@ -1242,29 +1250,21 @@
    "best": "proxy",
    "urls": 4405
   },
-  "svip.xgplay19.com": {
+  "vod.feifei-kan.com": {
    "direct": 403,
    "refer": 403,
    "proxy": 502,
    "ok": false,
    "best": "none",
-   "urls": 4906
+   "urls": 4635
   },
-  "vip.ffzy-play.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 4678
-  },
-  "v.cdnlz22.com": {
-   "direct": 404,
-   "refer": 404,
+  "vodcnd16.uvjtih.cn": {
+   "direct": 200,
+   "refer": null,
    "proxy": 200,
    "ok": true,
-   "best": "proxy",
-   "urls": 3482
+   "best": "direct",
+   "urls": 3397
   },
   "v12.rstu6.com": {
    "direct": 403,
@@ -1274,13 +1274,29 @@
    "best": "none",
    "urls": 3405
   },
-  "vod.feifei-kan.com": {
+  "svip.xgplay10.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 3997
+  },
+  "v.cdnlz22.com": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 3482
+  },
+  "svip.xgplay19.com": {
    "direct": 403,
    "refer": 403,
    "proxy": 502,
    "ok": false,
    "best": "none",
-   "urls": 4635
+   "urls": 4906
   },
   "vod11.wgslsw.com": {
    "direct": 200,
@@ -1290,30 +1306,6 @@
    "best": "direct",
    "urls": 3315
   },
-  "vip.ffzy-play1.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 4368
-  },
-  "v5.ppqrrs.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 3392
-  },
-  "vod.feifei-online.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 4272
-  },
   "v9.wsyzym3u8.com": {
    "direct": 200,
    "refer": null,
@@ -1321,38 +1313,6 @@
    "ok": true,
    "best": "direct",
    "urls": 3257
-  },
-  "vip.dytt-tvs.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 4227
-  },
-  "vodcnd16.uvjtih.cn": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 3313
-  },
-  "v.cdnlz19.com": {
-   "direct": 404,
-   "refer": 404,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 3414
-  },
-  "vod.feifei-video.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 4334
   },
   "v11.zuidazym3u8.com": {
    "direct": 403,
@@ -1362,6 +1322,46 @@
    "best": "none",
    "urls": 3391
   },
+  "v5.ppqrrs.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 3392
+  },
+  "v.cdnlz19.com": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 3414
+  },
+  "vip.ffzy-play.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 4678
+  },
+  "yzzy.play-cdn4.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 4073
+  },
+  "vip.dytt-tvs.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 4227
+  },
   "play.modujx13.com": {
    "direct": 200,
    "refer": null,
@@ -1369,38 +1369,6 @@
    "ok": true,
    "best": "direct",
    "urls": 3120
-  },
-  "vip.lz-cdn11.com": {
-   "direct": 404,
-   "refer": 404,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 3322
-  },
-  "cdn.ryplay10.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 3233
-  },
-  "vod5.wgslsw.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 2901
-  },
-  "vip.dytt-tvb.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 4002
   },
   "play.modujx14.com": {
    "direct": 200,
@@ -1410,21 +1378,77 @@
    "best": "direct",
    "urls": 2953
   },
-  "yzzy.play-cdn6.com": {
-   "direct": 403,
-   "refer": 403,
+  "cdn.ryplay10.com": {
+   "direct": 200,
+   "refer": null,
    "proxy": 200,
    "ok": true,
-   "best": "proxy",
-   "urls": 3698
+   "best": "direct",
+   "urls": 3233
   },
-  "svip.xgplay10.com": {
+  "v14.zuidazym3u8.com": {
    "direct": 403,
    "refer": 403,
    "proxy": 502,
    "ok": false,
    "best": "none",
-   "urls": 3997
+   "urls": 2951
+  },
+  "vod5.wgslsw.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 2901
+  },
+  "vod.feifei-online.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 4272
+  },
+  "yzzy.play-cdn3.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 3402
+  },
+  "vip.lz-cdn11.com": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 3322
+  },
+  "v13.zuidazym3u8.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 3078
+  },
+  "v.lzcdn31.com": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 3273
+  },
+  "yzzy.play-cdn7.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 3409
   },
   "v7.ppqrrs.com": {
    "direct": 403,
@@ -1442,21 +1466,29 @@
    "best": "proxy",
    "urls": 3090
   },
-  "v13.zuidazym3u8.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 3078
+  "svip.ryiplay18.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 2888
   },
-  "v14.zuidazym3u8.com": {
+  "yzzy.play-cdn6.com": {
    "direct": 403,
    "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 2951
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 3698
+  },
+  "svip.xgplay14.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 3660
   },
   "v4.ppqrrs.com": {
    "direct": 403,
@@ -1466,38 +1498,6 @@
    "best": "none",
    "urls": 2947
   },
-  "yzzy.play-cdn4.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 4073
-  },
-  "vip.dytt-video.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 3977
-  },
-  "vip.ffzy-play9.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 3841
-  },
-  "v.lzcdn31.com": {
-   "direct": 404,
-   "refer": 404,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 3273
-  },
   "v7.wsyzym3u8.com": {
    "direct": 200,
    "refer": null,
@@ -1505,6 +1505,22 @@
    "ok": true,
    "best": "direct",
    "urls": 2661
+  },
+  "cdn.ryplay12.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 2815
+  },
+  "vip.dytt-tvb.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 4002
   },
   "svip.xgplay11.com": {
    "direct": 403,
@@ -1514,53 +1530,13 @@
    "best": "none",
    "urls": 3830
   },
-  "cdn.ryplay12.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 2813
-  },
-  "svip.ryiplay18.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 2882
-  },
-  "vip.dytt-see.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 3836
-  },
-  "vip.dytt-love.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 3830
-  },
-  "vod6.wgslsw.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 2537
-  },
-  "v.cdnlz3.com": {
+  "vip1.lz-cdn.com": {
    "direct": 404,
    "refer": 404,
    "proxy": 200,
    "ok": true,
    "best": "proxy",
-   "urls": 2915
+   "urls": 2877
   },
   "v9.rstu6.com": {
    "direct": 403,
@@ -1570,77 +1546,53 @@
    "best": "none",
    "urls": 2899
   },
-  "vip.lz-cdn16.com": {
+  "v.cdnlz3.com": {
    "direct": 404,
    "refer": 404,
    "proxy": 200,
    "ok": true,
    "best": "proxy",
-   "urls": 2768
+   "urls": 2915
   },
-  "vip1.lz-cdn.com": {
-   "direct": 404,
-   "refer": 404,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 2877
-  },
-  "vip.dytt-luck.com": {
+  "vip.dytt-video.com": {
    "direct": 403,
    "refer": 403,
    "proxy": 502,
    "ok": false,
    "best": "none",
-   "urls": 3660
+   "urls": 3977
   },
-  "vip.lz-cdn14.com": {
-   "direct": 404,
-   "refer": 404,
+  "vod6.wgslsw.com": {
+   "direct": 200,
+   "refer": null,
    "proxy": 200,
    "ok": true,
-   "best": "proxy",
-   "urls": 2704
+   "best": "direct",
+   "urls": 2537
   },
-  "svip.xgplay14.com": {
+  "vip.ffzy-play9.com": {
    "direct": 403,
    "refer": 403,
    "proxy": 502,
    "ok": false,
    "best": "none",
-   "urls": 3660
+   "urls": 3841
   },
-  "yzzy.play-cdn7.com": {
+  "cdn8.ryplay8.com": {
    "direct": 403,
    "refer": 403,
    "proxy": 200,
    "ok": true,
    "best": "proxy",
-   "urls": 3409
+   "urls": 3332
   },
-  "vip.lz-cdn4.com": {
-   "direct": 404,
-   "refer": 404,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 2747
-  },
-  "yzzy.play-cdn3.com": {
+  "vip.dytt-see.com": {
    "direct": 403,
    "refer": 403,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 3402
-  },
-  "vip1.lz-cdn6.com": {
-   "direct": 404,
-   "refer": 404,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 2654
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 3836
   },
   "v12.zuidazym3u8.com": {
    "direct": 403,
@@ -1658,173 +1610,37 @@
    "best": "none",
    "urls": 2517
   },
-  "vod2.wgslsw.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 2279
-  },
-  "v7.rstu6.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 2474
-  },
-  "cdn.yzzyvip-29.com": {
-   "direct": 403,
-   "refer": 403,
+  "vip.lz-cdn4.com": {
+   "direct": 404,
+   "refer": 404,
    "proxy": 200,
    "ok": true,
    "best": "proxy",
-   "urls": 2938
+   "urls": 2747
+  },
+  "vip.lz-cdn14.com": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 2704
   },
   "www.bilibili.com": {
-   "direct": 412,
-   "refer": 200,
+   "direct": 200,
+   "refer": null,
    "proxy": 502,
    "ok": true,
-   "best": "refer",
+   "best": "direct",
    "urls": 2593
   },
-  "v12.ppqrrs.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 2486
-  },
-  "v9.ppqrrs.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 2399
-  },
-  "vodcnd17.ajupf.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 2246
-  },
-  "cdn2.ryplay2.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 2765
-  },
-  "cdn8.ryplay8.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 3332
-  },
-  "v7.zuidazym3u8.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 2350
-  },
-  "vip.lzcdn10.com": {
+  "vip.lz-cdn16.com": {
    "direct": 404,
    "refer": 404,
    "proxy": 200,
    "ok": true,
    "best": "proxy",
-   "urls": 2360
-  },
-  "cdn9.ryplay9.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 2133
-  },
-  "yzzy.play-cdn8.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 2554
-  },
-  "cdn.yzzy32-play.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 2553
-  },
-  "vip.dytt-play.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 2050
-  },
-  "cdn6.ryplay6.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 2650
-  },
-  "s1.fengbao9.com": {
-   "direct": 404,
-   "refer": 404,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 2366
-  },
-  "vodcnd17.uvjtih.cn": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 2054
-  },
-  "s3.bfllvip.com": {
-   "direct": 404,
-   "refer": 404,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 2133
-  },
-  "vip1.lz-cdn8.com": {
-   "direct": 404,
-   "refer": 404,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 2124
-  },
-  "v10.ppqrrs.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 2103
+   "urls": 2768
   },
   "yzzy.play-cdn10.com": {
    "direct": 403,
@@ -1834,6 +1650,166 @@
    "best": "proxy",
    "urls": 2886
   },
+  "v7.rstu6.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 2474
+  },
+  "vod2.wgslsw.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 2279
+  },
+  "vip.dytt-love.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 3830
+  },
+  "vip1.lz-cdn6.com": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 2654
+  },
+  "v9.ppqrrs.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 2399
+  },
+  "v12.ppqrrs.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 2486
+  },
+  "v7.zuidazym3u8.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 2350
+  },
+  "cdn.yzzyvip-29.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 2938
+  },
+  "vodcnd17.ajupf.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 2246
+  },
+  "vodcnd17.uvjtih.cn": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 2188
+  },
+  "cdn2.ryplay2.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 2765
+  },
+  "cdn9.ryplay9.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 2133
+  },
+  "vip.lzcdn10.com": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 2360
+  },
+  "s1.fengbao9.com": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 2366
+  },
+  "cdn.yzzy32-play.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 2553
+  },
+  "v10.ppqrrs.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 2103
+  },
+  "vip1.lz-cdn8.com": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 2124
+  },
+  "vip.dytt-luck.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 3660
+  },
+  "vip.dytt-play.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 2050
+  },
+  "s3.bfllvip.com": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 2133
+  },
   "vodcnd00.ajupf.com": {
    "direct": 200,
    "refer": null,
@@ -1841,6 +1817,14 @@
    "ok": true,
    "best": "direct",
    "urls": 1928
+  },
+  "cdn6.ryplay6.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 2650
   },
   "v.lzcdn26.com": {
    "direct": 404,
@@ -1850,6 +1834,22 @@
    "best": "proxy",
    "urls": 2336
   },
+  "svip.xgplay21.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 2884
+  },
+  "svip.xgplay18.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 2829
+  },
   "tyyszywvod1.com": {
    "direct": "RemoteDisconnected",
    "refer": "RemoteDisconnected",
@@ -1858,69 +1858,13 @@
    "best": "none",
    "urls": 1909
   },
-  "v10.zuidazym3u8.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 1808
-  },
-  "yzzy.play-cdn14.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 2119
-  },
   "v.baofeng9.com": {
    "direct": 404,
    "refer": 404,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 2109
-  },
-  "vod1.wgslsw.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 1680
-  },
-  "vip.lz-cdn17.com": {
-   "direct": 404,
-   "refer": 404,
    "proxy": 200,
    "ok": true,
    "best": "proxy",
-   "urls": 1804
-  },
-  "cdn.yzzy28-play.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 2024
-  },
-  "cdn.yzzy31-play.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 2332
-  },
-  "svip.xgplay21.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 2884
+   "urls": 2110
   },
   "svip.ryplay17.com": {
    "direct": 403,
@@ -1930,53 +1874,29 @@
    "best": "proxy",
    "urls": 2303
   },
-  "v.cdnlz11.com": {
-   "direct": 404,
-   "refer": 404,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 1692
-  },
-  "vip.lz-cdn12.com": {
-   "direct": 404,
-   "refer": 404,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 1538
-  },
-  "v.lzcdn25.com": {
-   "direct": 404,
-   "refer": 404,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 1852
-  },
-  "svip.xgplay18.com": {
+  "v10.zuidazym3u8.com": {
    "direct": 403,
    "refer": 403,
    "proxy": 502,
    "ok": false,
    "best": "none",
-   "urls": 2829
+   "urls": 1808
   },
-  "vip15.play-cdn15.com": {
+  "vod1.wgslsw.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 1680
+  },
+  "yzzy.play-cdn13.com": {
    "direct": 403,
    "refer": 403,
    "proxy": 200,
    "ok": true,
    "best": "proxy",
-   "urls": 1956
-  },
-  "v2.yzzy5-play.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 1887
+   "urls": 2015
   },
   "yzzy.play-cdn12.com": {
    "direct": 403,
@@ -1986,6 +1906,46 @@
    "best": "proxy",
    "urls": 2112
   },
+  "yzzy.play-cdn8.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 2554
+  },
+  "v.cdnlz11.com": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 1692
+  },
+  "vip15.play-cdn15.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 1956
+  },
+  "vip.lz-cdn17.com": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 1804
+  },
+  "v2.yzzy5-play.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 1887
+  },
   "yzzy1.play-cdn16.com": {
    "direct": 403,
    "refer": 403,
@@ -1994,6 +1954,38 @@
    "best": "proxy",
    "urls": 2294
   },
+  "v.lzcdn25.com": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 1852
+  },
+  "cdn.yzzy31-play.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 2332
+  },
+  "vip.lz-cdn12.com": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 1538
+  },
+  "svip.xgplay5.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 2050
+  },
   "vod7.wgslsw.com": {
    "direct": 200,
    "refer": null,
@@ -2001,6 +1993,46 @@
    "ok": true,
    "best": "direct",
    "urls": 1327
+  },
+  "yzzy.play-cdn9.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 1780
+  },
+  "vip.lz-cdn13.com": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 1482
+  },
+  "yzzy.play-cdn14.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 2119
+  },
+  "v.lfthirtytwo.com": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 1530
+  },
+  "cdn.vvvip-plays33.cc": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 1772
   },
   "vod8.wgslsw.com": {
    "direct": 200,
@@ -2018,14 +2050,6 @@
    "best": "direct",
    "urls": 1289
   },
-  "cdn.vvvip-plays33.cc": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 1772
-  },
   "vod10.wgslsw.com": {
    "direct": 200,
    "refer": null,
@@ -2042,21 +2066,13 @@
    "best": "proxy",
    "urls": 1698
   },
-  "v.cdnlz21.com": {
+  "v.cdnlz20.com": {
    "direct": 404,
    "refer": 404,
    "proxy": 200,
    "ok": true,
    "best": "proxy",
-   "urls": 1684
-  },
-  "vip.lz-cdn13.com": {
-   "direct": 404,
-   "refer": 404,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 1482
+   "urls": 1410
   },
   "vip.ffzy-play5.com": {
    "direct": 403,
@@ -2066,14 +2082,6 @@
    "best": "none",
    "urls": 2332
   },
-  "vod1.maowushi.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 1191
-  },
   "vip.lz-cdn9.com": {
    "direct": 404,
    "refer": 404,
@@ -2082,13 +2090,37 @@
    "best": "proxy",
    "urls": 1393
   },
-  "v.cdnlz20.com": {
-   "direct": 404,
-   "refer": 404,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 1410
+  "vod1.maowushi.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 1198
+  },
+  "cdn.yzzy28-play.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 2024
+  },
+  "play.modujx17.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 1155
+  },
+  "vip.dytt-movie.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 2010
   },
   "v.cdnlz17.com": {
    "direct": 404,
@@ -2098,37 +2130,13 @@
    "best": "none",
    "urls": 1399
   },
-  "play.modujx17.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 1095
-  },
-  "yzzy.play-cdn13.com": {
+  "cdn1.yzzyhd-play.com": {
    "direct": 403,
    "refer": 403,
    "proxy": 200,
    "ok": true,
    "best": "proxy",
-   "urls": 2015
-  },
-  "play.phimgood.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 2242
-  },
-  "v.lfthirtytwo.com": {
-   "direct": 404,
-   "refer": 404,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 1530
+   "urls": 1409
   },
   "vip.ffzy-online5.com": {
    "direct": 403,
@@ -2138,29 +2146,13 @@
    "best": "none",
    "urls": 2090
   },
-  "svip.xgplay5.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 2050
-  },
-  "v.cdnlz9.com": {
-   "direct": 404,
-   "refer": 404,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 1060
-  },
-  "cdn1.yzzyhd-play.com": {
+  "svip.high20-playback.com": {
    "direct": 403,
    "refer": 403,
    "proxy": 200,
    "ok": true,
    "best": "proxy",
-   "urls": 1409
+   "urls": 1519
   },
   "svip.xgplay6.com": {
    "direct": 403,
@@ -2170,21 +2162,29 @@
    "best": "none",
    "urls": 2011
   },
-  "vip.dytt-movie.com": {
+  "svip.high24-playback.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 1455
+  },
+  "play.phimgood.com": {
    "direct": 403,
    "refer": 403,
    "proxy": 502,
    "ok": false,
    "best": "none",
-   "urls": 2010
+   "urls": 2242
   },
-  "v.cdnlz2.com": {
-   "direct": 404,
-   "refer": 404,
+  "cdn.yzzy27-play.com": {
+   "direct": 403,
+   "refer": 403,
    "proxy": 200,
    "ok": true,
    "best": "proxy",
-   "urls": 860
+   "urls": 1315
   },
   "v.cdnlz29.com": {
    "direct": 404,
@@ -2194,21 +2194,29 @@
    "best": "proxy",
    "urls": 998
   },
-  "yzzy.play-cdn9.com": {
-   "direct": 403,
-   "refer": 403,
+  "v.cdnlz9.com": {
+   "direct": 404,
+   "refer": 404,
    "proxy": 502,
    "ok": false,
    "best": "none",
-   "urls": 1780
+   "urls": 1060
   },
-  "svip.yyzy-play.vip": {
-   "direct": 403,
-   "refer": 403,
+  "v.lzcdn28.com": {
+   "direct": 404,
+   "refer": 404,
    "proxy": 200,
    "ok": true,
    "best": "proxy",
-   "urls": 1532
+   "urls": 1150
+  },
+  "v10.baofeng10.com": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 1019
   },
   "vvip.high26-playback.com": {
    "direct": 403,
@@ -2218,21 +2226,21 @@
    "best": "proxy",
    "urls": 1187
   },
-  "v1.cdnlz1.com": {
+  "v.cdnlz2.com": {
    "direct": 404,
    "refer": 404,
    "proxy": 200,
    "ok": true,
    "best": "proxy",
-   "urls": 798
+   "urls": 860
   },
-  "v10.baofeng10.com": {
-   "direct": 404,
-   "refer": 404,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 1019
+  "vip.ffzy-video.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 865
   },
   "v.cdnlz13.com": {
    "direct": 404,
@@ -2241,6 +2249,14 @@
    "ok": true,
    "best": "proxy",
    "urls": 828
+  },
+  "v1.cdnlz1.com": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 798
   },
   "v.cdnlz18.com": {
    "direct": 200,
@@ -2253,26 +2269,26 @@
   "p.b8bf.com": {
    "direct": "UnicodeEncodeError",
    "refer": "UnicodeEncodeError",
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
    "urls": 616
   },
-  "cdn.yzzy27-play.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 1315
+  "bfeng11.com": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 889
   },
-  "yzzy.play-cdn19.com": {
-   "direct": 403,
-   "refer": 403,
+  "v.cdnlz21.com": {
+   "direct": 404,
+   "refer": 404,
    "proxy": 200,
    "ok": true,
    "best": "proxy",
-   "urls": 1462
+   "urls": 1684
   },
   "v.cdnlz14.com": {
    "direct": 404,
@@ -2282,61 +2298,85 @@
    "best": "proxy",
    "urls": 584
   },
-  "svip.high20-playback.com": {
+  "yzzy.play-cdn19.com": {
    "direct": 403,
    "refer": 403,
    "proxy": 200,
    "ok": true,
    "best": "proxy",
-   "urls": 1519
+   "urls": 1462
   },
-  "svip.high25-playback.com": {
-   "direct": 403,
-   "refer": 403,
+  "v.fengbao11.com": {
+   "direct": 404,
+   "refer": 404,
    "proxy": 200,
    "ok": true,
    "best": "proxy",
-   "urls": 1274
-  },
-  "svip.high24-playback.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 1455
+   "urls": 696
   },
   "bfeng10.com": {
    "direct": 404,
    "refer": 404,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
    "urls": 953
   },
-  "bfeng11.com": {
+  "v.cdnlz4.com": {
    "direct": 404,
    "refer": 404,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 888
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 456
   },
-  "cdn.yzzy30-play.com": {
+  "yzzy.play-cdn18.com": {
    "direct": 403,
    "refer": 403,
    "proxy": 200,
    "ok": true,
    "best": "proxy",
-   "urls": 710
+   "urls": 768
   },
-  "v.lzcdn28.com": {
+  "fengbao12.com": {
    "direct": 404,
    "refer": 404,
    "proxy": 200,
    "ok": true,
    "best": "proxy",
-   "urls": 1150
+   "urls": 810
+  },
+  "vodcnd08.uvjtih.cn": {
+   "direct": "TimeoutError",
+   "refer": "TimeoutError",
+   "proxy": "TimeoutError",
+   "ok": false,
+   "best": "none",
+   "urls": 12033
+  },
+  "fengbao13.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 339
+  },
+  "vod.ffzy-bofang.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 321
+  },
+  "vod.360zyx.vip": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 293
   },
   "tyyszywvod.com": {
    "direct": "RemoteDisconnected",
@@ -2354,13 +2394,29 @@
    "best": "direct",
    "urls": 418
   },
-  "fengbao12.com": {
+  "hd.lz-cdn18.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 244
+  },
+  "v.fengbao10.com": {
    "direct": 404,
    "refer": 404,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 456
+  },
+  "svip.yyzy-play.vip": {
+   "direct": 403,
+   "refer": 403,
    "proxy": 502,
    "ok": false,
    "best": "none",
-   "urls": 810
+   "urls": 1532
   },
   "player.yzzyvip-35.com": {
    "direct": 403,
@@ -2370,61 +2426,13 @@
    "best": "proxy",
    "urls": 1242
   },
-  "v.cdnlz4.com": {
+  "v.lzcdn23.com": {
    "direct": 404,
    "refer": 404,
    "proxy": 200,
    "ok": true,
    "best": "proxy",
-   "urls": 456
-  },
-  "vod.360zyx.vip": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 293
-  },
-  "vod.ffzy-bofang.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 321
-  },
-  "v.fengbao11.com": {
-   "direct": 404,
-   "refer": 404,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 696
-  },
-  "hd.lz-cdn18.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 244
-  },
-  "v.lzfile26.com": {
-   "direct": 404,
-   "refer": 404,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 496
-  },
-  "fengbao13.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 273
+   "urls": 312
   },
   "vodcnd00.uvjtih.cn": {
    "direct": 200,
@@ -2434,21 +2442,13 @@
    "best": "direct",
    "urls": 280
   },
-  "v.lzcdn23.com": {
-   "direct": 404,
-   "refer": 404,
+  "svip.high25-playback.com": {
+   "direct": 403,
+   "refer": 403,
    "proxy": 200,
    "ok": true,
    "best": "proxy",
-   "urls": 312
-  },
-  "v.fengbao10.com": {
-   "direct": 404,
-   "refer": 404,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 456
+   "urls": 1274
   },
   "v15.wsyzym3u8.com": {
    "direct": 200,
@@ -2458,6 +2458,14 @@
    "best": "direct",
    "urls": 121
   },
+  "v.baofeng11.com": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 434
+  },
   "vod.guoluche.com": {
    "direct": 200,
    "refer": null,
@@ -2465,174 +2473,6 @@
    "ok": true,
    "best": "direct",
    "urls": 131
-  },
-  "yzzy.play-cdn18.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 768
-  },
-  "v.cdnlz16.com": {
-   "direct": 404,
-   "refer": 404,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 220
-  },
-  "b3.bdzybf22.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 755
-  },
-  "v.baofeng11.com": {
-   "direct": 404,
-   "refer": 404,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 434
-  },
-  "185.34.144.117:2100": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 502,
-   "ok": true,
-   "best": "direct",
-   "urls": 74
-  },
-  "185.92.188.176:2100": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 502,
-   "ok": true,
-   "best": "direct",
-   "urls": 72
-  },
-  "cdn.yzzyvip-32.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 502,
-   "ok": true,
-   "best": "direct",
-   "urls": 567
-  },
-  "vod2.maowushi.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 79
-  },
-  "vip.ffzy-video.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 865
-  },
-  "tvpull.dxhmt.cn:9081": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 89
-  },
-  "vip.ffzy-online4.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 730
-  },
-  "v.cdnlz7.com": {
-   "direct": 404,
-   "refer": 404,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 270
-  },
-  "38.75.136.137:98": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 502,
-   "ok": true,
-   "best": "direct",
-   "urls": 52
-  },
-  "svip.high1-playback.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 502,
-   "ok": true,
-   "best": "direct",
-   "urls": 388
-  },
-  "vip.lz15uu.com": {
-   "direct": 404,
-   "refer": 404,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 90
-  },
-  "107.150.60.122": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 502,
-   "ok": true,
-   "best": "direct",
-   "urls": 36
-  },
-  "svip.high23-playback.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 360
-  },
-  "63.141.230.178:82": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 502,
-   "ok": true,
-   "best": "direct",
-   "urls": 33
-  },
-  "v.baofeng10.com": {
-   "direct": 404,
-   "refer": 404,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 219
-  },
-  "v15.rstu6.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 58
-  },
-  "lzcdn33v1.com": {
-   "direct": 404,
-   "refer": 404,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 132
   },
   "cdn.power34play.vip": {
    "direct": 403,
@@ -2642,21 +2482,157 @@
    "best": "proxy",
    "urls": 432
   },
-  "v.cdnlz30.com": {
+  "v.cdnlz16.com": {
    "direct": 404,
    "refer": 404,
    "proxy": 200,
    "ok": true,
    "best": "proxy",
-   "urls": 102
+   "urls": 220
   },
-  "v.lzv22.com": {
+  "svip.high23-playback.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 360
+  },
+  "185.34.144.117:2100": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 502,
+   "ok": true,
+   "best": "direct",
+   "urls": 74
+  },
+  "v.lzfile26.com": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 496
+  },
+  "185.92.188.176:2100": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 502,
+   "ok": true,
+   "best": "direct",
+   "urls": 72
+  },
+  "vod2.maowushi.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 79
+  },
+  "tvpull.dxhmt.cn:9081": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 88
+  },
+  "cdn.yzzyvip-32.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 502,
+   "ok": true,
+   "best": "direct",
+   "urls": 567
+  },
+  "cdn.yzzy30-play.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 710
+  },
+  "vip.lz15uu.com": {
    "direct": 404,
    "refer": 404,
    "proxy": 200,
    "ok": true,
    "best": "proxy",
-   "urls": 50
+   "urls": 90
+  },
+  "v.cdnlz7.com": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 270
+  },
+  "lzcdn33v1.com": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 132
+  },
+  "63.141.230.178:82": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 502,
+   "ok": true,
+   "best": "direct",
+   "urls": 40
+  },
+  "svip.high1-playback.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 502,
+   "ok": true,
+   "best": "direct",
+   "urls": 388
+  },
+  "v15.rstu6.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 60
+  },
+  "107.150.60.122": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 502,
+   "ok": true,
+   "best": "direct",
+   "urls": 34
+  },
+  "svipsvip.ffzyread1.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 650
+  },
+  "b3.bdzybf22.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 755
+  },
+  "v.baofeng10.com": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 219
   },
   "svip.ryiplay21.com": {
    "direct": 200,
@@ -2664,23 +2640,7 @@
    "proxy": 200,
    "ok": true,
    "best": "direct",
-   "urls": 36
-  },
-  "svipsvip.ffzy-online5.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 558
-  },
-  "svipsvip.ffzyread1.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 650
+   "urls": 38
   },
   "svip.ryplay16.com": {
    "direct": 200,
@@ -2690,37 +2650,29 @@
    "best": "direct",
    "urls": 35
   },
-  "hls-gateway.vpstv.net": {
+  "38.75.136.137:98": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 502,
+   "ok": true,
+   "best": "direct",
+   "urls": 22
+  },
+  "v.cdnlz30.com": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 102
+  },
+  "vip.ffzy-online4.com": {
    "direct": 403,
    "refer": 403,
    "proxy": 502,
    "ok": false,
    "best": "none",
-   "urls": 18
-  },
-  "vodcnd08.kunyu.com.cn": {
-   "direct": "URLError",
-   "refer": "URLError",
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 21
-  },
-  "ali-m-l.cztv.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 30
-  },
-  "l.cztvcloud.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 59
+   "urls": 730
   },
   "gcalic.v.myalicdn.com": {
    "direct": 200,
@@ -2730,6 +2682,14 @@
    "best": "direct",
    "urls": 29
   },
+  "ali-m-l.cztv.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 30
+  },
   "lzv34.com": {
    "direct": 404,
    "refer": 404,
@@ -2738,14 +2698,6 @@
    "best": "proxy",
    "urls": 66
   },
-  "vodcnd14.kunyu.com.cn": {
-   "direct": "URLError",
-   "refer": "URLError",
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 16
-  },
   "vodcnd09.kunyu.com.cn": {
    "direct": "URLError",
    "refer": "URLError",
@@ -2753,6 +2705,54 @@
    "ok": false,
    "best": "none",
    "urls": 20
+  },
+  "198.204.228.26": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 502,
+   "ok": true,
+   "best": "direct",
+   "urls": 16
+  },
+  "vodcnd08.kunyu.com.cn": {
+   "direct": "URLError",
+   "refer": "URLError",
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 21
+  },
+  "v.lzv22.com": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 50
+  },
+  "hls-gateway.vpstv.net": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 15
+  },
+  "live.264788.xyz": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 20
+  },
+  "vodcnd14.kunyu.com.cn": {
+   "direct": "URLError",
+   "refer": "URLError",
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 16
   },
   "ls.qingting.fm": {
    "direct": 200,
@@ -2770,13 +2770,13 @@
    "best": "proxy",
    "urls": 22
   },
-  "b2.bdzybf22.com": {
+  "svipsvip.ffzy-online5.com": {
    "direct": 403,
    "refer": 403,
    "proxy": 502,
    "ok": false,
    "best": "none",
-   "urls": 190
+   "urls": 558
   },
   "vodcnd07.kunyu.com.cn": {
    "direct": "URLError",
@@ -2786,14 +2786,6 @@
    "best": "none",
    "urls": 13
   },
-  "live.264788.xyz": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 14
-  },
   "vodcnd01.kunyu.com.cn": {
    "direct": "URLError",
    "refer": "URLError",
@@ -2802,44 +2794,12 @@
    "best": "none",
    "urls": 13
   },
-  "74.91.26.218:82": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 502,
-   "ok": true,
-   "best": "direct",
-   "urls": 11
-  },
-  "cdn.yzzy34-play.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 502,
-   "ok": true,
-   "best": "direct",
-   "urls": 117
-  },
-  "iptv.666230.xyz": {
-   "direct": "URLError",
-   "refer": "URLError",
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 11
-  },
-  "120.76.248.139": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 502,
-   "ok": true,
-   "best": "direct",
-   "urls": 11
-  },
   "vip.dytt-broadcast.com": {
    "direct": 403,
    "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
    "urls": 243
   },
   "vodcnd04.kunyu.com.cn": {
@@ -2850,13 +2810,21 @@
    "best": "none",
    "urls": 11
   },
-  "cdn.yzzy33-play.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 200,
+  "74.91.26.218:82": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 502,
    "ok": true,
-   "best": "proxy",
-   "urls": 42
+   "best": "direct",
+   "urls": 12
+  },
+  "cdn.yzzy34-play.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 502,
+   "ok": true,
+   "best": "direct",
+   "urls": 117
   },
   "v15.zuidazym3u8.com": {
    "direct": 403,
@@ -2866,13 +2834,13 @@
    "best": "none",
    "urls": 14
   },
-  "vodcnd10.kunyu.com.cn": {
+  "iptv.666230.xyz": {
    "direct": "URLError",
    "refer": "URLError",
    "proxy": 502,
    "ok": false,
    "best": "none",
-   "urls": 10
+   "urls": 11
   },
   "cnppvodcdn.uvjtih.cn": {
    "direct": "URLError",
@@ -2890,6 +2858,54 @@
    "best": "none",
    "urls": 10
   },
+  "r.jdshipin.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 11
+  },
+  "b2.bdzybf22.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 190
+  },
+  "120.76.248.139": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 502,
+   "ok": true,
+   "best": "direct",
+   "urls": 10
+  },
+  "cdn14.yzzy-dy-cdn.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 75
+  },
+  "php.jdshipin.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 10
+  },
+  "vodcnd10.kunyu.com.cn": {
+   "direct": "URLError",
+   "refer": "URLError",
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 10
+  },
   "cnppvodcdn.ajupf.com": {
    "direct": "URLError",
    "refer": "URLError",
@@ -2898,7 +2914,7 @@
    "best": "none",
    "urls": 9
   },
-  "198.204.228.26": {
+  "204.12.221.218:8181": {
    "direct": 200,
    "refer": null,
    "proxy": 502,
@@ -2906,10 +2922,66 @@
    "best": "direct",
    "urls": 8
   },
-  "204.12.221.218:8181": {
+  "zby.130519.xyz": {
+   "direct": "URLError",
+   "refer": "URLError",
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 12
+  },
+  "gslbmgsplive.miguvideo.com": {
+   "direct": 660,
+   "refer": 660,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 16
+  },
+  "v.lzcdn32.com": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 12
+  },
+  "xlzycdn1.sy-precise.com:65": {
+   "direct": "URLError",
+   "refer": "URLError",
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 6
+  },
+  "ukzyvod5.ukubf7.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 120
+  },
+  "jwcdnqx.hebyun.com.cn": {
+   "direct": 200,
+   "refer": 404,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 21
+  },
+  "192.151.150.154": {
    "direct": 200,
    "refer": null,
    "proxy": 502,
+   "ok": true,
+   "best": "direct",
+   "urls": 6
+  },
+  "satellitepull.cnr.cn": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
    "ok": true,
    "best": "direct",
    "urls": 8
@@ -2922,76 +2994,20 @@
    "best": "none",
    "urls": 201
   },
-  "zby.130519.xyz": {
-   "direct": "URLError",
-   "refer": "URLError",
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 13
-  },
-  "r.jdshipin.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 10
-  },
-  "ukzyll.ukubf6.com": {
+  "svip.high26-playback.com": {
    "direct": 403,
    "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 58
-  },
-  "satellitepull.cnr.cn": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 8
-  },
-  "xlzycdn1.sy-precise.com:65": {
-   "direct": "URLError",
-   "refer": "URLError",
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 6
-  },
-  "jwcdnqx.hebyun.com.cn": {
-   "direct": 200,
-   "refer": 404,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 21
-  },
-  "v.lzcdn32.com": {
-   "direct": 404,
-   "refer": 404,
    "proxy": 200,
    "ok": true,
    "best": "proxy",
-   "urls": 12
+   "urls": 13
   },
-  "stream.thmz.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 15
-  },
-  "livealone302.iqilu.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
+  "stream.hrbtv.net": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
    "urls": 6
   },
   "play.kankanlive.com": {
@@ -3002,45 +3018,13 @@
    "best": "direct",
    "urls": 8
   },
-  "192.151.150.154": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 502,
-   "ok": true,
-   "best": "direct",
-   "urls": 5
-  },
-  "stream.hrbtv.net": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 6
-  },
-  "38.64.72.148:80": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 502,
-   "ok": true,
-   "best": "direct",
-   "urls": 5
-  },
-  "vip.dytt-look.com": {
-   "direct": 403,
-   "refer": 403,
+  "vodcnd11.kunyu.com.cn": {
+   "direct": "URLError",
+   "refer": "URLError",
    "proxy": 502,
    "ok": false,
    "best": "none",
-   "urls": 87
-  },
-  "cdn14.yzzy-dy-cdn.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 75
+   "urls": 5
   },
   "cn.cdnppvodcom.cdn01.ajupf.com": {
    "direct": "URLError",
@@ -3050,13 +3034,29 @@
    "best": "none",
    "urls": 5
   },
-  "vodcnd11.kunyu.com.cn": {
-   "direct": "URLError",
-   "refer": "URLError",
+  "epg.pw": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 5
+  },
+  "livealone302.iqilu.com": {
+   "direct": 403,
+   "refer": 403,
    "proxy": 502,
    "ok": false,
    "best": "none",
-   "urls": 5
+   "urls": 6
+  },
+  "stream.thmz.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 15
   },
   "localhost:2100": {
    "direct": "URLError",
@@ -3082,13 +3082,37 @@
    "best": "none",
    "urls": 4
   },
-  "ukzyvod4.ukubf7.com": {
+  "stream3.jlntv.cn:80": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 6
+  },
+  "cdn15.yzzy-dy-cdn.com": {
    "direct": 403,
    "refer": 403,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 13
+  },
+  "vodcnd06.kunyu.com.cn": {
+   "direct": "URLError",
+   "refer": "URLError",
    "proxy": 502,
    "ok": false,
    "best": "none",
-   "urls": 41
+   "urls": 4
+  },
+  "cdn.yzzy33-play.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 42
   },
   "mgtv.ottiptv.cc": {
    "direct": 404,
@@ -3106,53 +3130,13 @@
    "best": "none",
    "urls": 23
   },
-  "stream3.jlntv.cn:80": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 6
-  },
-  "live-auth.51kandianshi.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 5
-  },
-  "vodcnd06.kunyu.com.cn": {
-   "direct": "URLError",
-   "refer": "URLError",
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 4
-  },
-  "vip.lz-cdn5.com": {
+  "v.lzcdn34.com": {
    "direct": 404,
    "refer": 404,
    "proxy": 200,
    "ok": true,
    "best": "proxy",
-   "urls": 4
-  },
-  "liveout.xntv.tv": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 5
-  },
-  "vodcnd03.otkbl.com": {
-   "direct": "URLError",
-   "refer": "URLError",
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 4
+   "urls": 7
   },
   "vodcnd13.kunyu.com.cn": {
    "direct": "URLError",
@@ -3160,6 +3144,14 @@
    "proxy": 502,
    "ok": false,
    "best": "none",
+   "urls": 4
+  },
+  "69.30.245.50": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 502,
+   "ok": true,
+   "best": "direct",
    "urls": 4
   },
   "v6.kuaioss.com": {
@@ -3170,6 +3162,22 @@
    "best": "direct",
    "urls": 4
   },
+  "live-auth.51kandianshi.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 5
+  },
+  "vip.lz-cdn5.com": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 4
+  },
   "vodcnd12.kunyu.com.cn": {
    "direct": "URLError",
    "refer": "URLError",
@@ -3178,21 +3186,21 @@
    "best": "none",
    "urls": 4
   },
-  "cdn15.yzzy-dy-cdn.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 13
+  "vodcnd03.otkbl.com": {
+   "direct": "URLError",
+   "refer": "URLError",
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 4
   },
-  "svip.high26-playback.com": {
+  "vip.dytt-look.com": {
    "direct": 403,
    "refer": 403,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 13
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 87
   },
   "110.153.180.106:55555": {
    "direct": 200,
@@ -3202,38 +3210,6 @@
    "best": "direct",
    "urls": 4
   },
-  "epg.pw": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 4
-  },
-  "v.lzcdn34.com": {
-   "direct": 404,
-   "refer": 404,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 7
-  },
-  "vodcnd03.wyfkg.cn": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 502,
-   "ok": true,
-   "best": "direct",
-   "urls": 4
-  },
-  "gslbmgsplive.miguvideo.com": {
-   "direct": 660,
-   "refer": 660,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 18
-  },
   "live.spccmc.com:90": {
    "direct": 200,
    "refer": null,
@@ -3241,6 +3217,14 @@
    "ok": true,
    "best": "direct",
    "urls": 4
+  },
+  "v5.kuaioss.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 502,
+   "ok": true,
+   "best": "direct",
+   "urls": 3
   },
   "tencentplay.gztv.com": {
    "direct": 200,
@@ -3250,6 +3234,22 @@
    "best": "direct",
    "urls": 4
   },
+  "v2.letvoss.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 502,
+   "ok": true,
+   "best": "direct",
+   "urls": 3
+  },
+  "cn.cdnppvodcom.cdn01.uvjtih.cn": {
+   "direct": "URLError",
+   "refer": "URLError",
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 3
+  },
   "vodcnd01.rsfcxq.com": {
    "direct": 200,
    "refer": null,
@@ -3258,31 +3258,7 @@
    "best": "direct",
    "urls": 3
   },
-  "m3u8.channel.dzsm.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 4
-  },
-  "23.224.119.162": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 502,
-   "ok": true,
-   "best": "direct",
-   "urls": 3
-  },
-  "69.30.245.50": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 502,
-   "ok": true,
-   "best": "direct",
-   "urls": 3
-  },
-  "v2.letvoss.com": {
+  "vodcnd09.rsfcxq.com": {
    "direct": 200,
    "refer": null,
    "proxy": 502,
@@ -3298,12 +3274,52 @@
    "best": "none",
    "urls": 9
   },
-  "cn.cdnppvodcom.cdn01.uvjtih.cn": {
+  "s1.letvoss.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 502,
+   "ok": true,
+   "best": "direct",
+   "urls": 3
+  },
+  "23.224.119.162": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 502,
+   "ok": true,
+   "best": "direct",
+   "urls": 3
+  },
+  "173.208.212.130:8181": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 502,
+   "ok": true,
+   "best": "direct",
+   "urls": 3
+  },
+  "zbbf2.ahbztv.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 4
+  },
+  "v1.qrssuv.com": {
    "direct": "URLError",
    "refer": "URLError",
    "proxy": 502,
    "ok": false,
    "best": "none",
+   "urls": 3
+  },
+  "104.152.209.49:8181": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 502,
+   "ok": true,
+   "best": "direct",
    "urls": 3
   },
   "php.jdshipin.com:8880": {
@@ -3314,31 +3330,39 @@
    "best": "direct",
    "urls": 3
   },
-  "v1.qrssuv.com": {
+  "liveout.xntv.tv": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 5
+  },
+  "vodcnd03.wyfkg.cn": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 502,
+   "ok": true,
+   "best": "direct",
+   "urls": 4
+  },
+  "vodcnd01.myrqsb.com": {
    "direct": "URLError",
    "refer": "URLError",
    "proxy": 502,
    "ok": false,
    "best": "none",
-   "urls": 3
+   "urls": 4
   },
-  "vodcnd09.rsfcxq.com": {
+  "nklive.nbs.cn": {
    "direct": 200,
    "refer": null,
-   "proxy": 502,
+   "proxy": 200,
    "ok": true,
    "best": "direct",
    "urls": 3
   },
-  "s1.letvoss.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 502,
-   "ok": true,
-   "best": "direct",
-   "urls": 3
-  },
-  "v5.kuaioss.com": {
+  "38.64.72.148:80": {
    "direct": 200,
    "refer": null,
    "proxy": 502,
@@ -3354,31 +3378,7 @@
    "best": "direct",
    "urls": 3
   },
-  "vodcnd11.myrqsb.com": {
-   "direct": "URLError",
-   "refer": "URLError",
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 4
-  },
-  "zbbf2.ahbztv.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 4
-  },
   "live1.gatv.com.cn:85": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 3
-  },
-  "0472.org": {
    "direct": 200,
    "refer": null,
    "proxy": 200,
@@ -3394,22 +3394,6 @@
    "best": "direct",
    "urls": 3
   },
-  "vodcnd01.myrqsb.com": {
-   "direct": "URLError",
-   "refer": "URLError",
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 4
-  },
-  "stream5.jlntv.cn": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 3
-  },
   "hslive.hsnewsnet.com": {
    "direct": 200,
    "refer": null,
@@ -3418,7 +3402,39 @@
    "best": "direct",
    "urls": 3
   },
-  "stream8.jlntv.cn": {
+  "vodcnd11.myrqsb.com": {
+   "direct": "URLError",
+   "refer": "URLError",
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 4
+  },
+  "zb-live.ynurl.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 3
+  },
+  "0472.org": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 3
+  },
+  "jwliveqxzb.hebyun.com.cn": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 3
+  },
+  "stream5.jlntv.cn": {
    "direct": 200,
    "refer": null,
    "proxy": 200,
@@ -3434,15 +3450,15 @@
    "best": "direct",
    "urls": 3
   },
-  "vodcnd03.3rut0.com": {
-   "direct": "URLError",
-   "refer": "URLError",
+  "t.061899.xyz": {
+   "direct": "RemoteDisconnected",
+   "refer": "RemoteDisconnected",
    "proxy": 502,
    "ok": false,
    "best": "none",
-   "urls": 2
+   "urls": 4
   },
-  "zb-live.ynurl.com": {
+  "stream8.jlntv.cn": {
    "direct": 200,
    "refer": null,
    "proxy": 200,
@@ -3458,15 +3474,31 @@
    "best": "direct",
    "urls": 3
   },
-  "vodcnd11.rsfcxq.com": {
-   "direct": 200,
-   "refer": null,
+  "ukzyvod4.ukubf7.com": {
+   "direct": 403,
+   "refer": 403,
    "proxy": 502,
-   "ok": true,
-   "best": "direct",
+   "ok": false,
+   "best": "none",
+   "urls": 41
+  },
+  "vodcnd03.3rut0.com": {
+   "direct": "URLError",
+   "refer": "URLError",
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
    "urls": 2
   },
-  "jwliveqxzb.hebyun.com.cn": {
+  "migu.188766.xyz": {
+   "direct": "URLError",
+   "refer": "URLError",
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 19
+  },
+  "wshlslive.migucloud.com": {
    "direct": 404,
    "refer": 404,
    "proxy": 502,
@@ -3474,12 +3506,12 @@
    "best": "none",
    "urls": 3
   },
-  "vodcnd14.myrqsb.com": {
-   "direct": "URLError",
-   "refer": "URLError",
+  "vodcnd11.rsfcxq.com": {
+   "direct": 200,
+   "refer": null,
    "proxy": 502,
-   "ok": false,
-   "best": "none",
+   "ok": true,
+   "best": "direct",
    "urls": 2
   },
   "v8.qrssv.com": {
@@ -3490,31 +3522,7 @@
    "best": "none",
    "urls": 2
   },
-  "php.jdshipin.com": {
-   "direct": 200,
-   "refer": "URLError",
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 9
-  },
   "v6.qrssv.com": {
-   "direct": "URLError",
-   "refer": "URLError",
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 2
-  },
-  "vodcnd02.oag7h.com": {
-   "direct": "URLError",
-   "refer": "URLError",
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 2
-  },
-  "v12.gggread.com": {
    "direct": "URLError",
    "refer": "URLError",
    "proxy": 502,
@@ -3530,12 +3538,44 @@
    "best": "none",
    "urls": 2
   },
-  "vodcnd02.wyfkg.cn": {
-   "direct": 200,
-   "refer": null,
+  "ukzyll.ukubf6.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": "TimeoutError",
+   "ok": false,
+   "best": "none",
+   "urls": 58
+  },
+  "vodcnd14.myrqsb.com": {
+   "direct": "URLError",
+   "refer": "URLError",
    "proxy": 502,
-   "ok": true,
-   "best": "direct",
+   "ok": false,
+   "best": "none",
+   "urls": 2
+  },
+  "play1-qk.nmtv.cn": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 3
+  },
+  "v12.gggread.com": {
+   "direct": "URLError",
+   "refer": "URLError",
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 2
+  },
+  "vodcnd02.oag7h.com": {
+   "direct": "URLError",
+   "refer": "URLError",
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
    "urls": 2
   },
   "vodcnd01.otkbl.com": {
@@ -3546,14 +3586,6 @@
    "best": "none",
    "urls": 2
   },
-  "svip.ryplay13.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 2
-  },
   "vodcnd14.rsfcxq.com": {
    "direct": 200,
    "refer": null,
@@ -3562,12 +3594,12 @@
    "best": "direct",
    "urls": 2
   },
-  "vodcnd10.myrqsb.com": {
-   "direct": "URLError",
-   "refer": "URLError",
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
+  "svip.ryplay13.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
    "urls": 2
   },
   "vod1.wxjyedu.com": {
@@ -3578,6 +3610,22 @@
    "best": "none",
    "urls": 2
   },
+  "vod1.bdzybf7.com": {
+   "direct": "URLError",
+   "refer": "URLError",
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 4
+  },
+  "l.cztvcloud.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": "TimeoutError",
+   "ok": true,
+   "best": "direct",
+   "urls": 59
+  },
   "vodcnd03.kunyu.com.cn": {
    "direct": "URLError",
    "refer": "URLError",
@@ -3585,22 +3633,6 @@
    "ok": false,
    "best": "none",
    "urls": 2
-  },
-  "ukzyvod5.ukubf7.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 120
-  },
-  "t.061899.xyz": {
-   "direct": "RemoteDisconnected",
-   "refer": "RemoteDisconnected",
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 4
   },
   "vodcnd03.trjho.com": {
    "direct": "URLError",
@@ -3610,13 +3642,21 @@
    "best": "none",
    "urls": 2
   },
-  "migu.188766.xyz": {
+  "vodcnd10.myrqsb.com": {
    "direct": "URLError",
    "refer": "URLError",
    "proxy": 502,
    "ok": false,
    "best": "none",
-   "urls": 19
+   "urls": 2
+  },
+  "vod1.ltzyplay.com": {
+   "direct": "URLError",
+   "refer": "URLError",
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 2
   },
   "vodcnd05ktprodscom": {
    "direct": "URLError",
@@ -3642,28 +3682,12 @@
    "best": "none",
    "urls": 2
   },
-  "vod1.ltzyplay.com": {
-   "direct": "URLError",
-   "refer": "URLError",
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 2
-  },
-  "wshlslive.migucloud.com": {
+  "b.lzfile32.com": {
    "direct": 404,
    "refer": 404,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 3
-  },
-  "cdn2.163189.xyz": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 502,
+   "proxy": 200,
    "ok": true,
-   "best": "direct",
+   "best": "proxy",
    "urls": 2
   },
   "vocn13.ajupf.com": {
@@ -3674,10 +3698,10 @@
    "best": "none",
    "urls": 2
   },
-  "live.zohi.tv": {
+  "vodcnd02.wyfkg.cn": {
    "direct": 200,
    "refer": null,
-   "proxy": 200,
+   "proxy": 502,
    "ok": true,
    "best": "direct",
    "urls": 2
@@ -3690,36 +3714,12 @@
    "best": "direct",
    "urls": 2
   },
-  "b.lzfile32.com": {
-   "direct": 404,
-   "refer": 404,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 2
-  },
-  "play1-qk.nmtv.cn": {
-   "direct": 404,
-   "refer": 404,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 3
-  },
   "v1.lzcdn32.com": {
    "direct": 404,
    "refer": 404,
    "proxy": 200,
    "ok": true,
    "best": "proxy",
-   "urls": 2
-  },
-  "[2409:8087:4c0a:22:1::11]:6410": {
-   "direct": "URLError",
-   "refer": "URLError",
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
    "urls": 2
   },
   "live.xysrmt.cn": {
@@ -3730,6 +3730,30 @@
    "best": "direct",
    "urls": 2
   },
+  "live.zohi.tv": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 2
+  },
+  "[2409:8087:4c0a:22:1::11]:6410": {
+   "direct": "URLError",
+   "refer": "URLError",
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 2
+  },
+  "112.46.105.20:8009": {
+   "direct": "URLError",
+   "refer": "URLError",
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 5
+  },
   "lianshui-tv-hls.cm.jstv.com": {
    "direct": 200,
    "refer": null,
@@ -3738,12 +3762,12 @@
    "best": "direct",
    "urls": 2
   },
-  "cdn16.yzzy-kb-cdn.com": {
-   "direct": 403,
-   "refer": 403,
+  "live.wjyanghu.com": {
+   "direct": 200,
+   "refer": null,
    "proxy": 200,
    "ok": true,
-   "best": "proxy",
+   "best": "direct",
    "urls": 2
   },
   "live.iwcmt.cn:90": {
@@ -3753,14 +3777,6 @@
    "ok": true,
    "best": "direct",
    "urls": 2
-  },
-  "hzcm-live.media.hugd.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 3
   },
   "pulls.myun.tv": {
    "direct": 200,
@@ -3778,6 +3794,14 @@
    "best": "direct",
    "urls": 2
   },
+  "cdn16.yzzy-kb-cdn.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 2
+  },
   "www.guzhenm.com:7001": {
    "direct": 200,
    "refer": null,
@@ -3786,17 +3810,17 @@
    "best": "direct",
    "urls": 2
   },
-  "vod1.bdzybf7.com": {
+  "m3u8.channel.dzsm.com": {
    "direct": "URLError",
    "refer": "URLError",
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
    "urls": 4
   },
-  "live.ahsz.tv": {
+  "jwplay.hebyun.com.cn": {
    "direct": 200,
-   "refer": null,
+   "refer": 404,
    "proxy": 200,
    "ok": true,
    "best": "direct",
@@ -3818,14 +3842,6 @@
    "best": "direct",
    "urls": 2
   },
-  "jwplay.hebyun.com.cn": {
-   "direct": 200,
-   "refer": 404,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 2
-  },
   "38.64.72.148": {
    "direct": 200,
    "refer": null,
@@ -3834,18 +3850,26 @@
    "best": "direct",
    "urls": 2
   },
-  "112.46.105.20:8009": {
+  "pptv.1080tg.com": {
    "direct": "URLError",
    "refer": "URLError",
    "proxy": 502,
    "ok": false,
    "best": "none",
-   "urls": 5
+   "urls": 7
   },
-  "m3u8channel.ganzitv.com": {
+  "stream.sun0769.com": {
    "direct": 200,
-   "refer": 200,
+   "refer": null,
    "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 2
+  },
+  "hwapi.yntv.net": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 502,
    "ok": true,
    "best": "direct",
    "urls": 2
@@ -3858,15 +3882,15 @@
    "best": "none",
    "urls": 1
   },
-  "tmpstream.hyrtv.cn": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 2
-  },
   "v11.qsstvw.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 1
+  },
+  "yzzy.play-cdn20.com": {
    "direct": 403,
    "refer": 403,
    "proxy": 502,
@@ -3906,47 +3930,7 @@
    "best": "none",
    "urls": 1
   },
-  "stream.sun0769.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 2
-  },
-  "www.ukuzy.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 1
-  },
-  "vod5.wxjyedu.com": {
-   "direct": "URLError",
-   "refer": "URLError",
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 1
-  },
-  "yzzy.play-cdn20.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 1
-  },
-  "upload.wikimedia.org": {
-   "direct": 429,
-   "refer": 200,
-   "proxy": 200,
-   "ok": true,
-   "best": "refer",
-   "urls": 1
-  },
-  "v5.qrssv.com": {
+  "v5.mzxay.com": {
    "direct": "URLError",
    "refer": "URLError",
    "proxy": 502,
@@ -3960,6 +3944,46 @@
    "proxy": 502,
    "ok": true,
    "best": "direct",
+   "urls": 1
+  },
+  "vod5.wxjyedu.com": {
+   "direct": "URLError",
+   "refer": "URLError",
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 1
+  },
+  "www.ukuzy.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 1
+  },
+  "stream1.freetv.fun": {
+   "direct": "TimeoutError",
+   "refer": "TimeoutError",
+   "proxy": "TimeoutError",
+   "ok": false,
+   "best": "none",
+   "urls": 253
+  },
+  "v5.qrssv.com": {
+   "direct": "URLError",
+   "refer": "URLError",
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 1
+  },
+  "upload.wikimedia.org": {
+   "direct": 429,
+   "refer": 200,
+   "proxy": 200,
+   "ok": true,
+   "best": "refer",
    "urls": 1
   },
   "162.209.204.42:2100": {
@@ -3986,13 +4010,13 @@
    "best": "none",
    "urls": 1
   },
-  "v5.mzxay.com": {
-   "direct": "URLError",
-   "refer": "URLError",
+  "tmpstream.hyrtv.cn": {
+   "direct": "RemoteDisconnected",
+   "refer": "RemoteDisconnected",
    "proxy": 502,
    "ok": false,
    "best": "none",
-   "urls": 1
+   "urls": 2
   },
   "zvip1.lz-cdn1.com": {
    "direct": "URLError",
@@ -4018,12 +4042,12 @@
    "best": "none",
    "urls": 1
   },
-  "hwapi.yntv.net": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 502,
+  "m3u8channel.ganzitv.com": {
+   "direct": 504,
+   "refer": 504,
+   "proxy": 200,
    "ok": true,
-   "best": "direct",
+   "best": "proxy",
    "urls": 2
   },
   "v4.qsstvw.com": {
@@ -4066,14 +4090,6 @@
    "best": "none",
    "urls": 1
   },
-  "live.wjyanghu.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 2
-  },
   "cdn6.vipzyk-video.com": {
    "direct": 403,
    "refer": 403,
@@ -4090,12 +4106,20 @@
    "best": "proxy",
    "urls": 1
   },
-  "vip.lz-cdn2.com": {
-   "direct": 404,
-   "refer": 404,
+  "cdn4.vipzyk-video.com": {
+   "direct": 403,
+   "refer": 403,
    "proxy": 200,
    "ok": true,
    "best": "proxy",
+   "urls": 1
+  },
+  "vip.lz-cdn2.com": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
    "urls": 1
   },
   "vodcnd09.myqqd.com": {
@@ -4114,7 +4138,15 @@
    "best": "none",
    "urls": 1
   },
-  "173.208.212.130:8181": {
+  "t.freetv.fun": {
+   "direct": "TimeoutError",
+   "refer": "TimeoutError",
+   "proxy": "TimeoutError",
+   "ok": false,
+   "best": "none",
+   "urls": 19
+  },
+  "198.204.240.250:82": {
    "direct": 200,
    "refer": null,
    "proxy": 502,
@@ -4130,20 +4162,12 @@
    "best": "none",
    "urls": 1
   },
-  "198.204.240.250:82": {
+  "cdn2.163189.xyz": {
    "direct": 200,
    "refer": null,
    "proxy": 502,
    "ok": true,
    "best": "direct",
-   "urls": 1
-  },
-  "cdn4.vipzyk-video.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
    "urls": 1
   },
   "183.11.239.36:808": {
@@ -4210,44 +4234,28 @@
    "best": "none",
    "urls": 1
   },
+  "43.251.226.89:8080": {
+   "direct": "URLError",
+   "refer": "URLError",
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 2
+  },
+  "live.cztv.cc:85": {
+   "direct": "URLError",
+   "refer": "URLError",
+   "proxy": "TimeoutError",
+   "ok": false,
+   "best": "none",
+   "urls": 7
+  },
   "pili-live-hls.wdit.com.cn": {
    "direct": 404,
    "refer": 404,
    "proxy": 502,
    "ok": false,
    "best": "none",
-   "urls": 1
-  },
-  "v4.tlkqc.com": {
-   "direct": "URLError",
-   "refer": "URLError",
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 1
-  },
-  "stream1.freetv.fun": {
-   "direct": "TimeoutError",
-   "refer": "TimeoutError",
-   "proxy": "TimeoutError",
-   "ok": false,
-   "best": "none",
-   "urls": 245
-  },
-  "m3u8channel.yunxya.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 1
-  },
-  "live.wanyuannews.com": {
-   "direct": 304,
-   "refer": null,
-   "proxy": 502,
-   "ok": true,
-   "best": "direct",
    "urls": 1
   },
   "vod5.bdzybf7.com": {
@@ -4258,15 +4266,15 @@
    "best": "none",
    "urls": 1
   },
-  "nklive.nbs.cn": {
-   "direct": 200,
+  "live.wanyuannews.com": {
+   "direct": 304,
    "refer": null,
-   "proxy": 200,
+   "proxy": 502,
    "ok": true,
    "best": "direct",
    "urls": 1
   },
-  "shuyang-tv-hls.cm.jstv.com": {
+  "m3u8channel.yunxya.com": {
    "direct": 200,
    "refer": null,
    "proxy": 200,
@@ -4282,23 +4290,7 @@
    "best": "direct",
    "urls": 1
   },
-  "pptv.1080tg.com": {
-   "direct": "URLError",
-   "refer": "URLError",
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 7
-  },
-  "43.251.226.89:8080": {
-   "direct": "URLError",
-   "refer": "URLError",
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 2
-  },
-  "zjtv-wshls.homecdn.com": {
+  "shuyang-tv-hls.cm.jstv.com": {
    "direct": 200,
    "refer": null,
    "proxy": 200,
@@ -4306,12 +4298,20 @@
    "best": "direct",
    "urls": 1
   },
+  "v4.tlkqc.com": {
+   "direct": "URLError",
+   "refer": "URLError",
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 1
+  },
   "traffic.jbh.tjbh.com": {
    "direct": 502,
-   "refer": 502,
+   "refer": 200,
    "proxy": 200,
    "ok": true,
-   "best": "proxy",
+   "best": "refer",
    "urls": 1
   },
   "wanzhoulive.cbg.cn:8017": {
@@ -4322,13 +4322,29 @@
    "best": "none",
    "urls": 1
   },
-  "huaiyin-tv-replay.cm.jstv.com": {
-   "direct": 500,
-   "refer": 500,
-   "proxy": 502,
+  "zjtv-wshls.homecdn.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 1
+  },
+  "cm-wshls.homecdn.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 1
+  },
+  "live1.habctv.com": {
+   "direct": "URLError",
+   "refer": "URLError",
+   "proxy": "TimeoutError",
    "ok": false,
    "best": "none",
-   "urls": 1
+   "urls": 4
   },
   "175.155.106.72:89": {
    "direct": 200,
@@ -4338,13 +4354,21 @@
    "best": "direct",
    "urls": 1
   },
-  "t.freetv.fun": {
-   "direct": "TimeoutError",
-   "refer": "TimeoutError",
-   "proxy": "TimeoutError",
+  "huaiyin-tv-replay.cm.jstv.com": {
+   "direct": 500,
+   "refer": 500,
+   "proxy": 502,
    "ok": false,
    "best": "none",
-   "urls": 21
+   "urls": 1
+  },
+  "hls.nntv.cn": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 1
   },
   "tvfile.jyrmt.cn": {
    "direct": 200,
@@ -4354,13 +4378,53 @@
    "best": "direct",
    "urls": 1
   },
-  "m3u8channel-bx.yunxya.com": {
+  "z.b.bkpcp.top": {
+   "direct": "TimeoutError",
+   "refer": "TimeoutError",
+   "proxy": "TimeoutError",
+   "ok": false,
+   "best": "none",
+   "urls": 3
+  },
+  "goo.bkpcp.top": {
+   "direct": "TimeoutError",
+   "refer": "TimeoutError",
+   "proxy": "TimeoutError",
+   "ok": false,
+   "best": "none",
+   "urls": 3
+  },
+  "live.hyxrmt.com:85": {
+   "direct": "URLError",
+   "refer": "URLError",
+   "proxy": "TimeoutError",
+   "ok": false,
+   "best": "none",
+   "urls": 3
+  },
+  "v2.1080tg.com": {
+   "direct": "URLError",
+   "refer": "URLError",
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 1
+  },
+  "139.203.180.9:90": {
    "direct": 200,
    "refer": null,
-   "proxy": 200,
+   "proxy": 502,
    "ok": true,
    "best": "direct",
    "urls": 1
+  },
+  "hzcm-live.media.hugd.com": {
+   "direct": 200,
+   "refer": "URLError",
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 3
   },
   "tvpull.smartwq.cn": {
    "direct": 403,
@@ -4370,7 +4434,31 @@
    "best": "none",
    "urls": 1
   },
-  "hls.nntv.cn": {
+  "m3u8channel-yj.yunxya.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 1
+  },
+  "live.jinchuanrmt.com:90": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 1
+  },
+  "qcfile.qcrmt.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 1
+  },
+  "live.zzyxxw.com:2443": {
    "direct": 200,
    "refer": null,
    "proxy": 200,
@@ -4386,47 +4474,7 @@
    "best": "direct",
    "urls": 1
   },
-  "123.146.162.24:8017": {
-   "direct": "URLError",
-   "refer": "URLError",
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 1
-  },
-  "live.cztv.cc:85": {
-   "direct": "URLError",
-   "refer": "URLError",
-   "proxy": "TimeoutError",
-   "ok": false,
-   "best": "none",
-   "urls": 7
-  },
-  "v2.1080tg.com": {
-   "direct": "URLError",
-   "refer": "URLError",
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 1
-  },
-  "live1.habctv.com": {
-   "direct": "URLError",
-   "refer": "URLError",
-   "proxy": "TimeoutError",
-   "ok": false,
-   "best": "none",
-   "urls": 4
-  },
-  "tvpull.hmgbtv.com": {
-   "direct": "URLError",
-   "refer": "URLError",
-   "proxy": "TimeoutError",
-   "ok": false,
-   "best": "none",
-   "urls": 2
-  },
-  "live.hyxrmt.com:85": {
+  "m3u8.channel.wsrtv.com.cn": {
    "direct": "URLError",
    "refer": "URLError",
    "proxy": "TimeoutError",
@@ -4434,15 +4482,7 @@
    "best": "none",
    "urls": 3
   },
-  "qcfile.qcrmt.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 1
-  },
-  "play.yunxya.com": {
+  "live.zohi.tv:80": {
    "direct": 200,
    "refer": null,
    "proxy": 200,
@@ -4458,22 +4498,6 @@
    "best": "none",
    "urls": 1
   },
-  "m3u8.channel.wsrtv.com.cn": {
-   "direct": "URLError",
-   "refer": "URLError",
-   "proxy": "TimeoutError",
-   "ok": false,
-   "best": "none",
-   "urls": 3
-  },
-  "live.zzyxxw.com:2443": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 1
-  },
   "1.94.31.214": {
    "direct": 302,
    "refer": null,
@@ -4482,7 +4506,15 @@
    "best": "direct",
    "urls": 1
   },
-  "live.zohi.tv:80": {
+  "play.yunxya.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 1
+  },
+  "jwplay.hebyun.com.cn:443": {
    "direct": 200,
    "refer": null,
    "proxy": 200,
@@ -4498,15 +4530,31 @@
    "best": "direct",
    "urls": 1
   },
-  "channel.wcrmt.cn:80": {
-   "direct": "URLError",
-   "refer": "URLError",
+  "p2.vzan.com": {
+   "direct": 200,
+   "refer": null,
    "proxy": 200,
    "ok": true,
-   "best": "proxy",
+   "best": "direct",
    "urls": 1
   },
-  "jwplay.hebyun.com.cn:443": {
+  "radio.pull.hebtv.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 1
+  },
+  "m3u8channel-bx.yunxya.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 1
+  },
+  "test1.live.sdetv.com.cn": {
    "direct": 200,
    "refer": null,
    "proxy": 200,
@@ -4522,38 +4570,6 @@
    "best": "direct",
    "urls": 1
   },
-  "cdn1.hbkfdj.com:65": {
-   "direct": "URLError",
-   "refer": "URLError",
-   "proxy": "TimeoutError",
-   "ok": false,
-   "best": "none",
-   "urls": 2
-  },
-  "radio.pull.hebtv.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 1
-  },
-  "lxfile.lxxcb.cn:80": {
-   "direct": "URLError",
-   "refer": "URLError",
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 1
-  },
-  "m3u8channel-yj.yunxya.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 1
-  },
   "111.53.96.67:8081": {
    "direct": 404,
    "refer": 404,
@@ -4562,28 +4578,12 @@
    "best": "none",
    "urls": 1
   },
-  "live.yantaitv.cn": {
-   "direct": "TimeoutError",
-   "refer": "TimeoutError",
-   "proxy": "TimeoutError",
+  "123.146.162.24:8017": {
+   "direct": "URLError",
+   "refer": "URLError",
+   "proxy": 502,
    "ok": false,
    "best": "none",
-   "urls": 3
-  },
-  "test1.live.sdetv.com.cn": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 1
-  },
-  "p2.vzan.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
    "urls": 1
   },
   "m.italkbbtv.com": {
@@ -4594,20 +4594,12 @@
    "best": "direct",
    "urls": 1
   },
-  "ottrrs.hl.chinamobile.com": {
-   "direct": "URLError",
-   "refer": "URLError",
-   "proxy": "TimeoutError",
-   "ok": false,
-   "best": "none",
-   "urls": 1
-  },
-  "139.203.180.9:90": {
-   "direct": "URLError",
-   "refer": "URLError",
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
+  "dspdhls.appcoo.com:8888": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
    "urls": 1
   },
   "uzoiczhh.live.sxmty.com": {
@@ -4618,7 +4610,31 @@
    "best": "direct",
    "urls": 1
   },
-  "dspdhls.appcoo.com:8888": {
+  "cdn1.hbkfdj.com:65": {
+   "direct": "URLError",
+   "refer": "URLError",
+   "proxy": "TimeoutError",
+   "ok": false,
+   "best": "none",
+   "urls": 2
+  },
+  "live.gdtv.ah.cn": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 1
+  },
+  "live.yantaitv.cn": {
+   "direct": "TimeoutError",
+   "refer": "TimeoutError",
+   "proxy": "TimeoutError",
+   "ok": false,
+   "best": "none",
+   "urls": 3
+  },
+  "hplayer1.juyun.tv:80": {
    "direct": 200,
    "refer": null,
    "proxy": 200,
@@ -4642,14 +4658,6 @@
    "best": "none",
    "urls": 1
   },
-  "goo.bkpcp.top": {
-   "direct": "TimeoutError",
-   "refer": "TimeoutError",
-   "proxy": "TimeoutError",
-   "ok": false,
-   "best": "none",
-   "urls": 1
-  },
   "[2409:8087:1a01:df::7005]": {
    "direct": "URLError",
    "refer": "URLError",
@@ -4658,12 +4666,12 @@
    "best": "none",
    "urls": 1
   },
-  "hplayer1.juyun.tv:80": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
+  "live.lalifeier.eu.org": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
    "urls": 1
   },
   "[2409:8087:1a01:df::4059]:80": {
@@ -4698,7 +4706,7 @@
    "best": "none",
    "urls": 1
   },
-  "srs.iyb983.cn:443": {
+  "srs.iyb983.cn": {
    "direct": 200,
    "refer": null,
    "proxy": 200,
@@ -4714,15 +4722,7 @@
    "best": "direct",
    "urls": 1
   },
-  "srs.iyb983.cn": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 1
-  },
-  "live.gdtv.ah.cn": {
+  "srs.iyb983.cn:443": {
    "direct": 200,
    "refer": null,
    "proxy": 200,
@@ -4738,14 +4738,6 @@
    "best": "direct",
    "urls": 1
   },
-  "live.lalifeier.eu.org": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 1
-  },
   "yp.qqqtv.top": {
    "direct": "URLError",
    "refer": "URLError",
@@ -4754,23 +4746,39 @@
    "best": "none",
    "urls": 1
   },
-  "z.b.bkpcp.top": {
+  "live.ahsz.tv": {
    "direct": "TimeoutError",
-   "refer": "TimeoutError",
-   "proxy": "TimeoutError",
-   "ok": false,
-   "best": "none",
+   "refer": "URLError",
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
    "urls": 2
   },
-  "iptv.huuc.edu.cn": {
+  "lxfile.lxxcb.cn": {
    "direct": "URLError",
    "refer": "URLError",
-   "proxy": "TimeoutError",
-   "ok": false,
-   "best": "none",
-   "urls": 2
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 1
+  },
+  "english-livetx.cgtn.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 1
   },
   "litv.tzh911.qzz.io": {
+   "direct": 308,
+   "refer": null,
+   "proxy": 502,
+   "ok": true,
+   "best": "direct",
+   "urls": 1
+  },
+  "play1-qk.nmtv.cn:80": {
    "direct": 404,
    "refer": 404,
    "proxy": 502,
@@ -4786,18 +4794,18 @@
    "best": "direct",
    "urls": 1
   },
+  "tv.pull.hebtv.com": {
+   "direct": 403,
+   "refer": 403,
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 1
+  },
   "60.222.246.220:19433": {
    "direct": 200,
    "refer": null,
    "proxy": 502,
-   "ok": true,
-   "best": "direct",
-   "urls": 1
-  },
-  "english-livetx.cgtn.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
    "ok": true,
    "best": "direct",
    "urls": 1
@@ -4810,9 +4818,9 @@
    "best": "direct",
    "urls": 1
   },
-  "devlivepull.migucloud.com": {
-   "direct": 404,
-   "refer": 404,
+  "tvpull.hmgbtv.com": {
+   "direct": "URLError",
+   "refer": "URLError",
    "proxy": "TimeoutError",
    "ok": false,
    "best": "none",
@@ -4821,6 +4829,14 @@
   "drive.mxmy.net:8888": {
    "direct": "URLError",
    "refer": "URLError",
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 1
+  },
+  "live-cmvideo.cmread.com:80": {
+   "direct": 403,
+   "refer": 403,
    "proxy": 502,
    "ok": false,
    "best": "none",
@@ -4842,18 +4858,18 @@
    "best": "direct",
    "urls": 1
   },
-  "tv.pull.hebtv.com": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 1
-  },
   "l2fpdktp.live.sxmty.com": {
    "direct": 200,
    "refer": null,
    "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 1
+  },
+  "218.84.12.186:8002": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 502,
    "ok": true,
    "best": "direct",
    "urls": 1
@@ -4866,63 +4882,15 @@
    "best": "direct",
    "urls": 1
   },
-  "play1-qk.nmtv.cn:80": {
-   "direct": 404,
-   "refer": 404,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 1
-  },
-  "218.84.12.186:8002": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 502,
-   "ok": true,
-   "best": "direct",
-   "urls": 1
-  },
-  "lxfile.lxxcb.cn": {
+  "iptv.huuc.edu.cn": {
    "direct": "URLError",
    "refer": "URLError",
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
-   "urls": 1
-  },
-  "live-cmvideo.cmread.com:80": {
-   "direct": 403,
-   "refer": 403,
-   "proxy": 502,
+   "proxy": "TimeoutError",
    "ok": false,
    "best": "none",
-   "urls": 1
+   "urls": 2
   },
   "stream11.jlntv.cn": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 1
-  },
-  "59.175.226.142:280": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 502,
-   "ok": true,
-   "best": "direct",
-   "urls": 1
-  },
-  "1yp7hc5p.live.sxmty.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 1
-  },
-  "stream.jinjiang.tv": {
    "direct": 200,
    "refer": null,
    "proxy": 200,
@@ -4938,7 +4906,39 @@
    "best": "direct",
    "urls": 1
   },
-  "218.84.127.245:1026": {
+  "iptv.cdn.ha.chinamobile.com": {
+   "direct": "URLError",
+   "refer": "URLError",
+   "proxy": "TimeoutError",
+   "ok": false,
+   "best": "none",
+   "urls": 10
+  },
+  "devlivepull.migucloud.com": {
+   "direct": 404,
+   "refer": 404,
+   "proxy": "TimeoutError",
+   "ok": false,
+   "best": "none",
+   "urls": 2
+  },
+  "1yp7hc5p.live.sxmty.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 1
+  },
+  "ottrrs.hl.chinamobile.com": {
+   "direct": "URLError",
+   "refer": "URLError",
+   "proxy": "TimeoutError",
+   "ok": false,
+   "best": "none",
+   "urls": 1
+  },
+  "59.175.226.142:280": {
    "direct": 200,
    "refer": null,
    "proxy": 502,
@@ -4946,10 +4946,34 @@
    "best": "direct",
    "urls": 1
   },
-  "zb.gxlbamc.com:1935": {
+  "lbyzztfe.live.sxmty.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": "TimeoutError",
+   "ok": true,
+   "best": "direct",
+   "urls": 1
+  },
+  "tntgjhjb.live.sxmty.com": {
    "direct": 200,
    "refer": null,
    "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 1
+  },
+  "stream.jinjiang.tv": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 1
+  },
+  "218.84.127.245:1026": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 502,
    "ok": true,
    "best": "direct",
    "urls": 1
@@ -4970,47 +4994,7 @@
    "best": "direct",
    "urls": 1
   },
-  "ali-vl.cztv.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 200,
-   "ok": true,
-   "best": "direct",
-   "urls": 1
-  },
-  "tv.drs.ganzitv.com:8100": {
-   "direct": "URLError",
-   "refer": "URLError",
-   "proxy": "TimeoutError",
-   "ok": false,
-   "best": "none",
-   "urls": 1
-  },
-  "iptv.cdn.ha.chinamobile.com": {
-   "direct": "URLError",
-   "refer": "URLError",
-   "proxy": "TimeoutError",
-   "ok": false,
-   "best": "none",
-   "urls": 10
-  },
-  "nmk.ioapk.com:5050": {
-   "direct": "URLError",
-   "refer": "URLError",
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 1
-  },
-  "tntgjhjb.live.sxmty.com": {
-   "direct": 404,
-   "refer": 404,
-   "proxy": 502,
-   "ok": false,
-   "best": "none",
-   "urls": 1
-  },
-  "liveplay-srs.voc.com.cn": {
+  "zb.gxlbamc.com:1935": {
    "direct": 200,
    "refer": null,
    "proxy": 200,
@@ -5026,6 +5010,38 @@
    "best": "direct",
    "urls": 1
   },
+  "qmmqvzoz.live.sxmty.com": {
+   "direct": 200,
+   "refer": null,
+   "proxy": "TimeoutError",
+   "ok": true,
+   "best": "direct",
+   "urls": 1
+  },
+  "nmk.ioapk.com:5050": {
+   "direct": "URLError",
+   "refer": "URLError",
+   "proxy": 502,
+   "ok": false,
+   "best": "none",
+   "urls": 1
+  },
+  "tpc.x3322.net:9901": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 1
+  },
+  "liveplay-srs.voc.com.cn": {
+   "direct": 200,
+   "refer": null,
+   "proxy": 200,
+   "ok": true,
+   "best": "direct",
+   "urls": 1
+  },
   "www.wxhcgbds.com:8081": {
    "direct": 200,
    "refer": null,
@@ -5034,12 +5050,28 @@
    "best": "direct",
    "urls": 1
   },
-  "qmmqvzoz.live.sxmty.com": {
-   "direct": 200,
-   "refer": null,
-   "proxy": "TimeoutError",
+  "lxfile.lxxcb.cn:80": {
+   "direct": "URLError",
+   "refer": "URLError",
+   "proxy": 200,
    "ok": true,
-   "best": "direct",
+   "best": "proxy",
+   "urls": 1
+  },
+  "channel.wcrmt.cn:80": {
+   "direct": "URLError",
+   "refer": "URLError",
+   "proxy": "TimeoutError",
+   "ok": false,
+   "best": "none",
+   "urls": 1
+  },
+  "tv.drs.ganzitv.com:8100": {
+   "direct": "URLError",
+   "refer": "URLError",
+   "proxy": "TimeoutError",
+   "ok": false,
+   "best": "none",
    "urls": 1
   },
   "palive.patv123.com:8091": {
@@ -5050,44 +5082,12 @@
    "best": "none",
    "urls": 1
   },
-  "live.jinchuanrmt.com:90": {
-   "direct": "URLError",
-   "refer": "URLError",
-   "proxy": "TimeoutError",
-   "ok": false,
-   "best": "none",
-   "urls": 1
-  },
-  "hls.gstv.com.cn": {
-   "direct": 403,
-   "refer": 404,
-   "proxy": "TimeoutError",
-   "ok": false,
-   "best": "none",
-   "urls": 3
-  },
   "124.88.144.73:1935": {
    "direct": "URLError",
    "refer": "URLError",
    "proxy": 502,
    "ok": false,
    "best": "none",
-   "urls": 1
-  },
-  "tpc.x3322.net:9901": {
-   "direct": "URLError",
-   "refer": 200,
-   "proxy": 200,
-   "ok": true,
-   "best": "refer",
-   "urls": 1
-  },
-  "tvfile.jjrm.org.cn": {
-   "direct": "URLError",
-   "refer": "URLError",
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
    "urls": 1
   },
   "livehls1.appcoo.com": {
@@ -5098,15 +5098,15 @@
    "best": "none",
    "urls": 1
   },
-  "v13.yuglf.com": {
+  "play.scrstv.com.cn": {
    "direct": "URLError",
    "refer": "URLError",
-   "proxy": "TimeoutError",
-   "ok": false,
-   "best": "none",
-   "urls": 2
+   "proxy": 200,
+   "ok": true,
+   "best": "proxy",
+   "urls": 1
   },
-  "v14.yuglf.com": {
+  "v13.yuglf.com": {
    "direct": "URLError",
    "refer": "URLError",
    "proxy": "TimeoutError",
@@ -5122,12 +5122,28 @@
    "best": "none",
    "urls": 1
   },
-  "cm-wshls.homecdn.com": {
+  "hls.gstv.com.cn": {
+   "direct": 403,
+   "refer": 404,
+   "proxy": "TimeoutError",
+   "ok": false,
+   "best": "none",
+   "urls": 3
+  },
+  "v14.yuglf.com": {
    "direct": "URLError",
    "refer": "URLError",
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
+   "proxy": "TimeoutError",
+   "ok": false,
+   "best": "none",
+   "urls": 2
+  },
+  "tvfile.jjrm.org.cn": {
+   "direct": "URLError",
+   "refer": "URLError",
+   "proxy": "TimeoutError",
+   "ok": false,
+   "best": "none",
    "urls": 1
   },
   "3gvod.zjgonline.com.cn:1935": {
@@ -5146,28 +5162,12 @@
    "best": "none",
    "urls": 1
   },
-  "lbyzztfe.live.sxmty.com": {
-   "direct": "URLError",
-   "refer": 200,
-   "proxy": 200,
-   "ok": true,
-   "best": "refer",
-   "urls": 1
-  },
   "fenghuang.tv12.xyz": {
    "direct": "URLError",
    "refer": "URLError",
    "proxy": "TimeoutError",
    "ok": false,
    "best": "none",
-   "urls": 1
-  },
-  "play.scrstv.com.cn": {
-   "direct": "URLError",
-   "refer": "URLError",
-   "proxy": 200,
-   "ok": true,
-   "best": "proxy",
    "urls": 1
   },
   "3ee63cd9178a070a2db29f77915c49d4.livehwc3.cn": {
@@ -5178,13 +5178,13 @@
    "best": "none",
    "urls": 1
   },
-  "104.152.209.49:8181": {
-   "direct": 200,
-   "refer": null,
-   "proxy": 502,
+  "ali-vl.cztv.com": {
+   "direct": "URLError",
+   "refer": "URLError",
+   "proxy": 200,
    "ok": true,
-   "best": "direct",
-   "urls": 3
+   "best": "proxy",
+   "urls": 1
   },
   "tencentplaybusiness.gztv.com": {
    "direct": 200,
