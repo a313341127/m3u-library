@@ -396,9 +396,16 @@ function playbackInfo(data, delta, id, origin) {
       DirectStreamUrl: path,
       Type: "Default",
       Container: "m3u8",
-      IsRemote: false,
+      // ⚠️ 与 output/_worker.js 的 playbackInfo 保持同步：
+      // IsRemote 必须为 true（Path 是 http URL），且必须给 TranscodingUrl 回退位，
+      // 否则 carTV 等通用客户端播放方式协商失败 → 点播放秒败且不发流请求。
+      IsRemote: true,
       SupportsDirectStream: true,
       SupportsDirectPlay: true,
+      SupportsTranscoding: true,
+      TranscodingUrl: origin + "/Videos/" + m.id + "/master.m3u8?MediaSourceId=" + m.id + "-" + i + "&api_key=m3u-jellyfin-token",
+      TranscodingSubProtocol: "hls",
+      TranscodingContainer: "ts",
       Name: i === 0 ? "主线路" : "线路" + (i + 1),
     };
   });

@@ -1223,7 +1223,10 @@ async function playbackInfo(data, id, origin) {
         IsRemote: true,
         SupportsDirectStream: true,
         SupportsDirectPlay: true,
-        SupportsTranscoding: false,
+        SupportsTranscoding: true,
+        TranscodingUrl: origin + "/Videos/" + m.id + "/master.m3u8?MediaSourceId=" + m.id + "-" + i + "&api_key=m3u-jellyfin-token",
+        TranscodingSubProtocol: "hls",
+        TranscodingContainer: "ts",
         Name: i === 0 ? "主线路" : "线路" + (i + 1),
         Size: 0,
         MediaStreams: makeStreams(),
@@ -1247,10 +1250,18 @@ async function playbackInfo(data, id, origin) {
       DirectStreamUrl: path,
       Type: "Default",
       Container: container,
-      IsRemote: false,
+      // ⚠️ IsRemote 必须为 true：Path 是 http URL，标 false 会被通用客户端
+      // （carTV 等 Emby 系）当成「本地文件路径」→ 播放方式协商直接失败。
+      IsRemote: true,
       SupportsDirectStream: true,
       SupportsDirectPlay: true,
-      SupportsTranscoding: false,
+      // ⚠️ 必须给转码回退位：通用客户端的 DeviceProfile 往往不含 m3u8 直连，
+      // 没有 TranscodingUrl 会判定「无可用播放方式」→ 点播放秒败且不发起流请求。
+      // master.m3u8 实际返回改写后的 HLS 清单，无需真转码。
+      SupportsTranscoding: true,
+      TranscodingUrl: origin + "/Videos/" + m.id + "/master.m3u8?MediaSourceId=" + m.id + "-" + i + "&api_key=m3u-jellyfin-token",
+      TranscodingSubProtocol: "hls",
+      TranscodingContainer: "ts",
       Name: i === 0 ? "主线路" : "线路" + (i + 1),
       Size: 0,
       MediaStreams: makeStreams(),
