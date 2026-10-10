@@ -32,9 +32,13 @@ jobs:
             | jq -r '.result[0].id')
           echo "dep=$DEP" >> "$GITHUB_OUTPUT"
           echo "tailing deployment: $DEP"
-      - name: tail 实时日志
+      - name: tail 实时日志（循环重建会话，绕开 5 分钟会话寿命）
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
-          npx --yes wrangler@4 pages deployment tail "${{ steps.dep.outputs.dep }}" \
-            --project-name qinjin --format json 2>&1
+          for i in 1 2 3 4 5; do
+            echo "=== tail session $i ==="
+            npx --yes wrangler@4 pages deployment tail "${{ steps.dep.outputs.dep }}" \
+              --project-name qinjin --format json 2>&1 || true
+            sleep 2
+          done
