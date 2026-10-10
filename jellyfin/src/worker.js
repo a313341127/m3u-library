@@ -411,7 +411,9 @@ function playbackInfo(data, delta, id, origin) {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    const p = url.pathname;
+    // Emby 系客户端（如部分车机 App）所有请求带 /emby 前缀，统一剥掉
+    let p = url.pathname;
+    if (/^\/emby(\/|$)/i.test(p)) p = p.slice(5) || "/";
     try {
       const data = await loadData(ctx);
       const delta = await loadDelta(env);
@@ -419,6 +421,18 @@ export default {
       if (p === "/System/Info/Public" || p === "/System/Info")
         return json(systemInfo());
       if (p === "/System/Ping") return new Response("pong", { status: 200 });
+
+      // ===== 通用客户端兼容层（carTV 等 Emby/Jellyfin 双协议 App 需要的周边端点）=====
+      if (p === "/Branding/Configuration")
+        return json({ SplashscreenEnabled: false, CustomCss: "" });
+      if (p === "/System/Configuration") return json({});
+      if (/^\/Sessions\/Playing/.test(p)) return new Response(null, { status: 204 });
+      if (/^\/DisplayPreferences\//.test(p)) return json({});
+      if (/\/Items\/Latest$/.test(p)) return json([]);
+      if (/\/Items\/(Resume|ContinueWatching|NextUp)$/.test(p))
+        return json({ Items: [], TotalRecordCount: 0 });
+      if (/^\/Shows\/[^\/]+\/(Episodes|Seasons)/.test(p))
+        return json({ Items: [], TotalRecordCount: 0 });
 
       if (p === "/proxy") return proxyRoute(url);
 
@@ -444,6 +458,10 @@ export default {
       if (m) { const it = getById(m[1], data, delta); return json(it ? toDto(it) : {}); }
       m = p.match(/^\/Items\/([^\/]+)\/Images\/Primary/);
       if (m) return imagePrimary(data, delta, m[1], url.origin);
+      m = p.match(/^\/Items\/([^\/]+)\/(Similar|Intros)/);
+      if (m) return json({ Items: [], TotalRecordCount: 0 });
+      m = p.match(/^\/Items\/([^\/]+)\/Download/);
+      if (m) return streamProxy(data, delta, m[1], url);
       m = p.match(/^\/Items\/([^\/]+)\/PlaybackInfo/);
       if (m) return playbackInfo(data, delta, m[1], url.origin);
       // 播放：途播会请求 /Videos/{id}/stream（或带 src 参数切换线路）
