@@ -413,7 +413,10 @@ function playbackInfo(data, delta, id, origin) {
       Path: path,
       DirectStreamUrl: path,
       Type: "Default",
-      Container: "m3u8",
+      // ⚠️ 与 output/_worker.js 保持同步：容器必须报 "mp4" 进通用客户端
+      // 直连白名单（carTV 的 DeviceProfile 直连只认 mp4,m4v,mov），
+      // 报 "m3u8" 会被能力匹配判死 → 点播放秒败且不发流请求。
+      Container: "mp4",
       // ⚠️ 与 output/_worker.js 的 playbackInfo 保持同步：
       // IsRemote 必须为 true（Path 是 http URL），且必须给 TranscodingUrl 回退位，
       // 否则 carTV 等通用客户端播放方式协商失败 → 点播放秒败且不发流请求。
@@ -424,7 +427,7 @@ function playbackInfo(data, delta, id, origin) {
       RequiresOpening: false,
       RequiresClosing: false,
       SupportsTranscoding: true,
-      TranscodingUrl: origin + "/Videos/" + m.id + "/master.m3u8?MediaSourceId=" + m.id + "-" + i + "&PlaySessionId=" + sessionId + "&api_key=m3u-jellyfin-token",
+      TranscodingUrl: origin + "/Videos/" + m.id + "/master.m3u8?MediaSourceId=" + m.id + "-" + i + "&PlaySessionId=" + sessionId + "&VideoCodec=h264&AudioCodec=aac&TranscodingProtocol=hls&TranscodingContainer=ts&api_key=m3u-jellyfin-token",
       TranscodingSubProtocol: "hls",
       TranscodingContainer: "ts",
       DefaultAudioStreamIndex: 1,

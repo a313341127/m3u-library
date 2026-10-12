@@ -1222,7 +1222,8 @@ async function playbackInfo(data, id, origin) {
   // 直播：不过滤、不代理，直接给原始 m3u8 地址让客户端大陆网络直连
   if (cat === "live") {
     const mediaSources = sourcesRaw.map((u, i) => {
-      const container = detectContainer(u);
+      // ⚠️ 与非 live 分支同理：容器报 "mp4" 进通用客户端直连白名单（见下方注释）
+      const container = "mp4";
       return {
         Protocol: "Http",
         Id: m.id + "-" + i,
@@ -1234,7 +1235,7 @@ async function playbackInfo(data, id, origin) {
         SupportsDirectStream: true,
         SupportsDirectPlay: true,
         SupportsTranscoding: true,
-        TranscodingUrl: origin + "/Videos/" + m.id + "/master.m3u8?MediaSourceId=" + m.id + "-" + i + "&api_key=m3u-jellyfin-token",
+        TranscodingUrl: origin + "/Videos/" + m.id + "/master.m3u8?MediaSourceId=" + m.id + "-" + i + "&VideoCodec=h264&AudioCodec=aac&TranscodingProtocol=hls&TranscodingContainer=ts&api_key=m3u-jellyfin-token",
         TranscodingSubProtocol: "hls",
         TranscodingContainer: "ts",
         Name: i === 0 ? "主线路" : "线路" + (i + 1),
@@ -1250,7 +1251,11 @@ async function playbackInfo(data, id, origin) {
   if (!sources.length) return { MediaSources: [] };
   const sessionId = "ps" + m.id + Date.now().toString(36);
   const mediaSources = sources.map((u, i) => {
-    const container = detectContainer(u);
+    // ⚠️ Container 必须报 "mp4"：carTV 等通用客户端的 DeviceProfile 直连白名单
+    // 只有 mp4,m4v,mov（转码才认 HLS+ts）。报 "m3u8" 两个名单都不沾 → 客户端
+    // 能力匹配判死，点播放秒败且不发任何流请求（2026-10-12 抓包实锤）。
+    // 实际内容是 m3u8 也没关系：Darwin AVPlayer 按内容嗅探，不认容器声明。
+    const container = "mp4";
     // 所有线路统一走 worker 代理：worker 能解析的分享页返回真实 m3u8，
     // 解析失败再 302 让客户端大陆网络自行解析，体验最稳。
     const path = origin + "/Videos/" + m.id + "/stream?src=" + i;
@@ -1273,7 +1278,7 @@ async function playbackInfo(data, id, origin) {
       // 没有 TranscodingUrl 会判定「无可用播放方式」→ 点播放秒败且不发起流请求。
       // master.m3u8 实际返回改写后的 HLS 清单，无需真转码。
       SupportsTranscoding: true,
-      TranscodingUrl: origin + "/Videos/" + m.id + "/master.m3u8?MediaSourceId=" + m.id + "-" + i + "&PlaySessionId=" + sessionId + "&api_key=m3u-jellyfin-token",
+      TranscodingUrl: origin + "/Videos/" + m.id + "/master.m3u8?MediaSourceId=" + m.id + "-" + i + "&PlaySessionId=" + sessionId + "&VideoCodec=h264&AudioCodec=aac&TranscodingProtocol=hls&TranscodingContainer=ts&api_key=m3u-jellyfin-token",
       TranscodingSubProtocol: "hls",
       TranscodingContainer: "ts",
       DefaultAudioStreamIndex: 1,
