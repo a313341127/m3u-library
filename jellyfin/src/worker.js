@@ -101,6 +101,10 @@ function json(obj, status = 200) {
     headers: {
       "content-type": "application/json; charset=utf-8",
       "access-control-allow-origin": "*",
+      // 与 output/_worker.js 对齐：Jellyfin API 响应禁客户端缓存——
+      // 无缓存头时 iOS NSURLCache 会启发式缓存，陈旧 PlaybackInfo
+      // 会让通用客户端点播放直接本地判死、不发请求。
+      "cache-control": "no-store",
     },
   });
 }

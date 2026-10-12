@@ -1418,7 +1418,20 @@ export default {
         }
         const info = await playbackInfo(data, m[1], url.origin);
         console.log("PINFO_RESP " + m[1] + " " + JSON.stringify(info).slice(0, 900));
-        return cacheJson(request, info, 200, DATA_VERSION + "_play_" + m[1], 60, 300);
+        // ⚠️ PlaybackInfo 严禁任何客户端缓存（含 stale-while-revalidate）：
+        // 响应含会话级 PlaySessionId，且 iOS NSURLCache 吃了旧响应后，
+        // 客户端点播放会直接用陈旧 MediaSources 本地判死、连请求都不发
+        // （carTV 秒败实锤：窗口期活跃浏览 11 分钟、点播放 0 次请求）。
+        return new Response(JSON.stringify(info), {
+          status: 200,
+          headers: {
+            "content-type": "application/json; charset=utf-8",
+            "access-control-allow-origin": "*",
+            "cache-control": "no-store, no-cache, must-revalidate",
+            "cdn-cache-control": "no-store",
+            "vary": "Accept-Encoding",
+          },
+        });
       }
       // AutoOpenLiveStream=true 时部分客户端会调 LiveStreams/Open 打开流
       m = p.match(/^\/LiveStreams\/Open/i);
@@ -1428,7 +1441,8 @@ export default {
         const itemId = lsId.split("-")[0];
         const info = await playbackInfo(data, itemId, url.origin);
         console.log("LS_OPEN " + itemId + " " + JSON.stringify(info).slice(0, 300));
-        return json(info);
+        // 播放链路响应禁客户端缓存（同 PlaybackInfo，防陈旧 MediaSources 判死）
+        return json(info, 200, { "cache-control": "no-store, no-cache, must-revalidate", "cdn-cache-control": "no-store" });
       }
       m = p.match(/^\/Items\/([^\/]+)\/(Similar|Intros)/);
       if (m) return json({ Items: [], TotalRecordCount: 0 });
