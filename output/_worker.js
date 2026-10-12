@@ -1167,18 +1167,23 @@ function shouldClientParse(url) {
 }
 
 function makeStreams() {
-  // 按 Emby/Jellyfin 真实响应补全字段：宽高/码率/声道等缺失时部分通用客户端
-  // 会在设备能力匹配阶段判死（点播放秒败且不发流请求）。
+  // 逐字段复刻真实 Jellyfin 响应：部分通用客户端（carTV 等）用严格模型解码，
+  // 缺字段 → 解码失败 → 点播放秒败且不发任何流请求（2026-10-12 四轮抓包结论）。
   return [
     {
       Type: "Video", Codec: "h264", IsVideo: true, IsDefault: true, IsExternal: false,
       Index: 0, Level: 40, BitRate: 2000000, BitDepth: 8, Width: 1920, Height: 1080,
-      AspectRatio: "16:9", IsInterlaced: false, DisplayTitle: "1080p H264", Title: "1080p H264",
+      AspectRatio: "16:9", IsInterlaced: false, IsAVC: true, IsForced: false,
+      IsHearingImpaired: false, IsTextSubtitleStream: false, SupportsExternalStream: false,
+      VideoRange: "SDR", VideoRangeType: "SDR",
+      Language: "und", DisplayTitle: "1080p H264", Title: "1080p H264",
     },
     {
       Type: "Audio", Codec: "aac", IsAudio: true, IsDefault: true, IsExternal: false,
       Index: 1, BitRate: 128000, Channels: 2, SampleRate: 44100, ChannelLayout: "stereo",
-      Language: "chi", DisplayTitle: "中文 AAC 立体声", Title: "中文",
+      IsForced: false, IsHearingImpaired: false, IsTextSubtitleStream: false,
+      SupportsExternalStream: false, Language: "und",
+      DisplayTitle: "Chinese - AAC - Stereo", Title: "Chinese",
     },
   ];
 }
@@ -1249,7 +1254,8 @@ async function playbackInfo(data, id, origin) {
   // 途播侧只暴露“途播可播”的源（过滤黑名单域名）；网页端走静态数据不受影响
   const sources = tuboSources(m);
   if (!sources.length) return { MediaSources: [] };
-  const sessionId = "ps" + m.id + Date.now().toString(36);
+  // ⚠️ PlaySessionId 必须是标准 UUID：部分客户端会严格解析，非 UUID 直接判死
+  const sessionId = crypto.randomUUID();
   const mediaSources = sources.map((u, i) => {
     // ⚠️ Container 必须报 "mp4"：carTV 等通用客户端的 DeviceProfile 直连白名单
     // 只有 mp4,m4v,mov（转码才认 HLS+ts）。报 "m3u8" 两个名单都不沾 → 客户端
@@ -1258,7 +1264,9 @@ async function playbackInfo(data, id, origin) {
     const container = "mp4";
     // 所有线路统一走 worker 代理：worker 能解析的分享页返回真实 m3u8，
     // 解析失败再 302 让客户端大陆网络自行解析，体验最稳。
-    const path = origin + "/Videos/" + m.id + "/stream?src=" + i;
+    // ⚠️ 路径带 .mp4 后缀：部分客户端校验 URL 扩展名与 Container 一致，
+    // /Videos/{id}/* 全部落 streamProxy，后缀只是给客户端看的。
+    const path = origin + "/Videos/" + m.id + "/stream.mp4?src=" + i;
     return {
       Protocol: "Http",
       Id: m.id + "-" + i,
@@ -1274,6 +1282,8 @@ async function playbackInfo(data, id, origin) {
       SupportsProbing: false,
       RequiresOpening: false,
       RequiresClosing: false,
+      RequiresLooping: false,
+      IsInfiniteStream: false,
       // ⚠️ 必须给转码回退位：通用客户端的 DeviceProfile 往往不含 m3u8 直连，
       // 没有 TranscodingUrl 会判定「无可用播放方式」→ 点播放秒败且不发起流请求。
       // master.m3u8 实际返回改写后的 HLS 清单，无需真转码。
@@ -1282,9 +1292,10 @@ async function playbackInfo(data, id, origin) {
       TranscodingSubProtocol: "hls",
       TranscodingContainer: "ts",
       DefaultAudioStreamIndex: 1,
-      DefaultSubtitleStreamIndex: -1,
       Name: i === 0 ? "主线路" : "线路" + (i + 1),
       Size: 0,
+      Bitrate: 2000000,
+      RunTimeTicks: 54000000000,
       MediaStreams: makeStreams(),
     };
   });
@@ -1304,6 +1315,7 @@ function isJellyfinPath(p) {
     p.startsWith("/Sessions/") ||
     p.startsWith("/DisplayPreferences/") ||
     p.startsWith("/Shows/") ||
+    p.startsWith("/LiveStreams/") ||
     p.startsWith("/Videos/") ||
     p === "/proxy" ||
     p === "/probe" ||             // 线路预检：前端开播前并发探测，避免死链空等
@@ -1407,6 +1419,16 @@ export default {
         const info = await playbackInfo(data, m[1], url.origin);
         console.log("PINFO_RESP " + m[1] + " " + JSON.stringify(info).slice(0, 900));
         return cacheJson(request, info, 200, DATA_VERSION + "_play_" + m[1], 60, 300);
+      }
+      // AutoOpenLiveStream=true 时部分客户端会调 LiveStreams/Open 打开流
+      m = p.match(/^\/LiveStreams\/Open/i);
+      if (m) {
+        const data = makeData(ctx, url.origin);
+        const lsId = url.searchParams.get("Id") || url.searchParams.get("MediaSourceId") || "";
+        const itemId = lsId.split("-")[0];
+        const info = await playbackInfo(data, itemId, url.origin);
+        console.log("LS_OPEN " + itemId + " " + JSON.stringify(info).slice(0, 300));
+        return json(info);
       }
       m = p.match(/^\/Items\/([^\/]+)\/(Similar|Intros)/);
       if (m) return json({ Items: [], TotalRecordCount: 0 });

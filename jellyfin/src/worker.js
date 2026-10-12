@@ -380,19 +380,24 @@ function proxyRoute(url) {
   return proxyFetch(u, url.origin);
 }
 
-// 与 output/_worker.js 的 makeStreams 保持同步：字段补全（宽高/码率/声道等）
-// 缺失时部分通用客户端在设备能力匹配阶段判死（点播放秒败且不发流请求）。
+// 与 output/_worker.js 的 makeStreams 保持同步：逐字段复刻真实 Jellyfin 响应，
+// 部分通用客户端（carTV 等）用严格模型解码，缺字段 → 解码失败 → 秒败不发流请求。
 function makeStreams() {
   return [
     {
       Type: "Video", Codec: "h264", IsVideo: true, IsDefault: true, IsExternal: false,
       Index: 0, Level: 40, BitRate: 2000000, BitDepth: 8, Width: 1920, Height: 1080,
-      AspectRatio: "16:9", IsInterlaced: false, DisplayTitle: "1080p H264", Title: "1080p H264",
+      AspectRatio: "16:9", IsInterlaced: false, IsAVC: true, IsForced: false,
+      IsHearingImpaired: false, IsTextSubtitleStream: false, SupportsExternalStream: false,
+      VideoRange: "SDR", VideoRangeType: "SDR",
+      Language: "und", DisplayTitle: "1080p H264", Title: "1080p H264",
     },
     {
       Type: "Audio", Codec: "aac", IsAudio: true, IsDefault: true, IsExternal: false,
       Index: 1, BitRate: 128000, Channels: 2, SampleRate: 44100, ChannelLayout: "stereo",
-      Language: "chi", DisplayTitle: "中文 AAC 立体声", Title: "中文",
+      IsForced: false, IsHearingImpaired: false, IsTextSubtitleStream: false,
+      SupportsExternalStream: false, Language: "und",
+      DisplayTitle: "Chinese - AAC - Stereo", Title: "Chinese",
     },
   ];
 }
@@ -404,9 +409,11 @@ function playbackInfo(data, delta, id, origin) {
     ? m.sources
     : (m.url ? [m.url] : []);
   if (!sources.length) return json({ MediaSources: [] }, 404);
-  const sessionId = "ps" + m.id + Date.now().toString(36);
+  // ⚠️ PlaySessionId 必须是标准 UUID（部分客户端严格解析）；
+  // 路径带 .mp4 后缀（部分客户端校验 URL 扩展名与 Container 一致）
+  const sessionId = crypto.randomUUID();
   const mediaSources = sources.map((u, i) => {
-    const path = origin + "/Videos/" + m.id + "/stream?src=" + i;
+    const path = origin + "/Videos/" + m.id + "/stream.mp4?src=" + i;
     return {
       Protocol: "Http",
       Id: m.id + "-" + i,
@@ -426,14 +433,17 @@ function playbackInfo(data, delta, id, origin) {
       SupportsProbing: false,
       RequiresOpening: false,
       RequiresClosing: false,
+      RequiresLooping: false,
+      IsInfiniteStream: false,
       SupportsTranscoding: true,
       TranscodingUrl: origin + "/Videos/" + m.id + "/master.m3u8?MediaSourceId=" + m.id + "-" + i + "&PlaySessionId=" + sessionId + "&VideoCodec=h264&AudioCodec=aac&TranscodingProtocol=hls&TranscodingContainer=ts&api_key=m3u-jellyfin-token",
       TranscodingSubProtocol: "hls",
       TranscodingContainer: "ts",
       DefaultAudioStreamIndex: 1,
-      DefaultSubtitleStreamIndex: -1,
       Name: i === 0 ? "主线路" : "线路" + (i + 1),
       Size: 0,
+      Bitrate: 2000000,
+      RunTimeTicks: 54000000000,
       MediaStreams: makeStreams(),
     };
   });
@@ -499,6 +509,11 @@ export default {
       if (m) return streamProxy(data, delta, m[1], url);
       m = p.match(/^\/Items\/([^\/]+)\/PlaybackInfo/);
       if (m) return playbackInfo(data, delta, m[1], url.origin);
+      // AutoOpenLiveStream=true 时部分客户端会调 LiveStreams/Open 打开流
+      if (/^\/LiveStreams\/Open/i.test(p)) {
+        const lsId = url.searchParams.get("Id") || url.searchParams.get("MediaSourceId") || "";
+        return playbackInfo(data, delta, lsId.split("-")[0], url.origin);
+      }
       // 播放：途播会请求 /Videos/{id}/stream（或带 src 参数切换线路）
       m = p.match(/^\/Videos\/([^\/]+)(\/stream)?/);
       if (m) return streamProxy(data, delta, m[1], url);
