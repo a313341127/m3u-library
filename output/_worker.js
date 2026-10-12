@@ -1240,7 +1240,7 @@ async function playbackInfo(data, id, origin) {
         SupportsDirectStream: true,
         SupportsDirectPlay: true,
         SupportsTranscoding: true,
-        TranscodingUrl: origin + "/Videos/" + m.id + "/master.m3u8?MediaSourceId=" + m.id + "-" + i + "&VideoCodec=h264&AudioCodec=aac&TranscodingProtocol=hls&TranscodingContainer=ts&api_key=m3u-jellyfin-token",
+        TranscodingUrl: "/Videos/" + m.id + "/master.m3u8?MediaSourceId=" + m.id + "-" + i + "&VideoCodec=h264&AudioCodec=aac&TranscodingProtocol=hls&TranscodingContainer=ts&api_key=m3u-jellyfin-token",
         TranscodingSubProtocol: "hls",
         TranscodingContainer: "ts",
         Name: i === 0 ? "主线路" : "线路" + (i + 1),
@@ -1267,11 +1267,16 @@ async function playbackInfo(data, id, origin) {
     // ⚠️ 路径带 .mp4 后缀：部分客户端校验 URL 扩展名与 Container 一致，
     // /Videos/{id}/* 全部落 streamProxy，后缀只是给客户端看的。
     const path = origin + "/Videos/" + m.id + "/stream.mp4?src=" + i;
+    // ⚠️ DirectStreamUrl/TranscodingUrl 必须是相对路径（/Videos/...）：
+    // 真实 Jellyfin/Emby 就这么返回，客户端自己拼服务器地址；给绝对 URL
+    // 会被「base + path」拼接的客户端拼成垃圾 URL → 本地解析失败，
+    // 点播放秒败且零流请求（carTV 六轮排障实锤，2026-10-12）。
+    const relPath = "/Videos/" + m.id + "/stream.mp4?src=" + i;
     return {
       Protocol: "Http",
       Id: m.id + "-" + i,
       Path: path,
-      DirectStreamUrl: path,
+      DirectStreamUrl: relPath,
       Type: "Default",
       Container: container,
       // ⚠️ IsRemote 必须为 true：Path 是 http URL，标 false 会被通用客户端
@@ -1288,7 +1293,7 @@ async function playbackInfo(data, id, origin) {
       // 没有 TranscodingUrl 会判定「无可用播放方式」→ 点播放秒败且不发起流请求。
       // master.m3u8 实际返回改写后的 HLS 清单，无需真转码。
       SupportsTranscoding: true,
-      TranscodingUrl: origin + "/Videos/" + m.id + "/master.m3u8?MediaSourceId=" + m.id + "-" + i + "&PlaySessionId=" + sessionId + "&VideoCodec=h264&AudioCodec=aac&TranscodingProtocol=hls&TranscodingContainer=ts&api_key=m3u-jellyfin-token",
+      TranscodingUrl: "/Videos/" + m.id + "/master.m3u8?MediaSourceId=" + m.id + "-" + i + "&PlaySessionId=" + sessionId + "&VideoCodec=h264&AudioCodec=aac&TranscodingProtocol=hls&TranscodingContainer=ts&api_key=m3u-jellyfin-token",
       TranscodingSubProtocol: "hls",
       TranscodingContainer: "ts",
       DefaultAudioStreamIndex: 1,

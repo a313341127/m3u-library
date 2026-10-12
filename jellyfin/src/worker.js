@@ -418,11 +418,15 @@ function playbackInfo(data, delta, id, origin) {
   const sessionId = crypto.randomUUID();
   const mediaSources = sources.map((u, i) => {
     const path = origin + "/Videos/" + m.id + "/stream.mp4?src=" + i;
+    // ⚠️ 与 output/_worker.js 同步：DirectStreamUrl/TranscodingUrl 用相对路径
+    // （真实 Jellyfin/Emby 约定，客户端自己拼服务器地址；绝对 URL 会被拼接成
+    // 垃圾 URL → 客户端本地解析失败、点播放秒败零请求）。
+    const relPath = "/Videos/" + m.id + "/stream.mp4?src=" + i;
     return {
       Protocol: "Http",
       Id: m.id + "-" + i,
       Path: path,
-      DirectStreamUrl: path,
+      DirectStreamUrl: relPath,
       Type: "Default",
       // ⚠️ 与 output/_worker.js 保持同步：容器必须报 "mp4" 进通用客户端
       // 直连白名单（carTV 的 DeviceProfile 直连只认 mp4,m4v,mov），
@@ -440,7 +444,7 @@ function playbackInfo(data, delta, id, origin) {
       RequiresLooping: false,
       IsInfiniteStream: false,
       SupportsTranscoding: true,
-      TranscodingUrl: origin + "/Videos/" + m.id + "/master.m3u8?MediaSourceId=" + m.id + "-" + i + "&PlaySessionId=" + sessionId + "&VideoCodec=h264&AudioCodec=aac&TranscodingProtocol=hls&TranscodingContainer=ts&api_key=m3u-jellyfin-token",
+      TranscodingUrl: "/Videos/" + m.id + "/master.m3u8?MediaSourceId=" + m.id + "-" + i + "&PlaySessionId=" + sessionId + "&VideoCodec=h264&AudioCodec=aac&TranscodingProtocol=hls&TranscodingContainer=ts&api_key=m3u-jellyfin-token",
       TranscodingSubProtocol: "hls",
       TranscodingContainer: "ts",
       DefaultAudioStreamIndex: 1,
