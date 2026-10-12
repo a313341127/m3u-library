@@ -380,6 +380,23 @@ function proxyRoute(url) {
   return proxyFetch(u, url.origin);
 }
 
+// 与 output/_worker.js 的 makeStreams 保持同步：字段补全（宽高/码率/声道等）
+// 缺失时部分通用客户端在设备能力匹配阶段判死（点播放秒败且不发流请求）。
+function makeStreams() {
+  return [
+    {
+      Type: "Video", Codec: "h264", IsVideo: true, IsDefault: true, IsExternal: false,
+      Index: 0, Level: 40, BitRate: 2000000, BitDepth: 8, Width: 1920, Height: 1080,
+      AspectRatio: "16:9", IsInterlaced: false, DisplayTitle: "1080p H264", Title: "1080p H264",
+    },
+    {
+      Type: "Audio", Codec: "aac", IsAudio: true, IsDefault: true, IsExternal: false,
+      Index: 1, BitRate: 128000, Channels: 2, SampleRate: 44100, ChannelLayout: "stereo",
+      Language: "chi", DisplayTitle: "中文 AAC 立体声", Title: "中文",
+    },
+  ];
+}
+
 function playbackInfo(data, delta, id, origin) {
   const m = getById(id, data, delta);
   if (!m) return json({ MediaSources: [] }, 404);
@@ -387,6 +404,7 @@ function playbackInfo(data, delta, id, origin) {
     ? m.sources
     : (m.url ? [m.url] : []);
   if (!sources.length) return json({ MediaSources: [] }, 404);
+  const sessionId = "ps" + m.id + Date.now().toString(36);
   const mediaSources = sources.map((u, i) => {
     const path = origin + "/Videos/" + m.id + "/stream?src=" + i;
     return {
@@ -402,16 +420,23 @@ function playbackInfo(data, delta, id, origin) {
       IsRemote: true,
       SupportsDirectStream: true,
       SupportsDirectPlay: true,
+      SupportsProbing: false,
+      RequiresOpening: false,
+      RequiresClosing: false,
       SupportsTranscoding: true,
-      TranscodingUrl: origin + "/Videos/" + m.id + "/master.m3u8?MediaSourceId=" + m.id + "-" + i + "&api_key=m3u-jellyfin-token",
+      TranscodingUrl: origin + "/Videos/" + m.id + "/master.m3u8?MediaSourceId=" + m.id + "-" + i + "&PlaySessionId=" + sessionId + "&api_key=m3u-jellyfin-token",
       TranscodingSubProtocol: "hls",
       TranscodingContainer: "ts",
+      DefaultAudioStreamIndex: 1,
+      DefaultSubtitleStreamIndex: -1,
       Name: i === 0 ? "主线路" : "线路" + (i + 1),
+      Size: 0,
+      MediaStreams: makeStreams(),
     };
   });
   return json({
     MediaSources: mediaSources,
-    PlaySessionId: "sess-" + m.id,
+    PlaySessionId: sessionId,
   });
 }
 

@@ -1167,9 +1167,19 @@ function shouldClientParse(url) {
 }
 
 function makeStreams() {
+  // 按 Emby/Jellyfin 真实响应补全字段：宽高/码率/声道等缺失时部分通用客户端
+  // 会在设备能力匹配阶段判死（点播放秒败且不发流请求）。
   return [
-    { Type: "Video", Codec: "h264", IsDefault: true, IsExternal: false, Index: 0, Level: 0 },
-    { Type: "Audio", Codec: "aac", IsDefault: true, IsExternal: false, Index: 1, Level: 0 },
+    {
+      Type: "Video", Codec: "h264", IsVideo: true, IsDefault: true, IsExternal: false,
+      Index: 0, Level: 40, BitRate: 2000000, BitDepth: 8, Width: 1920, Height: 1080,
+      AspectRatio: "16:9", IsInterlaced: false, DisplayTitle: "1080p H264", Title: "1080p H264",
+    },
+    {
+      Type: "Audio", Codec: "aac", IsAudio: true, IsDefault: true, IsExternal: false,
+      Index: 1, BitRate: 128000, Channels: 2, SampleRate: 44100, ChannelLayout: "stereo",
+      Language: "chi", DisplayTitle: "中文 AAC 立体声", Title: "中文",
+    },
   ];
 }
 
@@ -1238,6 +1248,7 @@ async function playbackInfo(data, id, origin) {
   // 途播侧只暴露“途播可播”的源（过滤黑名单域名）；网页端走静态数据不受影响
   const sources = tuboSources(m);
   if (!sources.length) return { MediaSources: [] };
+  const sessionId = "ps" + m.id + Date.now().toString(36);
   const mediaSources = sources.map((u, i) => {
     const container = detectContainer(u);
     // 所有线路统一走 worker 代理：worker 能解析的分享页返回真实 m3u8，
@@ -1255,13 +1266,18 @@ async function playbackInfo(data, id, origin) {
       IsRemote: true,
       SupportsDirectStream: true,
       SupportsDirectPlay: true,
+      SupportsProbing: false,
+      RequiresOpening: false,
+      RequiresClosing: false,
       // ⚠️ 必须给转码回退位：通用客户端的 DeviceProfile 往往不含 m3u8 直连，
       // 没有 TranscodingUrl 会判定「无可用播放方式」→ 点播放秒败且不发起流请求。
       // master.m3u8 实际返回改写后的 HLS 清单，无需真转码。
       SupportsTranscoding: true,
-      TranscodingUrl: origin + "/Videos/" + m.id + "/master.m3u8?MediaSourceId=" + m.id + "-" + i + "&api_key=m3u-jellyfin-token",
+      TranscodingUrl: origin + "/Videos/" + m.id + "/master.m3u8?MediaSourceId=" + m.id + "-" + i + "&PlaySessionId=" + sessionId + "&api_key=m3u-jellyfin-token",
       TranscodingSubProtocol: "hls",
       TranscodingContainer: "ts",
+      DefaultAudioStreamIndex: 1,
+      DefaultSubtitleStreamIndex: -1,
       Name: i === 0 ? "主线路" : "线路" + (i + 1),
       Size: 0,
       MediaStreams: makeStreams(),
@@ -1269,7 +1285,7 @@ async function playbackInfo(data, id, origin) {
   });
   return {
     MediaSources: mediaSources,
-    PlaySessionId: "sess-" + m.id,
+    PlaySessionId: sessionId,
   };
 }
 
@@ -1376,7 +1392,16 @@ export default {
       m = p.match(/^\/Items\/([^\/]+)\/PlaybackInfo/);
       if (m) {
         const data = makeData(ctx, url.origin);
-        return cacheJson(request, await playbackInfo(data, m[1], url.origin), 200, DATA_VERSION + "_play_" + m[1], 60, 300);
+        // 🔍 临时调试：把通用客户端（carTV 等）提交的 DeviceProfile 打进 tail 日志
+        if (request.method === "POST") {
+          try {
+            const reqBody = await request.clone().json();
+            console.log("PINFO_BODY " + m[1] + " " + JSON.stringify(reqBody));
+          } catch (_) { console.log("PINFO_BODY parse-fail"); }
+        }
+        const info = await playbackInfo(data, m[1], url.origin);
+        console.log("PINFO_RESP " + m[1] + " " + JSON.stringify(info).slice(0, 900));
+        return cacheJson(request, info, 200, DATA_VERSION + "_play_" + m[1], 60, 300);
       }
       m = p.match(/^\/Items\/([^\/]+)\/(Similar|Intros)/);
       if (m) return json({ Items: [], TotalRecordCount: 0 });
