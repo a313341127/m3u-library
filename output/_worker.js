@@ -1057,11 +1057,15 @@ async function streamProxy(data, id, url, request, ctx) {
     if (text && text.includes("#EXTM3U")) {
       return m3u8Response(clientDirectM3u8(text, real, origin));
     }
-    // 兜底：302 给客户端直连尝试
-    return redirect302(real);
+    // ⚠️ 该线路 worker 取不到清单（死链/过期分享页）：
+    // 疑似国内 CDN（worker 海外出口被源站限、手机直连通常能放）→ 照旧 302；
+    // 否则继续试下一条线路，全失败才兜底 302。
+    // （2026-10-12 修：carTV 等通用客户端无换线能力，第一条线死 = 整片失败；
+    // 旧代码 failover 循环首轮即 return，后面的线路永远轮不到。）
+    if (looksDomesticCdn(real)) return redirect302(real);
   }
 
-  // 极少数源 worker 出口取不到清单 → 兜底 302 给客户端直连
+  // 所有线路 worker 出口都取不到清单 → 兜底 302 给客户端直连
   // （途播可能仍失败，但浏览器/Safari 能放）
   return redirect302(sources[tryIdx]);
 }
@@ -1204,6 +1208,18 @@ function isTuboBlocked(url) {
     const host = new URL(url).hostname.toLowerCase();
     return TUBO_BLOCKED.some(b => host.includes(b));
   } catch (_) { return false; }
+}
+
+// 疑似国内 CDN：worker 海外出口常被这些源站限制（取清单失败），
+// 但客户端大陆网络直连通常能播 → stream 兜底 302 而不是跳线路。
+// 与 probeRoute 里的 domesticCdn 判据保持一致（2026-10-12）。
+function looksDomesticCdn(url) {
+  let host = "";
+  try { host = new URL(url).hostname.toLowerCase(); } catch (_) { return false; }
+  return host.includes("lzcdn") || host.includes("liangzi") || host.includes("uvjtih")
+    || host.includes("baofeng") || host.includes("fengbao") || host.includes("bfvvs")
+    || host.includes("maotai") || host.includes("mtzy") || host.includes("vodcnd")
+    || host.includes("wgslsw") || host.includes("qncdn") || host.includes("cdnd");
 }
 
 // 途播侧可见的源：过滤掉黑名单域名。过滤后为空则返回 []（途播显示无可用线路），
