@@ -11,7 +11,6 @@ rules:
   - DOMAIN-KEYWORD,feifei,DIRECT
   - DOMAIN-KEYWORD,fengbao,DIRECT
   - DOMAIN-KEYWORD,ffzy,DIRECT
-  - DOMAIN-KEYWORD,freetv,DIRECT
   - DOMAIN-KEYWORD,iptv,DIRECT
   - DOMAIN-KEYWORD,lzcdn,DIRECT
   - DOMAIN-KEYWORD,modujx,DIRECT
@@ -156,7 +155,6 @@ rules:
   - DOMAIN-SUFFIX,ffzyread2.com,DIRECT
   - DOMAIN-SUFFIX,ffzyvideo.com,DIRECT
   - DOMAIN-SUFFIX,freetv.fun,DIRECT
-  - DOMAIN-SUFFIX,freetv.top,DIRECT
   - DOMAIN-SUFFIX,ganzitv.com,DIRECT
   - DOMAIN-SUFFIX,gatv.com.cn,DIRECT
   - DOMAIN-SUFFIX,gggread.com,DIRECT
@@ -188,7 +186,6 @@ rules:
   - DOMAIN-SUFFIX,hugd.com,DIRECT
   - DOMAIN-SUFFIX,huuc.edu.cn,DIRECT
   - DOMAIN-SUFFIX,huyall.com,DIRECT
-  - DOMAIN-SUFFIX,hyrtv.cn,DIRECT
   - DOMAIN-SUFFIX,hyxrmt.com,DIRECT
   - DOMAIN-SUFFIX,ijycnd.com,DIRECT
   - DOMAIN-SUFFIX,ikzybf.cogm,DIRECT
@@ -272,7 +269,6 @@ rules:
   - DOMAIN-SUFFIX,modujx15.com,DIRECT
   - DOMAIN-SUFFIX,modujx16.com,DIRECT
   - DOMAIN-SUFFIX,modujx17.com,DIRECT
-  - DOMAIN-SUFFIX,mxmy.net,DIRECT
   - DOMAIN-SUFFIX,myalicdn.com,DIRECT
   - DOMAIN-SUFFIX,myds.me,DIRECT
   - DOMAIN-SUFFIX,myqqd.com,DIRECT
@@ -392,7 +388,6 @@ rules:
   - DOMAIN-SUFFIX,wdit.com.cn,DIRECT
   - DOMAIN-SUFFIX,wgslsw.com,DIRECT
   - DOMAIN-SUFFIX,wikimedia.org,DIRECT
-  - DOMAIN-SUFFIX,wjyanghu.com,DIRECT
   - DOMAIN-SUFFIX,wsrtv.com.cn,DIRECT
   - DOMAIN-SUFFIX,wsyzym3u8.com,DIRECT
   - DOMAIN-SUFFIX,wxhcgbds.com,DIRECT
