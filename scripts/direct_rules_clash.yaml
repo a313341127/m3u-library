@@ -129,6 +129,7 @@ rules:
   - DOMAIN-SUFFIX,fengbao11.com,DIRECT
   - DOMAIN-SUFFIX,fengbao12.com,DIRECT
   - DOMAIN-SUFFIX,fengbao13.com,DIRECT
+  - DOMAIN-SUFFIX,fengbao14.com,DIRECT
   - DOMAIN-SUFFIX,fengbao8.com,DIRECT
   - DOMAIN-SUFFIX,fengbao9.com,DIRECT
   - DOMAIN-SUFFIX,fentvoss.com,DIRECT
@@ -158,6 +159,7 @@ rules:
   - DOMAIN-SUFFIX,ganzitv.com,DIRECT
   - DOMAIN-SUFFIX,gatv.com.cn,DIRECT
   - DOMAIN-SUFFIX,gggread.com,DIRECT
+  - DOMAIN-SUFFIX,githubusercontent.com,DIRECT
   - DOMAIN-SUFFIX,gstv.com.cn,DIRECT
   - DOMAIN-SUFFIX,gsuus.com,DIRECT
   - DOMAIN-SUFFIX,guoluche.com,DIRECT
