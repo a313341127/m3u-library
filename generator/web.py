@@ -2642,9 +2642,14 @@ __DATA_SCRIPTS__
       const all = [];
       cats.forEach(c => RESOURCES[c].forEach(it => all.push({ it: it, cat: c })));
 
-      // 热播榜：全站按人气取前 10（对齐 dmhyy 的排行榜模块）
-      addSection('热播榜',
-        all.slice().sort((a, b) => (b.it.hits || 0) - (a.it.hits || 0)).slice(0, 10), '', true);
+      // 热播榜：hits 是源站的静态数字（老片永远不变、新片偏低），固定取前 10 会永远同
+      // 一批片子霸榜。改为「人气前 30 进池 + 按日期轮换展示 10 部」：步长 7 与 30 互质，
+      // 30 天转遍全部轮转位，每天榜单不同且所有人看到同一个榜（确定性，非随机）。
+      const hotPool = all.slice().sort((a, b) => (b.it.hits || 0) - (a.it.hits || 0)).slice(0, 30);
+      const hotN = hotPool.length;
+      const hotRot = hotN ? Math.floor(Date.now() / 86400000) * 7 % hotN : 0;
+      const hotTop = hotPool.slice(hotRot).concat(hotPool.slice(0, hotRot)).slice(0, 10);
+      addSection('热播榜', hotTop, '', true);
       // 最近更新：按采集更新时间倒序（updated 只到日期，同日按人气排）
       addSection('最近更新',
         all.slice().sort((a, b) => (b.it.updated || '').localeCompare(a.it.updated || '')
