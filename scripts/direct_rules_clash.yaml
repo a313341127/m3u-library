@@ -53,7 +53,6 @@ rules:
   - DOMAIN-SUFFIX,bdzybf11.com,DIRECT
   - DOMAIN-SUFFIX,bdzybf22.com,DIRECT
   - DOMAIN-SUFFIX,bdzybf7.com,DIRECT
-  - DOMAIN-SUFFIX,bestv.cn,DIRECT
   - DOMAIN-SUFFIX,bfeng10.com,DIRECT
   - DOMAIN-SUFFIX,bfeng11.com,DIRECT
   - DOMAIN-SUFFIX,bfikuncdn.com,DIRECT
@@ -88,7 +87,6 @@ rules:
   - DOMAIN-SUFFIX,cdnlz7.com,DIRECT
   - DOMAIN-SUFFIX,cdnlz9.com,DIRECT
   - DOMAIN-SUFFIX,cftest5.cn,DIRECT
-  - DOMAIN-SUFFIX,cgtn.com,DIRECT
   - DOMAIN-SUFFIX,chinamobile.com,DIRECT
   - DOMAIN-SUFFIX,cmread.com,DIRECT
   - DOMAIN-SUFFIX,cnr.cn,DIRECT
