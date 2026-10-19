@@ -1,8 +1,8 @@
 {
-  "checked_at": "2026-10-19T10:12:20.079583+00:00",
-  "healthy": true,
-  "stalled": false,
-  "last_success_collect": "2026-10-19T09:24:26Z",
+  "checked_at": "2026-10-19T17:05:47.276822+00:00",
+  "healthy": false,
+  "stalled": true,
+  "last_success_collect": "2026-10-19T10:09:34Z",
   "fails": {
     "fast-collect.yml": 0,
     "update.yml": 0,
@@ -396,13 +396,15 @@
     "茅台|57": 2
   },
   "actions": [
-    "[fast-collect.yml] 最新 run 39235414316: in_progress/None (updated 2026-10-19T10:09:38Z)",
+    "[fast-collect.yml] 最新 run 39291091036: in_progress/None (updated 2026-10-19T17:05:11Z)",
     "  -> 运行中, 观察",
     "[update.yml] 最新 run 39168641225: completed/success (updated 2026-10-18T22:23:01Z)",
     "  -> 成功, 重置失败计数",
     "[backfill-episodes.yml] 最新 run 39229816571: completed/success (updated 2026-10-19T09:28:03Z)",
     "  -> 成功, 重置失败计数",
-    "最近采集 run(in_progress): 2026-10-19T10:09:34Z (3 分钟前)",
-    "最近成功采集: 2026-10-19T09:24:26Z (0.8h 前)"
+    "最近采集 run(in_progress): 2026-10-19T17:05:07Z (1 分钟前)",
+    "最近成功采集: 2026-10-19T10:09:34Z (6.9h 前)",
+    "!! 采集停滞(无成功>3h), 兜底重投 fast-collect.yml (repository_dispatch 接力)",
+    "  -> 已重投 fast-collect.yml (via_chain=True) -> run 39291221218"
   ]
 }
