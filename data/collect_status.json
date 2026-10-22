@@ -1,8 +1,8 @@
 {
-  "checked_at": "2026-10-22T05:16:56.223914+00:00",
-  "healthy": false,
-  "stalled": true,
-  "last_success_collect": "2026-10-22T00:07:23Z",
+  "checked_at": "2026-10-22T10:28:57.491230+00:00",
+  "healthy": true,
+  "stalled": false,
+  "last_success_collect": "2026-10-22T09:00:22Z",
   "fails": {
     "fast-collect.yml": 0,
     "update.yml": 0,
@@ -49,7 +49,7 @@
     "光速|12": 34,
     "光速|13": 348,
     "光速|14": 210,
-    "_rotate_offset": 17,
+    "_rotate_offset": 22,
     "量子|3": 2,
     "量子|1": 2,
     "量子|4": 2,
@@ -396,15 +396,13 @@
     "茅台|57": 2
   },
   "actions": [
-    "[fast-collect.yml] 最新 run 39726760444: in_progress/None (updated 2026-10-22T05:13:12Z)",
+    "[fast-collect.yml] 最新 run 39763271359: in_progress/None (updated 2026-10-22T10:27:49Z)",
     "  -> 运行中, 观察",
     "[update.yml] 最新 run 39687154073: completed/success (updated 2026-10-21T23:33:52Z)",
     "  -> 成功, 重置失败计数",
-    "[backfill-episodes.yml] 最新 run 39573281068: completed/success (updated 2026-10-21T09:01:34Z)",
+    "[backfill-episodes.yml] 最新 run 39752049855: completed/success (updated 2026-10-22T09:03:44Z)",
     "  -> 成功, 重置失败计数",
-    "最近采集 run(in_progress): 2026-10-22T05:13:10Z (4 分钟前)",
-    "最近成功采集: 2026-10-22T00:07:23Z (5.2h 前)",
-    "!! 采集停滞(无成功>3h), 兜底重投 fast-collect.yml (repository_dispatch 接力)",
-    "  -> 已重投 fast-collect.yml (via_chain=True) -> run 39727131470"
+    "最近采集 run(in_progress): 2026-10-22T10:27:46Z (1 分钟前)",
+    "最近成功采集: 2026-10-22T09:00:22Z (1.5h 前)"
   ]
 }
