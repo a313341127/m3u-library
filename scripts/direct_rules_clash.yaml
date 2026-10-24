@@ -38,6 +38,7 @@ rules:
   - DOMAIN-SUFFIX,3rut.com,DIRECT
   - DOMAIN-SUFFIX,3rut0$.com,DIRECT
   - DOMAIN-SUFFIX,3rut0.com,DIRECT
+  - DOMAIN-SUFFIX,484947.xyz,DIRECT
   - DOMAIN-SUFFIX,492zyvideoplayurl.com,DIRECT
   - DOMAIN-SUFFIX,51kandianshi.com,DIRECT
   - DOMAIN-SUFFIX,666230.xyz,DIRECT
@@ -392,6 +393,7 @@ rules:
   - DOMAIN-SUFFIX,wdit.com.cn,DIRECT
   - DOMAIN-SUFFIX,wgslsw.com,DIRECT
   - DOMAIN-SUFFIX,wikimedia.org,DIRECT
+  - DOMAIN-SUFFIX,wjyanghu.com,DIRECT
   - DOMAIN-SUFFIX,wsrtv.com.cn,DIRECT
   - DOMAIN-SUFFIX,wsyzym3u8.com,DIRECT
   - DOMAIN-SUFFIX,wxhcgbds.com,DIRECT
