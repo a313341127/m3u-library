@@ -12,6 +12,7 @@ rules:
   - DOMAIN-KEYWORD,feifei,DIRECT
   - DOMAIN-KEYWORD,fengbao,DIRECT
   - DOMAIN-KEYWORD,ffzy,DIRECT
+  - DOMAIN-KEYWORD,freetv,DIRECT
   - DOMAIN-KEYWORD,iptv,DIRECT
   - DOMAIN-KEYWORD,lzcdn,DIRECT
   - DOMAIN-KEYWORD,modujx,DIRECT
@@ -61,6 +62,7 @@ rules:
   - DOMAIN-SUFFIX,bfvvs.com,DIRECT
   - DOMAIN-SUFFIX,bilibili.com,DIRECT
   - DOMAIN-SUFFIX,bkpcp.top,DIRECT
+  - DOMAIN-SUFFIX,btzx.com.cn,DIRECT
   - DOMAIN-SUFFIX,bvvvvvvv7f.com,DIRECT
   - DOMAIN-SUFFIX,bvvvvvvvvv1f.com,DIRECT
   - DOMAIN-SUFFIX,cbg.cn,DIRECT
@@ -157,9 +159,11 @@ rules:
   - DOMAIN-SUFFIX,ffzyread2.com,DIRECT
   - DOMAIN-SUFFIX,ffzyvideo.com,DIRECT
   - DOMAIN-SUFFIX,freetv.fun,DIRECT
+  - DOMAIN-SUFFIX,freetv.top,DIRECT
   - DOMAIN-SUFFIX,ganzitv.com,DIRECT
   - DOMAIN-SUFFIX,gatv.com.cn,DIRECT
   - DOMAIN-SUFFIX,gggread.com,DIRECT
+  - DOMAIN-SUFFIX,githubusercontent.com,DIRECT
   - DOMAIN-SUFFIX,gstv.com.cn,DIRECT
   - DOMAIN-SUFFIX,gsuus.com,DIRECT
   - DOMAIN-SUFFIX,guoluche.com,DIRECT
@@ -214,7 +218,6 @@ rules:
   - DOMAIN-SUFFIX,kuaioss.com,DIRECT
   - DOMAIN-SUFFIX,kuktxu.com,DIRECT
   - DOMAIN-SUFFIX,kunyu.com.cn,DIRECT
-  - DOMAIN-SUFFIX,kwimgs.com,DIRECT
   - DOMAIN-SUFFIX,ky32e.com,DIRECT
   - DOMAIN-SUFFIX,kylintv.tv,DIRECT
   - DOMAIN-SUFFIX,letvoss.com,DIRECT
@@ -391,7 +394,6 @@ rules:
   - DOMAIN-SUFFIX,wdit.com.cn,DIRECT
   - DOMAIN-SUFFIX,wgslsw.com,DIRECT
   - DOMAIN-SUFFIX,wikimedia.org,DIRECT
-  - DOMAIN-SUFFIX,wjyanghu.com,DIRECT
   - DOMAIN-SUFFIX,wsrtv.com.cn,DIRECT
   - DOMAIN-SUFFIX,wsyzym3u8.com,DIRECT
   - DOMAIN-SUFFIX,wxhcgbds.com,DIRECT
