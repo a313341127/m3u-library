@@ -51,6 +51,7 @@ rules:
   - DOMAIN-SUFFIX,baofeng10.com,DIRECT
   - DOMAIN-SUFFIX,baofeng11.com,DIRECT
   - DOMAIN-SUFFIX,baofeng9.com,DIRECT
+  - DOMAIN-SUFFIX,bdstatic.com,DIRECT
   - DOMAIN-SUFFIX,bdzybf11.com,DIRECT
   - DOMAIN-SUFFIX,bdzybf22.com,DIRECT
   - DOMAIN-SUFFIX,bdzybf7.com,DIRECT
@@ -87,7 +88,6 @@ rules:
   - DOMAIN-SUFFIX,cdnlz7.com,DIRECT
   - DOMAIN-SUFFIX,cdnlz9.com,DIRECT
   - DOMAIN-SUFFIX,cftest5.cn,DIRECT
-  - DOMAIN-SUFFIX,cgtn.com,DIRECT
   - DOMAIN-SUFFIX,chinamobile.com,DIRECT
   - DOMAIN-SUFFIX,cmread.com,DIRECT
   - DOMAIN-SUFFIX,cnr.cn,DIRECT
@@ -160,6 +160,7 @@ rules:
   - DOMAIN-SUFFIX,ganzitv.com,DIRECT
   - DOMAIN-SUFFIX,gatv.com.cn,DIRECT
   - DOMAIN-SUFFIX,gggread.com,DIRECT
+  - DOMAIN-SUFFIX,githubusercontent.com,DIRECT
   - DOMAIN-SUFFIX,gstv.com.cn,DIRECT
   - DOMAIN-SUFFIX,gsuus.com,DIRECT
   - DOMAIN-SUFFIX,guoluche.com,DIRECT
@@ -180,7 +181,6 @@ rules:
   - DOMAIN-SUFFIX,hndt.com,DIRECT
   - DOMAIN-SUFFIX,hntv.tv,DIRECT
   - DOMAIN-SUFFIX,homecdn.com,DIRECT
-  - DOMAIN-SUFFIX,hrbtv.net,DIRECT
   - DOMAIN-SUFFIX,hsnewsnet.com,DIRECT
   - DOMAIN-SUFFIX,hugd.com,DIRECT
   - DOMAIN-SUFFIX,huuc.edu.cn,DIRECT
@@ -299,7 +299,6 @@ rules:
   - DOMAIN-SUFFIX,playback-speed.com,DIRECT
   - DOMAIN-SUFFIX,power34play.vip,DIRECT
   - DOMAIN-SUFFIX,ppqrrs.com,DIRECT
-  - DOMAIN-SUFFIX,pybtv.cn,DIRECT
   - DOMAIN-SUFFIX,qcrmt.com,DIRECT
   - DOMAIN-SUFFIX,qingting.fm,DIRECT
   - DOMAIN-SUFFIX,qq.com,DIRECT
@@ -342,7 +341,6 @@ rules:
   - DOMAIN-SUFFIX,spccmc.com,DIRECT
   - DOMAIN-SUFFIX,streamlock.net,DIRECT
   - DOMAIN-SUFFIX,subokk.com,DIRECT
-  - DOMAIN-SUFFIX,sun0769.com,DIRECT
   - DOMAIN-SUFFIX,sxmty.com,DIRECT
   - DOMAIN-SUFFIX,sy-precise.com,DIRECT
   - DOMAIN-SUFFIX,thmz.com,DIRECT
@@ -383,7 +381,6 @@ rules:
   - DOMAIN-SUFFIX,wsyzym3u8.com,DIRECT
   - DOMAIN-SUFFIX,wxjyedu.com,DIRECT
   - DOMAIN-SUFFIX,wyfkg.cn,DIRECT
-  - DOMAIN-SUFFIX,x3322.net,DIRECT
   - DOMAIN-SUFFIX,xgplay1.com,DIRECT
   - DOMAIN-SUFFIX,xgplay10.com,DIRECT
   - DOMAIN-SUFFIX,xgplay11.com,DIRECT
