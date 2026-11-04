@@ -51,6 +51,7 @@ rules:
   - DOMAIN-SUFFIX,baofeng10.com,DIRECT
   - DOMAIN-SUFFIX,baofeng11.com,DIRECT
   - DOMAIN-SUFFIX,baofeng9.com,DIRECT
+  - DOMAIN-SUFFIX,bdstatic.com,DIRECT
   - DOMAIN-SUFFIX,bdzybf11.com,DIRECT
   - DOMAIN-SUFFIX,bdzybf22.com,DIRECT
   - DOMAIN-SUFFIX,bdzybf7.com,DIRECT
@@ -87,7 +88,6 @@ rules:
   - DOMAIN-SUFFIX,cdnlz7.com,DIRECT
   - DOMAIN-SUFFIX,cdnlz9.com,DIRECT
   - DOMAIN-SUFFIX,cftest5.cn,DIRECT
-  - DOMAIN-SUFFIX,cgtn.com,DIRECT
   - DOMAIN-SUFFIX,chinamobile.com,DIRECT
   - DOMAIN-SUFFIX,cmread.com,DIRECT
   - DOMAIN-SUFFIX,cnr.cn,DIRECT
@@ -160,7 +160,6 @@ rules:
   - DOMAIN-SUFFIX,ganzitv.com,DIRECT
   - DOMAIN-SUFFIX,gatv.com.cn,DIRECT
   - DOMAIN-SUFFIX,gggread.com,DIRECT
-  - DOMAIN-SUFFIX,githubusercontent.com,DIRECT
   - DOMAIN-SUFFIX,gstv.com.cn,DIRECT
   - DOMAIN-SUFFIX,gsuus.com,DIRECT
   - DOMAIN-SUFFIX,guoluche.com,DIRECT
@@ -272,7 +271,6 @@ rules:
   - DOMAIN-SUFFIX,modujx15.com,DIRECT
   - DOMAIN-SUFFIX,modujx16.com,DIRECT
   - DOMAIN-SUFFIX,modujx17.com,DIRECT
-  - DOMAIN-SUFFIX,myalicdn.com,DIRECT
   - DOMAIN-SUFFIX,myds.me,DIRECT
   - DOMAIN-SUFFIX,myqqd.com,DIRECT
   - DOMAIN-SUFFIX,myqqdd.com,DIRECT
