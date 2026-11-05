@@ -1,11 +1,11 @@
 {
-  "checked_at": "2026-11-05T18:54:24.225012+00:00",
-  "healthy": true,
+  "checked_at": "2026-11-05T23:57:43.816750+00:00",
+  "healthy": false,
   "stalled": false,
-  "last_success_collect": "2026-11-05T18:12:56Z",
+  "last_success_collect": "2026-11-05T23:46:15Z",
   "fails": {
     "fast-collect.yml": 0,
-    "update.yml": 3,
+    "update.yml": 4,
     "backfill-episodes.yml": 0
   },
   "progress_pages": {
@@ -49,12 +49,12 @@
     "光速|12": 34,
     "光速|13": 350,
     "光速|14": 212,
-    "_rotate_offset": 4,
+    "_rotate_offset": 9,
     "量子|3": 2,
     "量子|1": 2,
     "量子|4": 2,
     "量子|2": 2,
-    "最大|all": 6275,
+    "最大|all": 6277,
     "茅台|1": 2,
     "魔都|1": 132,
     "魔都|3": 33,
@@ -398,14 +398,13 @@
     "星球|all": 1017
   },
   "actions": [
-    "[fast-collect.yml] 最新 run 42082068776: completed/success (updated 2026-11-05T18:17:31Z)",
+    "[fast-collect.yml] 最新 run 42131906025: completed/success (updated 2026-11-05T23:50:41Z)",
     "  -> 成功, 重置失败计数",
-    "[update.yml] 最新 run 42018545619: completed/failure (updated 2026-11-05T11:32:42Z)",
-    "  -> 失败(3/4) 尝试自动重投",
-    "  -> 已重投 update.yml (via_chain=False) -> run 42088750687",
+    "[update.yml] 最新 run 42088750687: completed/failure (updated 2026-11-05T19:03:40Z)",
+    "  -> 连续失败 4 次, 开 Issue 升级",
     "[backfill-episodes.yml] 最新 run 42021113111: completed/success (updated 2026-11-05T11:45:16Z)",
     "  -> 成功, 重置失败计数",
-    "最近采集 run(completed): 2026-11-05T18:12:56Z (42 分钟前)",
-    "最近成功采集: 2026-11-05T18:12:56Z (0.7h 前)"
+    "最近采集 run(completed): 2026-11-05T23:46:15Z (12 分钟前)",
+    "最近成功采集: 2026-11-05T23:46:15Z (0.2h 前)"
   ]
 }
