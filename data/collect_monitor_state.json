@@ -6,7 +6,7 @@
   },
   "fails": {
     "fast-collect.yml": 0,
-    "update.yml": 23,
+    "update.yml": 24,
     "backfill-episodes.yml": 0
   },
   "last_health": false
