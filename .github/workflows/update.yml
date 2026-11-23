@@ -110,6 +110,9 @@ jobs:
         # 放在采集之后、所有生成之前：既覆盖本轮采集新入库的错分，也覆盖历史老数据。
         # 改 DB 而不是改生成代码 —— web / 途播 JSON / Jellyfin / M3U / 增量 KV 自动一致。
         # 幂等：跑第二遍命中 0 行，无副作用。
+        # 防御：脚本内部已有兜底降级，此处 continue-on-error 双保险 —— 本步属于
+        # 非核心清洗，偶发异常不应让后续采集/生成/部署全部 skipped（2026-11 教训）。
+        continue-on-error: true
         run: python scripts/fix_gala_categories.py --apply
 
       - name: 清理失效播放片源（链接健康检测，增量+安全阀）

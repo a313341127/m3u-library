@@ -40,6 +40,29 @@ def fix(db_path: str, apply: bool = False, verbose: bool = True) -> int:
     """返回被改判（或 dry-run 下将被改判）的行数。"""
     con = sqlite3.connect(db_path)
     con.row_factory = sqlite3.Row
+    # 修复 BLOB 片名脏数据（2026-11-23）：个别源站把 bytes 原样入库，is_tv_gala / clean_title
+    # 等正则消费方在全表扫描时会抛 TypeError("cannot use a string pattern on a bytes-like
+    # object")，未被下方 except OperationalError 捕获 -> 每日任务固定在此步失败、后续全部
+    # skipped（2026-11-05 起连续复发）。精准定点修复：typeof(name)='blob' 只扫坏行，
+    # decode 后写回，幂等。
+    try:
+        blobs = con.execute(
+            "SELECT id, name FROM resources WHERE typeof(name)='blob'").fetchall()
+    except sqlite3.DatabaseError as e:
+        print(f"[fix_gala] BLOB 片名检查失败: {e}")
+        blobs = []
+    if blobs:
+        fixed = []
+        for r in blobs:
+            try:
+                n = r["name"].decode("utf-8", "replace").strip()
+            except Exception:
+                n = ""
+            fixed.append((n or "未知", r["id"]))
+        con.executemany("UPDATE resources SET name=? WHERE id=?", fixed)
+        con.commit()
+        print(f"[fix_gala] 已修复 {len(blobs)} 条 BLOB 片名（decode utf-8），"
+              f"示例: {repr(blobs[0]['name'])[:80]}")
     try:
         rows = con.execute("SELECT id, name, category, media_type FROM resources").fetchall()
     except sqlite3.OperationalError as e:
@@ -88,7 +111,13 @@ def main():
     if not os.path.exists(args.db):
         print(f"[fix_gala] 库不存在，跳过: {args.db}")
         return 0
-    return fix(args.db, apply=args.apply)
+    try:
+        return fix(args.db, apply=args.apply)
+    except Exception as e:  # 兜底：任何意外（坏库/脏数据）都降级跳过，绝不拖垮每日流水线
+        import traceback
+        print(f"[fix_gala] 执行异常（已降级跳过，不阻断流水线）: {type(e).__name__}: {e}")
+        traceback.print_exc()
+        return 0
 
 
 if __name__ == "__main__":

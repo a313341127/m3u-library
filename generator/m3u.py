@@ -355,8 +355,14 @@ _GALA_LOC_RE = re.compile(
 )
 
 
-def is_tv_gala(name: str) -> bool:
-    """片名是否为「电视晚会」类（春节联欢晚会 / 跨年晚会 / 元宵喜乐会…）。"""
+def is_tv_gala(name) -> bool:
+    """片名是否为「电视晚会」类（春节联欢晚会 / 跨年晚会 / 元宵喜乐会…）。
+
+    兼容脏数据：个别源站把 bytes（BLOB）原样入库，正则对 bytes 会抛 TypeError，
+    这里统一 decode 后再判定（2026-11-23 每日任务连续失败根因）。
+    """
+    if isinstance(name, bytes):
+        name = name.decode("utf-8", "replace")
     n = name or ""
     if _TV_GALA_RE.search(n):
         return True
