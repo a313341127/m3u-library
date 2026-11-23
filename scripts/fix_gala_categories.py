@@ -93,14 +93,27 @@ def fix(db_path: str, apply: bool = False, verbose: bool = True) -> int:
         con.close()
         return len(hits)
 
-    con.executemany(
-        "UPDATE resources SET category='variety', media_type='' WHERE id=?",
-        [(r["id"],) for r in hits],
-    )
+    # 逐行改判（2026-11-23 实证真凶）：唯一索引 uq_resources_cat_name_url(category,name,url)
+    # 下，若库中已存在同 (name,url) 的 variety 行，一把 executemany UPDATE 会让任意一行
+    # 撞键即 IntegrityError 整体失败 -> 此前每日任务连续 18 天卡死在此。
+    # 处理：改判撞键时说明已有同源 variety 行，直接删除被误标的源行（去重）。
+    # resources 表无任何外键引用其 id，删除安全；幂等：跑第二遍命中 0 行。
+    changed = deleted = 0
+    for r in hits:
+        try:
+            con.execute(
+                "UPDATE resources SET category='variety', media_type='' WHERE id=?",
+                (r["id"],),
+            )
+            changed += 1
+        except sqlite3.IntegrityError:
+            con.execute("DELETE FROM resources WHERE id=?", (r["id"],))
+            deleted += 1
     con.commit()
     con.close()
-    print(f"[fix_gala] 已改判 {len(hits)} 行为 variety（media_type 置空）")
-    return len(hits)
+    print(f"[fix_gala] 已改判 {changed} 行为 variety（media_type 置空），"
+          f"去重删除 {deleted} 行（已存在同 (name,url) 的 variety 行）")
+    return changed + deleted
 
 
 def main():
