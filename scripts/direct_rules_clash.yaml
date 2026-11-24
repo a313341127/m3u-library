@@ -17,6 +17,7 @@ rules:
   - DOMAIN-KEYWORD,lzcdn,DIRECT
   - DOMAIN-KEYWORD,modujx,DIRECT
   - DOMAIN-KEYWORD,rrcdnbf,DIRECT
+  - DOMAIN-KEYWORD,ryiplay,DIRECT
   - DOMAIN-KEYWORD,ryplay,DIRECT
   - DOMAIN-KEYWORD,tvpull,DIRECT
   - DOMAIN-KEYWORD,tyyszywvod,DIRECT
@@ -51,8 +52,8 @@ rules:
   - DOMAIN-SUFFIX,baiducdnku.com,DIRECT
   - DOMAIN-SUFFIX,baofeng10.com,DIRECT
   - DOMAIN-SUFFIX,baofeng11.com,DIRECT
+  - DOMAIN-SUFFIX,baofeng12.com,DIRECT
   - DOMAIN-SUFFIX,baofeng9.com,DIRECT
-  - DOMAIN-SUFFIX,bdstatic.com,DIRECT
   - DOMAIN-SUFFIX,bdzybf11.com,DIRECT
   - DOMAIN-SUFFIX,bdzybf22.com,DIRECT
   - DOMAIN-SUFFIX,bdzybf7.com,DIRECT
@@ -89,6 +90,7 @@ rules:
   - DOMAIN-SUFFIX,cdnlz7.com,DIRECT
   - DOMAIN-SUFFIX,cdnlz9.com,DIRECT
   - DOMAIN-SUFFIX,cftest5.cn,DIRECT
+  - DOMAIN-SUFFIX,cgtn.com,DIRECT
   - DOMAIN-SUFFIX,chinamobile.com,DIRECT
   - DOMAIN-SUFFIX,cmread.com,DIRECT
   - DOMAIN-SUFFIX,cnr.cn,DIRECT
@@ -96,7 +98,6 @@ rules:
   - DOMAIN-SUFFIX,cztv.cc,DIRECT
   - DOMAIN-SUFFIX,cztv.com,DIRECT
   - DOMAIN-SUFFIX,cztvcloud.com,DIRECT
-  - DOMAIN-SUFFIX,daningtv.com,DIRECT
   - DOMAIN-SUFFIX,dbzy10.com,DIRECT
   - DOMAIN-SUFFIX,ddbbffcdn.com,DIRECT
   - DOMAIN-SUFFIX,dxhmt.cn,DIRECT
@@ -222,7 +223,6 @@ rules:
   - DOMAIN-SUFFIX,letvoss.com,DIRECT
   - DOMAIN-SUFFIX,lfthirtytwo.com,DIRECT
   - DOMAIN-SUFFIX,livehwc3.cn,DIRECT
-  - DOMAIN-SUFFIX,loulannews.cn,DIRECT
   - DOMAIN-SUFFIX,ltzyplay.com,DIRECT
   - DOMAIN-SUFFIX,lxxcb.cn,DIRECT
   - DOMAIN-SUFFIX,ly166.com,DIRECT
@@ -329,6 +329,8 @@ rules:
   - DOMAIN-SUFFIX,rsfcxq.com,DIRECT
   - DOMAIN-SUFFIX,rstu6.com,DIRECT
   - DOMAIN-SUFFIX,ryiplay18.com,DIRECT
+  - DOMAIN-SUFFIX,ryiplay19.com,DIRECT
+  - DOMAIN-SUFFIX,ryiplay20.com,DIRECT
   - DOMAIN-SUFFIX,ryiplay21.com,DIRECT
   - DOMAIN-SUFFIX,ryplay1.com,DIRECT
   - DOMAIN-SUFFIX,ryplay10.com,DIRECT
@@ -347,7 +349,6 @@ rules:
   - DOMAIN-SUFFIX,ryplay7.com,DIRECT
   - DOMAIN-SUFFIX,ryplay8.com,DIRECT
   - DOMAIN-SUFFIX,ryplay9.com,DIRECT
-  - DOMAIN-SUFFIX,scrstv.com.cn,DIRECT
   - DOMAIN-SUFFIX,sdetv.com.cn,DIRECT
   - DOMAIN-SUFFIX,shaoxing.com.cn,DIRECT
   - DOMAIN-SUFFIX,smartwq.cn,DIRECT
@@ -380,7 +381,6 @@ rules:
   - DOMAIN-SUFFIX,vip.lz-cjavascript,DIRECT
   - DOMAIN-SUFFIX,vipzyk-video.com,DIRECT
   - DOMAIN-SUFFIX,vmtqw.com,DIRECT
-  - DOMAIN-SUFFIX,voc.com.cn,DIRECT
   - DOMAIN-SUFFIX,vodcnd08.3rut0com,DIRECT
   - DOMAIN-SUFFIX,vodcnd13.3rut0com,DIRECT
   - DOMAIN-SUFFIX,vodcnd14.3rut0com,DIRECT
@@ -393,6 +393,7 @@ rules:
   - DOMAIN-SUFFIX,wdit.com.cn,DIRECT
   - DOMAIN-SUFFIX,wgslsw.com,DIRECT
   - DOMAIN-SUFFIX,wikimedia.org,DIRECT
+  - DOMAIN-SUFFIX,wjyanghu.com,DIRECT
   - DOMAIN-SUFFIX,wsrtv.com.cn,DIRECT
   - DOMAIN-SUFFIX,wsyzym3u8.com,DIRECT
   - DOMAIN-SUFFIX,wxhcgbds.com,DIRECT
@@ -422,7 +423,6 @@ rules:
   - DOMAIN-SUFFIX,xluuss.com,DIRECT
   - DOMAIN-SUFFIX,xntv.tv,DIRECT
   - DOMAIN-SUFFIX,xysrmt.cn,DIRECT
-  - DOMAIN-SUFFIX,yantaitv.cn,DIRECT
   - DOMAIN-SUFFIX,yntv.net,DIRECT
   - DOMAIN-SUFFIX,ynurl.com,DIRECT
   - DOMAIN-SUFFIX,youku.com,DIRECT
