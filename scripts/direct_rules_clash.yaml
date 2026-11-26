@@ -12,6 +12,7 @@ rules:
   - DOMAIN-KEYWORD,feifei,DIRECT
   - DOMAIN-KEYWORD,fengbao,DIRECT
   - DOMAIN-KEYWORD,ffzy,DIRECT
+  - DOMAIN-KEYWORD,freetv,DIRECT
   - DOMAIN-KEYWORD,iptv,DIRECT
   - DOMAIN-KEYWORD,lzcdn,DIRECT
   - DOMAIN-KEYWORD,modujx,DIRECT
@@ -83,6 +84,7 @@ rules:
   - DOMAIN-SUFFIX,cdnlz20.com,DIRECT
   - DOMAIN-SUFFIX,cdnlz21.com,DIRECT
   - DOMAIN-SUFFIX,cdnlz22.com,DIRECT
+  - DOMAIN-SUFFIX,cdnlz28.com,DIRECT
   - DOMAIN-SUFFIX,cdnlz29.com,DIRECT
   - DOMAIN-SUFFIX,cdnlz3.com,DIRECT
   - DOMAIN-SUFFIX,cdnlz30.com,DIRECT
@@ -162,10 +164,10 @@ rules:
   - DOMAIN-SUFFIX,ffzyread2.com,DIRECT
   - DOMAIN-SUFFIX,ffzyvideo.com,DIRECT
   - DOMAIN-SUFFIX,freetv.fun,DIRECT
+  - DOMAIN-SUFFIX,freetv.top,DIRECT
   - DOMAIN-SUFFIX,ganzitv.com,DIRECT
   - DOMAIN-SUFFIX,gatv.com.cn,DIRECT
   - DOMAIN-SUFFIX,gggread.com,DIRECT
-  - DOMAIN-SUFFIX,githubusercontent.com,DIRECT
   - DOMAIN-SUFFIX,gstv.com.cn,DIRECT
   - DOMAIN-SUFFIX,gsuus.com,DIRECT
   - DOMAIN-SUFFIX,guoluche.com,DIRECT
@@ -263,6 +265,8 @@ rules:
   - DOMAIN-SUFFIX,lzfile32.com,DIRECT
   - DOMAIN-SUFFIX,lzv22.com,DIRECT
   - DOMAIN-SUFFIX,lzv34.com,DIRECT
+  - DOMAIN-SUFFIX,lzv40.com,DIRECT
+  - DOMAIN-SUFFIX,lzv41.com,DIRECT
   - DOMAIN-SUFFIX,maowushi.com,DIRECT
   - DOMAIN-SUFFIX,maoyanplay.top,DIRECT
   - DOMAIN-SUFFIX,mgtv.com,DIRECT
