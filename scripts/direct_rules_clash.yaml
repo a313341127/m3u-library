@@ -166,7 +166,6 @@ rules:
   - DOMAIN-SUFFIX,ganzitv.com,DIRECT
   - DOMAIN-SUFFIX,gatv.com.cn,DIRECT
   - DOMAIN-SUFFIX,gggread.com,DIRECT
-  - DOMAIN-SUFFIX,githubusercontent.com,DIRECT
   - DOMAIN-SUFFIX,gstv.com.cn,DIRECT
   - DOMAIN-SUFFIX,gsuus.com,DIRECT
   - DOMAIN-SUFFIX,guoluche.com,DIRECT
@@ -184,7 +183,6 @@ rules:
   - DOMAIN-SUFFIX,high24-playback.com,DIRECT
   - DOMAIN-SUFFIX,high25-playback.com,DIRECT
   - DOMAIN-SUFFIX,high26-playback.com,DIRECT
-  - DOMAIN-SUFFIX,hljtv.com,DIRECT
   - DOMAIN-SUFFIX,hmgbtv.com,DIRECT
   - DOMAIN-SUFFIX,hndt.com,DIRECT
   - DOMAIN-SUFFIX,hntv.tv,DIRECT
@@ -208,7 +206,6 @@ rules:
   - DOMAIN-SUFFIX,jimxtc.com,DIRECT
   - DOMAIN-SUFFIX,jinchuanrmt.com,DIRECT
   - DOMAIN-SUFFIX,jinjiang.tv,DIRECT
-  - DOMAIN-SUFFIX,jinnantv.top,DIRECT
   - DOMAIN-SUFFIX,jisuzyv.com,DIRECT
   - DOMAIN-SUFFIX,jjrm.org.cn,DIRECT
   - DOMAIN-SUFFIX,jlntv.cn,DIRECT
@@ -315,7 +312,6 @@ rules:
   - DOMAIN-SUFFIX,playback-speed.com,DIRECT
   - DOMAIN-SUFFIX,power34play.vip,DIRECT
   - DOMAIN-SUFFIX,ppqrrs.com,DIRECT
-  - DOMAIN-SUFFIX,pybtv.cn,DIRECT
   - DOMAIN-SUFFIX,qcrmt.com,DIRECT
   - DOMAIN-SUFFIX,qingting.fm,DIRECT
   - DOMAIN-SUFFIX,qq.com,DIRECT
